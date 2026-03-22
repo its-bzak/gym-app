@@ -1,6 +1,8 @@
 import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
 import { router } from "expo-router";
 
+// Show workout name, timer, end workout button, exercise CTA
+
 export default function ActiveWorkoutScreen() {
   return (
     <View style={styles.container}>

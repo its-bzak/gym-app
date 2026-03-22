@@ -2,6 +2,8 @@ import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
 import { workoutSessions, workoutPlans, gyms } from "@/mockData";
 import { router } from "expo-router";
 
+//Workout type / selected mode, date strip (weekly), completed workouts, and start workout button above tabs
+
 export default function WorkoutScreen() {
     const today = new Date().toDateString();
 
