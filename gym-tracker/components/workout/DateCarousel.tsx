@@ -27,11 +27,11 @@ export default function DateCarousel() {
     return (
         <View style={styles.datePill}>
             <Pressable onPress={() => changeDay(-1)}>
-                <MaterialIcons name="chevron-left" style={styles.arrowContainer} />
+                <Text style={styles.arrow}>‹</Text>
             </Pressable>
             <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
             <Pressable onPress={() => changeDay(1)}>
-                <MaterialIcons name="chevron-right" style={styles.arrowContainer} />
+                <Text style={styles.arrow}>›</Text>
             </Pressable>
         </View>
     );
@@ -55,6 +55,10 @@ const styles = StyleSheet.create({
     color: "#888",
     fontSize: 14,
 },
+  arrow: {
+    color: "#888",
+    fontSize: 18,
+  },
   arrowContainer: {
     width: 40,              
     alignItems: "center",
