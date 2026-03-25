@@ -1,3 +1,9 @@
+import { Text, View } from "react-native";
 
-
-// Search and filter through exercises. Add custom exercises if they aren't already in the db.
+export default function ExercisesScreen() {
+	return (
+		<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+			<Text>exercises screen</Text>
+		</View>
+	);
+}

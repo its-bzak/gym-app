@@ -1,11 +1,11 @@
-import { View, Text } from "react-native";
+import { SafeAreaView, Text, View } from "react-native";
 
-//Show friend activity feed, each card is a completed workout, selecting the card leads to the workout review screen
-
-export default function Social() {
+export default function SocialScreen() {
   return (
-    <View className="flex-1 items-center justify-center bg-black">
-      <Text className="text-white text-xl">Social Screen</Text>
-    </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#151515" }}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <Text style={{ color: "#ECEDEE" }}>social screen</Text>
+      </View>
+    </SafeAreaView>
   );
 }

@@ -1,12 +1,11 @@
-import { View, Text } from "react-native";
+import { SafeAreaView, Text, View } from "react-native";
 
-// The profile screen will show current user streak, trophies, metrics and a body / muscle map
-// There will also be a profile header and friend count
-
-export default function Profile() {
+export default function ProfileScreen() {
   return (
-    <View className="flex-1 items-center justify-center bg-black">
-      <Text className="text-white text-xl">Profile Screen</Text>
-    </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#151515" }}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <Text style={{ color: "#ECEDEE" }}>profile screen</Text>
+      </View>
+    </SafeAreaView>
   );
 }

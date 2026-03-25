@@ -1,190 +1,116 @@
-import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
-import { workoutSessions, workoutPlans, gyms } from "@/mockData";
-import { router } from "expo-router";
-
-//Workout type / selected mode, date strip (weekly), completed workouts, and start workout button above tabs
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import StartWorkoutBar from "@/components/workout/StartWorkoutBar";
+import ActivityCard from "@/components/social/ActivityCard";
+import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { navigate } from "expo-router/build/global-state/routing";
+import { useState } from "react";
+import DateCarousel from "@/components/workout/DateCarousel";
 
 export default function WorkoutScreen() {
-    const today = new Date().toDateString();
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.screen}>
+        
+        <DateCarousel />
 
-    const todaysWorkouts = workoutSessions.filter((session) => {
-        if (!session.ended_at || session.is_deleted) return false;
-    return new Date(session.ended_at).toDateString() === today;
-    });
-
-    const getWorkoutPlanName = (workoutPlanId: string | null) => {
-        if (!workoutPlanId) return "Workout";
-    return workoutPlans.find((plan) => plan.id === workoutPlanId)?.name ?? "Workout";
-    };
-
-    const getGymName = (gymId: string | null) => {
-        if (!gymId) return "Unknown Gym";
-    return gyms.find((gym) => gym.id === gymId)?.name ?? "Unknown Gym";
-    };
-
-    const getDurationInMinutes = (startedAt: string, endedAt: string | null) => {
-        if (!endedAt) return 0;
-    const start = new Date(startedAt).getTime();
-    const end = new Date(endedAt).getTime();
-    return Math.round((end - start) / 1000 / 60);
-    };
-
-    return (
-        <View style={{ flex: 1 }}>
-            <ScrollView style={styles.screen}>
-                <View style={styles.content}>
-                    <Text style={styles.title}>Workout</Text>
-                    <Text style={styles.subtitle}>Today</Text>
-
-                    <View style={styles.actionsContainer}>
-
-                        <Pressable style={styles.secondaryButton}>
-                            <Text style={styles.secondaryButtonText}>Create Custom Exercise</Text>
-                        </Pressable>
-                    </View>
-
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Today’s Workouts</Text>
-
-                        {todaysWorkouts.length === 0 ? (
-                        <View style={styles.emptyCard}>
-                                <Text style={styles.emptyText}>No workouts logged today.</Text>
-                        </View>
-                        ) : (
-                        <View style={styles.workoutList}>
-                        {todaysWorkouts.map((session) => (
-                            <Pressable key={session.id} style={styles.workoutCard}>
-                            <Text style={styles.workoutName}>
-                                {getWorkoutPlanName(session.workout_plan_id)}
-                            </Text>
-
-                            <Text style={styles.workoutMeta}>
-                            {getGymName(session.gym_id)}
-                            </Text>
-
-                            <Text style={styles.workoutMeta}>
-                            Duration: {getDurationInMinutes(session.started_at, session.ended_at)} min
-                            </Text>
-
-                            <Text style={styles.workoutTime}>
-                            Completed at{" "}
-                            {new Date(session.ended_at!).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                            })}
-                            </Text>
-                            </Pressable>
-                        ))}
-                        </View>
-                    )}
-                    </View>
-                </View>
-            </ScrollView>
-                <View style={styles.bottomContainer}>
-                    <Pressable style={styles.primaryButton} onPress={() => router.push("/workout/active")}>
-                        <Text style={styles.primaryButtonText}>Start Workout</Text>
-                    </Pressable>
-                </View>
+        <View style={styles.toggleRow}>
+          <Pressable style={styles.segmentButton}>
+            <Text style={styles.segmentText}>Exercises</Text>
+          </Pressable>
+          <Pressable style={styles.segmentButton}>
+            <Text style={styles.segmentText}>My Routines</Text>
+          </Pressable>
         </View>
+
+        <View style={styles.routinePanel}>
+
+        </View>
+
+
+        <Pressable style={styles.startButton} onPress={() => {navigate("/workout/active")}}>
+          <Text style={styles.startButtonText}>Start Workout</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#151515",
+  },
   screen: {
     flex: 1,
-    backgroundColor: "#000",
-    paddingHorizontal: 20,
-    paddingTop: 64,
+    backgroundColor: "#151515",
+    paddingHorizontal: 36,
+    paddingTop: 18,
   },
-  title: {
-    color: "#fff",
-    fontSize: 32,
-    fontWeight: "700",
-  },
-  subtitle: {
-    marginTop: 8,
-    color: "#a3a3a3",
-    fontSize: 14,
-  },
-  actionsContainer: {
-    marginTop: 24,
-    gap: 12,
-  },
-  content: {
-  flex: 1,
-  },
-  bottomContainer: {
-  padding: 16,
-  borderTopWidth: 1,
-  borderColor: "#262626",
-  backgroundColor: "#000",
- },
-  primaryButton: {
-  backgroundColor: "#fff",
-  borderRadius: 16,
-  paddingVertical: 16,
-  alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#000",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: "#404040",
-    borderRadius: 16,
-    paddingVertical: 16,
+  datePill: {
+    height: 42,
+    borderRadius: 22,
+    backgroundColor: "#1A1A1A",
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
   },
-  secondaryButtonText: {
-    color: "#fff",
+  dateText: {
+    color: "#7C7C7C",
     fontSize: 16,
-    fontWeight: "600",
+    lineHeight: 20,
   },
-  section: {
-    marginTop: 32,
+  toggleRow: {
+    marginTop: 34,
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
-  sectionTitle: {
-    marginBottom: 16,
-    color: "#fff",
+  segmentButton: {
+    width: "47%",
+    height: 40,
+    borderRadius: 16,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentText: {
+    color: "#7C7C7C",
+    fontSize: 16,
+  },
+  routinePanel: {
+    display: "flex",
+    marginTop: 140,
+    height: 396,
+    borderRadius: 20,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addCircle: {
+    width: 102,
+    height: 102,
+    borderRadius: 51,
+    backgroundColor: "#3A3A3A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addIcon: {
+    color: "#7C7C7C",
+    fontSize: 54,
+    lineHeight: 58,
+    marginTop: -2,
+  },
+  startButton: {
+    marginTop: "auto",
+    marginBottom: 114,
+    height: 66,
+    borderRadius: 18,
+    backgroundColor: "#333333",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  startButtonText: {
+    color: "#7C7C7C",
     fontSize: 22,
-    fontWeight: "600",
-  },
-  emptyCard: {
-    backgroundColor: "#171717",
-    borderWidth: 1,
-    borderColor: "#262626",
-    borderRadius: 16,
-    padding: 16,
-  },
-  emptyText: {
-    color: "#a3a3a3",
-    fontSize: 14,
-  },
-  workoutList: {
-    gap: 12,
-  },
-  workoutCard: {
-    backgroundColor: "#171717",
-    borderWidth: 1,
-    borderColor: "#262626",
-    borderRadius: 16,
-    padding: 16,
-  },
-  workoutName: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  workoutMeta: {
-    marginTop: 6,
-    color: "#d4d4d4",
-    fontSize: 14,
-  },
-  workoutTime: {
-    marginTop: 6,
-    color: "#737373",
-    fontSize: 13,
   },
 });
