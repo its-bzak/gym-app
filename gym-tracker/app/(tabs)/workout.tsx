@@ -31,9 +31,23 @@ export default function WorkoutScreen() {
           calorieGoal={dailyMacroMetrics.calorieGoal}
         />
         <DailyExerciseMetricsSection metrics={dailyExerciseMetrics} />
-        <Pressable style={styles.startButton} onPress={() => {router.push("/workout/active")}}>
-          <Text style={styles.startButtonText}>Start Workout</Text>
-        </Pressable>
+        <View style={styles.mainButtonContainer}>
+    
+          <View style={styles.secondaryButtonContainer}>
+            <View style={styles.logFoodButton}>
+                <Text style={styles.secondaryButtonText}>Log Food</Text>
+            </View>
+
+            <View style={styles.logWeightButton}>
+                <Text style={styles.secondaryButtonText}>Log Weight</Text>
+            </View>
+          </View>
+
+          <View style={styles.startButton} onTouchStart={() => router.push("/workout/active")}>
+              <Text style={styles.startButtonText}>Start Workout</Text>
+          </View>
+
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -46,6 +60,8 @@ const styles = StyleSheet.create({
   },
   screen: {
     flex: 1,
+    display: "flex",
+    flexDirection: "column",
     backgroundColor: "#151515",
     paddingHorizontal: 36,
     paddingTop: 18,
@@ -65,9 +81,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   startButton: {
-    marginTop: "auto",
-    marginBottom: 114,
-    height: 66,
+    marginBottom: 35,
+    height: 50,
     borderRadius: 18,
     backgroundColor: "#333333",
     alignItems: "center",
@@ -75,6 +90,41 @@ const styles = StyleSheet.create({
   },
   startButtonText: {
     color: "#7C7C7C",
-    fontSize: 22,
+    fontSize: 18,
+  },
+    secondaryButtonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12, // 👈 THIS is important
+  },
+  logFoodButton: {
+    flex: 1,
+    height: 40,
+    backgroundColor: "#1A1A1A",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6,
+  },
+
+  logWeightButton: {
+    flex: 1,
+    height: 40,
+    backgroundColor: "#1A1A1A",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
+  },
+  secondaryButtonText: {
+    color: "#7C7C7C",
+    fontSize: 16,
+  },
+  mainButtonContainer: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "flex-end",
   },
 });

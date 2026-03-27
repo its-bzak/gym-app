@@ -9,8 +9,8 @@ function TabIcon({ focused }: { focused: boolean }) {
     return (
       <View
         style={{
-          width: 64,
-          height: 64,
+          width: 45,
+          height: 45,
           borderRadius: 32,
           backgroundColor: "#393939",
           alignItems: "center",
@@ -20,7 +20,6 @@ function TabIcon({ focused }: { focused: boolean }) {
           name="play-arrow"
           size={34}
           color="#E4E4E4"
-          style={{ transform: [{ rotate: "90deg" }] }}
         />
       </View>
     );
@@ -31,7 +30,6 @@ function TabIcon({ focused }: { focused: boolean }) {
       name="play-arrow"
       size={34}
       color="#E4E4E4"
-      style={{ transform: [{ rotate: "90deg" }] }}
     />
   );
 }
@@ -45,7 +43,7 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: "#151515" },
         tabBarStyle: {
           position: "absolute",
-          height: 90,
+          height: 65,
           paddingTop: 6,
           paddingBottom: 10,
           backgroundColor: "#282828",
@@ -75,9 +73,9 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="social"
+        name="performance"
         options={{
-          title: "Social",
+          title: "Performance",
           tabBarButton: HapticTab,
           tabBarIcon: ({ focused }) => <TabIcon focused={focused} />,
         }}
