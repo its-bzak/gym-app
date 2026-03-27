@@ -11,6 +11,25 @@ export type DailyExerciseMetrics = {
     workoutType: string;
 };
 
+export type WeightEntry = {
+    date: string;
+    weightKg: number;
+};
+
+export type WeightGoal = {
+    startWeightKg: number;
+    targetWeightKg: number;
+};
+
+type WeightTrendSectionProps = {
+    entries: WeightEntry[];
+};
+
+type GoalProgressSectionProps = {
+    entries: WeightEntry[];
+    goal: WeightGoal;
+};
+
 export const dailyMacroMetricsByDate: DatedMacroMetrics[] = [
     {
         date: "2026-03-25",
@@ -96,6 +115,37 @@ export const dailyExerciseMetricsByDate: DailyExerciseMetrics[] = [
         workoutType: "Strength Training",
     },
 ];
+
+export const mockWeightEntries: WeightEntry[] = [
+    { date: "2026-03-25", weightKg: 74 },
+    { date: "2026-03-26", weightKg: 73.8 },
+    { date: "2026-03-27", weightKg: 73.5 },
+    { date: "2026-03-28", weightKg: 73.2 },
+    { date: "2026-03-29", weightKg: 73 },
+    { date: "2026-03-30", weightKg: 72.8 },
+    { date: "2026-03-31", weightKg: 72.5 },
+    { date: "2026-04-01", weightKg: 72.3 },
+    { date: "2026-04-02", weightKg: 72 },
+    { date: "2026-04-03", weightKg: 71.8 },
+    { date: "2026-04-04", weightKg: 71.5 },
+    { date: "2026-04-05", weightKg: 71.2 },
+    { date: "2026-04-06", weightKg: 71 },
+    { date: "2026-04-07", weightKg: 70.8 },
+    { date: "2026-04-08", weightKg: 70.5 },
+    { date: "2026-04-09", weightKg: 70.3 },
+    { date: "2026-04-10", weightKg: 70 },
+    { date: "2026-04-11", weightKg: 69.8 },
+    { date: "2026-04-12", weightKg: 69.5 },
+    { date: "2026-04-13", weightKg: 69.2 },
+    { date: "2026-04-14", weightKg: 69 },
+    { date: "2026-04-15", weightKg: 68.8 },
+];
+
+export const mockGoal: WeightGoal = {
+    startWeightKg: 74,
+    targetWeightKg: 90,
+};
+
 
 export const DEFAULT_METRICS_DATE = "2026-03-27";
 

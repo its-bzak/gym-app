@@ -10,6 +10,11 @@ import {
   getDailyExerciseMetrics,
   getDailyMacroMetrics,
 } from "@/mock/MainScreen/DailyMetricsSection";
+import { WeightEntry, WeightGoal } from "@/mock/MainScreen/DailyMetricsSection";
+import { mockWeightEntries } from "@/mock/MainScreen/DailyMetricsSection";
+import WeightTrendSection from "@/components/main/WeightTrend";
+import GoalProgressSection from "@/components/main/GoalProgress";
+import { mockGoal } from "@/mock/MainScreen/DailyMetricsSection";
 
 export default function WorkoutScreen() {
   const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
@@ -34,10 +39,10 @@ export default function WorkoutScreen() {
 
         <View style={styles.dataContainers}>
           <View style={styles.weightTrendContainer}>
-            {/* Placeholder for weight trend component */}
+            <WeightTrendSection entries={mockWeightEntries} />
           </View>
           <View style={styles.goalProgressContainer}>
-            {/* Placeholder for goal progress component */}
+            <GoalProgressSection entries={mockWeightEntries} goal={mockGoal} />
           </View>
         </View>
 
