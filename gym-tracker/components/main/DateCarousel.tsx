@@ -2,6 +2,7 @@ import { Pressable, Text, View } from "react-native";
 import { useState } from "react";
 import MaterialIcons from "@expo/vector-icons/build/MaterialIcons";
 import { StyleSheet } from "react-native"; 
+import Ionicons from "@expo/vector-icons/build/Ionicons";
 
 export default function DateCarousel() {
 
@@ -27,11 +28,11 @@ export default function DateCarousel() {
     return (
         <View style={styles.datePill}>
             <Pressable onPress={() => changeDay(-1)}>
-                <Text style={styles.arrow}>‹</Text>
+                <Ionicons name="chevron-back" size={20} color="#888" />
             </Pressable>
             <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
             <Pressable onPress={() => changeDay(1)}>
-                <Text style={styles.arrow}>›</Text>
+                <Ionicons name="chevron-forward" size={20} color="#888" />
             </Pressable>
         </View>
     );
@@ -47,7 +48,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 10,
 },
   dateText: {
     flex: 1,                
@@ -55,10 +56,6 @@ const styles = StyleSheet.create({
     color: "#888",
     fontSize: 14,
 },
-  arrow: {
-    color: "#888",
-    fontSize: 18,
-  },
   arrowContainer: {
     width: 40,              
     alignItems: "center",
