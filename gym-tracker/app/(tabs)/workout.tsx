@@ -1,21 +1,26 @@
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import StartWorkoutBar from "@/components/workout/StartWorkoutBar";
-import ActivityCard from "@/components/social/ActivityCard";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { navigate } from "expo-router/build/global-state/routing";
+import { router } from "expo-router";
 import { useState } from "react";
 import DateCarousel from "@/components/main/DateCarousel";
 import DailyMacroMetricsSection from "@/components/main/DailyMetrics/DailyMacroMetricsSection";
 import DailyExerciseMetricsSection from "@/components/main/DailyMetrics/DailyExerciseMetricsSection";
-import { dailyMacroMetrics } from "@/mock/MainScreen/DailyMetricsSection";
+import {
+  DEFAULT_METRICS_DATE,
+  getDailyExerciseMetrics,
+  getDailyMacroMetrics,
+} from "@/mock/MainScreen/DailyMetricsSection";
 
 export default function WorkoutScreen() {
+  const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
+  const dailyMacroMetrics = getDailyMacroMetrics(selectedDate);
+  const dailyExerciseMetrics = getDailyExerciseMetrics(selectedDate);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
         
-        <DateCarousel />
+        <DateCarousel selectedDate={selectedDate} onChangeDate={setSelectedDate} />
         <DailyMacroMetricsSection
           protein={dailyMacroMetrics.protein}
           proteinGoal={dailyMacroMetrics.proteinGoal}
@@ -25,8 +30,8 @@ export default function WorkoutScreen() {
           carbsGoal={dailyMacroMetrics.carbsGoal}
           calorieGoal={dailyMacroMetrics.calorieGoal}
         />
-        <DailyExerciseMetricsSection />
-        <Pressable style={styles.startButton} onPress={() => {navigate("/workout/active")}}>
+        <DailyExerciseMetricsSection metrics={dailyExerciseMetrics} />
+        <Pressable style={styles.startButton} onPress={() => {router.push("/workout/active")}}>
           <Text style={styles.startButtonText}>Start Workout</Text>
         </Pressable>
       </View>

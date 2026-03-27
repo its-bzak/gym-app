@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
-import { dailyExerciseMetrics } from "@/mock/MainScreen/DailyMetricsSection";
+import { defaultDailyExerciseMetrics, type DailyExerciseMetrics } from "@/mock/MainScreen/DailyMetricsSection";
 
 function formatVolume(volumeKg: number) {
     if (volumeKg < 1000) {
@@ -27,11 +27,17 @@ function formatDuration(durationMins: number) {
         return `${hours}hr`;
     }
 
-    return `${hours}hr ${minutes}min`;
+    return `${hours}hr ${minutes} mins`;
 }
 
 
-export default function DailyExerciseMetricsSection() {
+type DailyExerciseMetricsSectionProps = {
+    metrics?: Omit<DailyExerciseMetrics, "date">;
+};
+
+export default function DailyExerciseMetricsSection({
+    metrics = defaultDailyExerciseMetrics,
+}: DailyExerciseMetricsSectionProps) {
     return (
         <View style={styles.container}>
             <View style={styles.volumeContainer}>
@@ -39,7 +45,7 @@ export default function DailyExerciseMetricsSection() {
                     <Ionicons name="barbell" size={20} color="#FFFFFF" />
                 </View>
                 <View style={styles.volumeText}>
-                    <Text style={styles.metricText}>{formatVolume(dailyExerciseMetrics.volume)}</Text>
+                    <Text style={styles.metricText}>{formatVolume(metrics.volume)}</Text>
                 </View>
             </View>
             <View style={styles.durationContainer}>
@@ -47,7 +53,7 @@ export default function DailyExerciseMetricsSection() {
                     <Ionicons name="time-outline" size={20} color="#FFFFFF" />
                 </View>
                 <View style={styles.durationText}>
-                    <Text style={styles.metricText}>{formatDuration(dailyExerciseMetrics.durationMins)}</Text>
+                    <Text style={styles.metricText}>{formatDuration(metrics.durationMins)}</Text>
                 </View>
             </View>
         </View>

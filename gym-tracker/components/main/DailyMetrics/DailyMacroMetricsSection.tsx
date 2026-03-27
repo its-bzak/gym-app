@@ -1,10 +1,8 @@
 import { StyleSheet, Text, View } from "react-native";
-import { useState } from "react";
-import React from "react";
 import { MacroBarProps, calculateMacroBar } from "@/utils/calculateMacroBar";
-import { dailyMacroMetrics } from "@/mock/MainScreen/DailyMetricsSection";
+import { defaultDailyMacroMetrics } from "@/mock/MainScreen/DailyMetricsSection";
 
-export default function DailyMacroMetricsSection(props: MacroBarProps = dailyMacroMetrics) {
+export default function DailyMacroMetricsSection(props: MacroBarProps = defaultDailyMacroMetrics) {
     const {
         protein,
         proteinGoal,

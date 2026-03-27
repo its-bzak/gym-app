@@ -1,12 +1,21 @@
 import { Pressable, Text, View } from "react-native";
 import { useState } from "react";
-import MaterialIcons from "@expo/vector-icons/build/MaterialIcons";
 import { StyleSheet } from "react-native"; 
 import Ionicons from "@expo/vector-icons/build/Ionicons";
+import { DEFAULT_METRICS_DATE } from "@/mock/MainScreen/DailyMetricsSection";
 
-export default function DateCarousel() {
+type DateCarouselProps = {
+    selectedDate?: Date;
+    onChangeDate?: (date: Date) => void;
+};
 
-    const [selectedDate, setSelectedDate] = useState(new Date());
+export default function DateCarousel({ selectedDate, onChangeDate }: DateCarouselProps) {
+
+    const [internalSelectedDate, setInternalSelectedDate] = useState(
+        () => new Date(DEFAULT_METRICS_DATE)
+    );
+
+    const activeDate = selectedDate ?? internalSelectedDate;
 
     function formatDate(date: Date) {
         return date.toLocaleDateString("en-US", {
@@ -18,11 +27,14 @@ export default function DateCarousel() {
     }
 
     function changeDay (amt: number) {
-        setSelectedDate(prev => {
-            const next = new Date(prev);
-            next.setDate(prev.getDate() + amt);
-            return next;
-        });
+        const next = new Date(activeDate);
+        next.setDate(activeDate.getDate() + amt);
+
+        if (!selectedDate) {
+            setInternalSelectedDate(next);
+        }
+
+        onChangeDate?.(next);
     }
 
     return (
@@ -30,7 +42,7 @@ export default function DateCarousel() {
             <Pressable onPress={() => changeDay(-1)}>
                 <Ionicons name="chevron-back" size={20} color="#888" />
             </Pressable>
-            <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+            <Text style={styles.dateText}>{formatDate(activeDate)}</Text>
             <Pressable onPress={() => changeDay(1)}>
                 <Ionicons name="chevron-forward" size={20} color="#888" />
             </Pressable>
