@@ -4,7 +4,7 @@ import React from "react";
 import { MacroBarProps, calculateMacroBar } from "@/utils/calculateMacroBar";
 import { dailyMacroMetrics } from "@/mock/MainScreen/DailyMetricsSection";
 
-export default function DailyMetricsSection(props: MacroBarProps = dailyMacroMetrics) {
+export default function DailyMacroMetricsSection(props: MacroBarProps = dailyMacroMetrics) {
     const {
         protein,
         proteinGoal,
@@ -76,19 +76,16 @@ export default function DailyMetricsSection(props: MacroBarProps = dailyMacroMet
                     />
                 )}
             </View>
-
-            <View style={styles.workoutMetricsContainer} />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     metricsContainer: {
-        height: 150,
         width: "100%",
         borderRadius: 10,
         paddingTop: 5,
-        marginBottom: 20,
+        marginBottom: 5,
     },
     macroTextContainer: {
         flexDirection: "row",
@@ -136,5 +133,4 @@ const styles = StyleSheet.create({
     remainingSegment: {
         backgroundColor: "#B5B5B5",
     },
-    workoutMetricsContainer: {},
 });
