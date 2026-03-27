@@ -31,6 +31,20 @@ export default function WorkoutScreen() {
           calorieGoal={dailyMacroMetrics.calorieGoal}
         />
         <DailyExerciseMetricsSection metrics={dailyExerciseMetrics} />
+
+        <View style={styles.dataContainers}>
+          <View style={styles.weightTrendContainer}>
+            {/* Placeholder for weight trend component */}
+          </View>
+          <View style={styles.goalProgressContainer}>
+            {/* Placeholder for goal progress component */}
+          </View>
+        </View>
+
+        <View style={styles.bodyMapContainer}>
+          {/* Placeholder for body map component */}
+        </View>
+
         <View style={styles.mainButtonContainer}>
     
           <View style={styles.secondaryButtonContainer}>
@@ -63,8 +77,8 @@ const styles = StyleSheet.create({
     display: "flex",
     flexDirection: "column",
     backgroundColor: "#151515",
-    paddingHorizontal: 36,
-    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingTop: 9,
   },
   datePill: {
     height: 42,
@@ -80,8 +94,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
+  dataContainers: {
+    flexDirection: "row",
+    marginTop: 18,
+  },
+  weightTrendContainer: {
+    flex: 1,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: "#1A1A1A",
+    marginRight: 5,
+  },
+  goalProgressContainer: {
+    flex: 1,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: "#1A1A1A",
+    marginLeft: 5,
+  },
+  bodyMapContainer: {
+    marginTop: 20,
+    height: 360,
+    borderRadius: 20,
+    backgroundColor: "#1A1A1A",
+  },
   startButton: {
-    marginBottom: 35,
+    marginBottom: 45,
     height: 50,
     borderRadius: 18,
     backgroundColor: "#333333",
@@ -95,8 +133,7 @@ const styles = StyleSheet.create({
     secondaryButtonContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 12, // 👈 THIS is important
+    marginBottom: 12,
   },
   logFoodButton: {
     flex: 1,
