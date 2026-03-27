@@ -4,7 +4,7 @@ import ActivityCard from "@/components/social/ActivityCard";
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { navigate } from "expo-router/build/global-state/routing";
 import { useState } from "react";
-import DateCarousel from "@/components/workout/DateCarousel";
+import DateCarousel from "@/components/main/DateCarousel";
 
 export default function WorkoutScreen() {
   return (
