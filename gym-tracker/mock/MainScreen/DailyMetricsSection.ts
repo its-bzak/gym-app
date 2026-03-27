@@ -52,6 +52,16 @@ export const dailyMacroMetricsByDate: DatedMacroMetrics[] = [
         carbsGoal: 230,
         calorieGoal: 2500,
     },
+    {
+        date: "2026-03-29",
+        protein: 0,
+        proteinGoal: 200,
+        fat: 0,
+        fatGoal: 55,
+        carbs: 0,
+        carbsGoal: 230,
+        calorieGoal: 2500,
+    },
 ];
 
 export const dailyExerciseMetricsByDate: DailyExerciseMetrics[] = [
@@ -77,6 +87,12 @@ export const dailyExerciseMetricsByDate: DailyExerciseMetrics[] = [
         date: "2026-03-28",
         volume: 12480,
         durationMins: 52,
+        workoutType: "Strength Training",
+    },
+    {
+        date: "2026-03-29",
+        volume: 0,
+        durationMins: 0,
         workoutType: "Strength Training",
     },
 ];
