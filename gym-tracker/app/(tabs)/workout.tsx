@@ -5,6 +5,8 @@ import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { navigate } from "expo-router/build/global-state/routing";
 import { useState } from "react";
 import DateCarousel from "@/components/main/DateCarousel";
+import DailyMetricsSection from "@/components/main/DailyMetrics/DailyMetricsSection";
+import { dailyMetrics } from "@/mock/MainScreen/DailyMetricsSection";
 
 export default function WorkoutScreen() {
   return (
@@ -12,21 +14,15 @@ export default function WorkoutScreen() {
       <View style={styles.screen}>
         
         <DateCarousel />
-
-        <View style={styles.toggleRow}>
-          <Pressable style={styles.segmentButton}>
-            <Text style={styles.segmentText}>Exercises</Text>
-          </Pressable>
-          <Pressable style={styles.segmentButton}>
-            <Text style={styles.segmentText}>My Routines</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.routinePanel}>
-
-        </View>
-
-
+        <DailyMetricsSection
+          protein={dailyMetrics.protein}
+          proteinGoal={dailyMetrics.proteinGoal}
+          fat={dailyMetrics.fat}
+          fatGoal={dailyMetrics.fatGoal}
+          carbs={dailyMetrics.carbs}
+          carbsGoal={dailyMetrics.carbsGoal}
+          calorieGoal={dailyMetrics.calorieGoal}
+        />
         <Pressable style={styles.startButton} onPress={() => {navigate("/workout/active")}}>
           <Text style={styles.startButtonText}>Start Workout</Text>
         </Pressable>
@@ -59,46 +55,6 @@ const styles = StyleSheet.create({
     color: "#7C7C7C",
     fontSize: 16,
     lineHeight: 20,
-  },
-  toggleRow: {
-    marginTop: 34,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  segmentButton: {
-    width: "47%",
-    height: 40,
-    borderRadius: 16,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentText: {
-    color: "#7C7C7C",
-    fontSize: 16,
-  },
-  routinePanel: {
-    display: "flex",
-    marginTop: 140,
-    height: 396,
-    borderRadius: 20,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addCircle: {
-    width: 102,
-    height: 102,
-    borderRadius: 51,
-    backgroundColor: "#3A3A3A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addIcon: {
-    color: "#7C7C7C",
-    fontSize: 54,
-    lineHeight: 58,
-    marginTop: -2,
   },
   startButton: {
     marginTop: "auto",
