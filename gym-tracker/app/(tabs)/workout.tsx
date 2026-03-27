@@ -6,7 +6,7 @@ import { navigate } from "expo-router/build/global-state/routing";
 import { useState } from "react";
 import DateCarousel from "@/components/main/DateCarousel";
 import DailyMetricsSection from "@/components/main/DailyMetrics/DailyMetricsSection";
-import { dailyMetrics } from "@/mock/MainScreen/DailyMetricsSection";
+import { dailyMacroMetrics } from "@/mock/MainScreen/DailyMetricsSection";
 
 export default function WorkoutScreen() {
   return (
@@ -15,13 +15,13 @@ export default function WorkoutScreen() {
         
         <DateCarousel />
         <DailyMetricsSection
-          protein={dailyMetrics.protein}
-          proteinGoal={dailyMetrics.proteinGoal}
-          fat={dailyMetrics.fat}
-          fatGoal={dailyMetrics.fatGoal}
-          carbs={dailyMetrics.carbs}
-          carbsGoal={dailyMetrics.carbsGoal}
-          calorieGoal={dailyMetrics.calorieGoal}
+          protein={dailyMacroMetrics.protein}
+          proteinGoal={dailyMacroMetrics.proteinGoal}
+          fat={dailyMacroMetrics.fat}
+          fatGoal={dailyMacroMetrics.fatGoal}
+          carbs={dailyMacroMetrics.carbs}
+          carbsGoal={dailyMacroMetrics.carbsGoal}
+          calorieGoal={dailyMacroMetrics.calorieGoal}
         />
         <Pressable style={styles.startButton} onPress={() => {navigate("/workout/active")}}>
           <Text style={styles.startButtonText}>Start Workout</Text>

@@ -1,6 +1,6 @@
 import { MacroBarProps } from "@/utils/calculateMacroBar";
 
-export const dailyMetrics: MacroBarProps = {
+export const dailyMacroMetrics: MacroBarProps = {
     protein: 187,
     proteinGoal: 200,
 
@@ -12,3 +12,4 @@ export const dailyMetrics: MacroBarProps = {
 
     calorieGoal: 2500,
 };
+

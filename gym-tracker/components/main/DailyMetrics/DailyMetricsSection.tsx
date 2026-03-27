@@ -2,9 +2,9 @@ import { StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 import React from "react";
 import { MacroBarProps, calculateMacroBar } from "@/utils/calculateMacroBar";
-import { dailyMetrics } from "@/mock/MainScreen/DailyMetricsSection";
+import { dailyMacroMetrics } from "@/mock/MainScreen/DailyMetricsSection";
 
-export default function DailyMetricsSection(props: MacroBarProps = dailyMetrics) {
+export default function DailyMetricsSection(props: MacroBarProps = dailyMacroMetrics) {
     const {
         protein,
         proteinGoal,
@@ -103,12 +103,12 @@ const styles = StyleSheet.create({
         flexShrink: 1,
     },
     macroText: {
-        color: "#FFFFFF",
+        color: "hsl(0, 0%, 60%)",
         fontSize: 10,
         fontWeight: "500",
     },
     calorieText: {
-        color: "#FFFFFF",
+        color: "hsl(0, 0%, 60%)",
         fontSize: 10,
         fontWeight: "500",
         marginLeft: 12,
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         overflow: "hidden",
         borderRadius: 8,
-        backgroundColor: "#2A2A2A",
+        backgroundColor: "hsl(0, 0%, 17%)",
     },
     macroSegment: {
         height: "100%",
