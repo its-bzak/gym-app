@@ -114,6 +114,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         overflow: "hidden",
         borderRadius: 8,
+        marginBottom: 5,
         backgroundColor: "hsl(0, 0%, 17%)",
     },
     macroSegment: {

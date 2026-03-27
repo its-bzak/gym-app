@@ -21,31 +21,34 @@ export function getAverageWeight(
     return total / recentEntries.length;
 }
 
-export function getWeightTrend(entries: WeightEntry[], windowSize: number = 7) {
-    if (!entries.length) {
+export function getWeightTrend(
+    entries: WeightEntry[],
+    windowSize: number = 7
+) {
+    if (entries.length < windowSize * 2) {
         return {
             currentWeight: 0,
-            startingWeight: 0,
+            previousWeight: 0,
             changeKg: 0,
-            chartData: [],
+            chartData: entries.map((e) => e.weightKg),
         };
     }
 
     const chartData = entries.map((entry) => entry.weightKg);
 
-    const startWindow = entries.slice(0, windowSize);
-    const endWindow = entries.slice(-windowSize);
+    const currentWeek = entries.slice(-windowSize);
+    const previousWeek = entries.slice(-windowSize * 2, -windowSize);
 
     const average = (arr: WeightEntry[]) =>
         arr.reduce((sum, entry) => sum + entry.weightKg, 0) / arr.length;
 
-    const startingWeight = average(startWindow);
-    const currentWeight = average(endWindow);
-    const changeKg = currentWeight - startingWeight;
+    const currentWeight = average(currentWeek);
+    const previousWeight = average(previousWeek);
+    const changeKg = currentWeight - previousWeight;
 
     return {
         currentWeight,
-        startingWeight,
+        previousWeight,
         changeKg,
         chartData,
     };
