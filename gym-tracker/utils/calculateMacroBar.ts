@@ -1,4 +1,3 @@
-
 export type MacroBarProps = {
     protein: number;
     proteinGoal: number;
