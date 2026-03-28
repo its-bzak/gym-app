@@ -14,34 +14,16 @@ export default function ActiveScreen() {
           <Text style={styles.timerText}>1:13:37</Text>
         </View>
 
-        <View style={styles.exercisePanel}>
+        <ScrollView style={styles.exercisePanel}>
 
           <View style={styles.addExerciseButton}>
             <Text style={styles.addExerciseText}>+</Text>
           </View>
 
-        </View>
+        </ScrollView>
 
         <ScrollView style={styles.setsSection}>
 
-          <View style={styles.addSetButton}>
-            <Text style={styles.addSetText}>Add Set</Text>
-          </View>
-          <View style={styles.addSetButton}>
-            <Text style={styles.addSetText}>Add Set</Text>
-          </View>
-          <View style={styles.addSetButton}>
-            <Text style={styles.addSetText}>Add Set</Text>
-          </View>
-          <View style={styles.addSetButton}>
-            <Text style={styles.addSetText}>Add Set</Text>
-          </View>
-          <View style={styles.addSetButton}>
-            <Text style={styles.addSetText}>Add Set</Text>
-          </View>
-          <View style={styles.addSetButton}>
-            <Text style={styles.addSetText}>Add Set</Text>
-          </View>
           <View style={styles.addSetButton}>
             <Text style={styles.addSetText}>Add Set</Text>
           </View>
@@ -97,7 +79,7 @@ const styles = StyleSheet.create({
   },
   exercisePanel: {
     marginTop: 12,
-    height: 350,
+    height: 300,
     borderRadius: 24,
     backgroundColor: "#1A1A1A",
     paddingHorizontal: 16,
