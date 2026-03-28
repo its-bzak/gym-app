@@ -1,11 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { navigate } from "expo-router/build/global-state/routing";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+function formatElapsedTime(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`;
+}
+
 export default function ActiveScreen() {
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
+  const [workoutStartTime] = useState(() => Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    const updateElapsedTime = () => {
+      setElapsedSeconds(Math.floor((Date.now() - workoutStartTime) / 1000));
+    };
+
+    updateElapsedTime();
+
+    const timerId = setInterval(updateElapsedTime, 1000);
+
+    return () => {
+      clearInterval(timerId);
+    };
+  }, [workoutStartTime]);
 
   const handleCancelWorkout = () => {
     setIsCancelModalVisible(true);
@@ -27,7 +53,7 @@ export default function ActiveScreen() {
           <Pressable style={styles.cancelButton} onPress={handleCancelWorkout}>
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
-          <Text style={styles.timerText}>1:13:37</Text>
+          <Text style={styles.timerText}>{formatElapsedTime(elapsedSeconds)}</Text>
         </View>
 
         <ScrollView style={styles.exercisePanel}>
