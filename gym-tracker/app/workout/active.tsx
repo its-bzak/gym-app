@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { navigate } from "expo-router/build/global-state/routing";
+import { useRouter } from "expo-router";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+const router = useRouter();
 
 function formatElapsedTime(totalSeconds: number) {
   const hours = Math.floor(totalSeconds / 3600);
@@ -43,7 +45,7 @@ export default function ActiveScreen() {
 
   const handleConfirmCancel = () => {
     setIsCancelModalVisible(false);
-    navigate("/workout");
+    router.push("/workout");
   };
 
   return (
@@ -58,22 +60,22 @@ export default function ActiveScreen() {
 
         <ScrollView style={styles.exercisePanel}>
 
-          <View style={styles.addExerciseButton}>
+          <Pressable style={styles.addExerciseButton} onPress={() => {router.push("/workout/exercises")}}>
             <Text style={styles.addExerciseText}>+</Text>
-          </View>
+          </Pressable>
 
         </ScrollView>
 
         <ScrollView style={styles.setsSection}>
 
-          <View style={styles.addSetButton}>
+          <Pressable style={styles.addSetButton}>
             <Text style={styles.addSetText}>Add Set</Text>
-          </View>
+          </Pressable>
 
         </ScrollView>
 
         <View style={styles.finishButtonContainer}>
-          <Pressable style={styles.finishButton} onPress={() => {navigate("/workout")}}>
+          <Pressable style={styles.finishButton} onPress={() => {router.push("/workout")}}>
             <Text style={styles.finishButtonText}>
               Finish Workout</Text>
           </Pressable>

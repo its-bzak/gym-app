@@ -54,18 +54,18 @@ export default function WorkoutScreen() {
         <View style={styles.mainButtonContainer}>
     
           <View style={styles.secondaryButtonContainer}>
-            <View style={styles.logFoodButton}>
+            <Pressable style={styles.logFoodButton}>
                 <Text style={styles.secondaryButtonText}>Log Food</Text>
-            </View>
+            </Pressable>
 
-            <View style={styles.logWeightButton}>
+            <Pressable style={styles.logWeightButton}>
                 <Text style={styles.secondaryButtonText}>Log Weight</Text>
-            </View>
+            </Pressable>
           </View>
 
-          <View style={styles.startButton} onTouchStart={() => router.push("/workout/active")}>
+          <Pressable style={styles.startButton} onPress={() => router.push("/workout/active")}>
               <Text style={styles.startButtonText}>Start Workout</Text>
-          </View>
+          </Pressable>
 
         </View>
       </View>
