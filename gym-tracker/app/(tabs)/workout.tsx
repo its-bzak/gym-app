@@ -15,6 +15,7 @@ import { mockWeightEntries } from "@/mock/MainScreen/DailyMetricsSection";
 import WeightTrendSection from "@/components/main/WeightTrend";
 import GoalProgressSection from "@/components/main/GoalProgress";
 import { mockGoal } from "@/mock/MainScreen/DailyMetricsSection";
+import { BodyMap } from "@/components/ui/BodyMap";
 
 export default function WorkoutScreen() {
   const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
@@ -47,7 +48,7 @@ export default function WorkoutScreen() {
         </View>
 
         <View style={styles.bodyMapContainer}>
-          {/* Placeholder for body map component */}
+          {/* Placeholder for BodyMap component */}
         </View>
 
         <View style={styles.mainButtonContainer}>
