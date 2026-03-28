@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     borderRadius: 16,
-    backgroundColor: "#3C3C3C",
+    backgroundColor: "hsl(0, 37%, 44%)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   modalPrimaryButtonText: {
-    color: "#F4F4F4",
+    color: "hsl(0, 100%, 80%)",
     fontSize: 15,
     fontWeight: "600",
   },
