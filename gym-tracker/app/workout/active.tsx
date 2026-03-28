@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 
@@ -16,7 +24,18 @@ function formatElapsedTime(totalSeconds: number) {
 
 export default function ActiveScreen() {
   const router = useRouter();
-  const { workout, clearWorkout } = useActiveWorkout();
+  const {
+  workout,
+  clearWorkout,
+  selectExercise,
+  addSetToSelectedExercise,
+  updateSet,
+  removeSet,
+  removeExercise,
+  } = useActiveWorkout();
+
+  const selectedExercise =
+  workout.exercises.find((exercise) => exercise.id === workout.selectedExerciseId) ?? null;
 
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
 
@@ -69,11 +88,26 @@ export default function ActiveScreen() {
           {workout.exercises.length === 0 ? (
             <Text style={styles.emptyText}>No exercises added yet.</Text>
           ) : (
-            workout.exercises.map((exercise) => (
-              <View key={exercise.id} style={styles.exerciseRow}>
-                <Text style={styles.exerciseText}>{exercise.name}</Text>
-              </View>
-            ))
+            workout.exercises.map((exercise) => {
+              const isSelected = exercise.id === workout.selectedExerciseId;
+
+              return (
+                <Pressable
+                  key={exercise.id}
+                  style={[styles.exerciseRow, isSelected && styles.exerciseRowSelected]}
+                  onPress={() => selectExercise(exercise.id)}
+                >
+                  <Text style={styles.exerciseText}>{exercise.name}</Text>
+
+                  <Pressable
+                    onPress={() => removeExercise(exercise.id)}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.removeText}>×</Text>
+                  </Pressable>
+                </Pressable>
+              );
+            })
           )}
 
           <Pressable
@@ -82,16 +116,58 @@ export default function ActiveScreen() {
               router.push("/workout/exercises");
             }}
           >
-            <Text style={styles.addExerciseText}>+</Text>
+            <Text style={styles.addSetText}>Add Exercise</Text>
           </Pressable>
         </ScrollView>
 
-        <ScrollView style={styles.setsSection}>
+        <ScrollView style={styles.setsSection} contentContainerStyle={styles.setsContent}>
+          {!selectedExercise ? (
+            <Text style={styles.emptyText}>Select an exercise to log sets.</Text>
+          ) : (
+            <>
+              {selectedExercise.sets.map((set, index) => (
+                <View key={set.id} style={styles.setRow}>
+                  <Text style={styles.setIndex}>#{index + 1}</Text>
 
-          <Pressable style={styles.addSetButton}>
-            <Text style={styles.addSetText}>Add Set</Text>
-          </Pressable>
+                  <View style={styles.metricGroup}>
+                    <Text style={styles.metricLabel}>Weight:</Text>
+                    <TextInput
+                      style={styles.metricInput}
+                      value={set.weight}
+                      onChangeText={(value) =>
+                        updateSet(selectedExercise.id, set.id, "weight", value)
+                      }
+                      placeholder="0"
+                      placeholderTextColor="#666"
+                      keyboardType="numeric"
+                    />
+                  </View>
 
+                  <View style={styles.metricGroup}>
+                    <Text style={styles.metricLabel}>Reps:</Text>
+                    <TextInput
+                      style={styles.repsInput}
+                      value={set.reps}
+                      onChangeText={(value) =>
+                        updateSet(selectedExercise.id, set.id, "reps", value)
+                      }
+                      placeholder="0"
+                      placeholderTextColor="#666"
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  <Pressable onPress={() => removeSet(selectedExercise.id, set.id)} hitSlop={8}>
+                    <Text style={styles.removeText}>×</Text>
+                  </Pressable>
+                </View>
+              ))}
+
+              <Pressable style={styles.addSetButton} onPress={addSetToSelectedExercise}>
+                <Text style={styles.addSetText}>Add Set</Text>
+              </Pressable>
+            </>
+          )}
         </ScrollView>
 
         <View style={styles.finishButtonContainer}>
@@ -174,6 +250,45 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 14,
   },
+  exercisePanelContent: {
+  paddingBottom: 14,
+  },
+  exerciseRowSelected: {
+    borderWidth: 1.5,
+    borderColor: "#D9D9D9",
+  },
+  setsContent: {
+    paddingBottom: 8,
+  },
+  setRow: {
+    minHeight: 46,
+    borderRadius: 16,
+    backgroundColor: "#212121",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  metricInput: {
+    minWidth: 82,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#333333",
+    color: "#7C7C7C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 10,
+  },
+  repsInput: {
+    minWidth: 52,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#333333",
+    color: "#7C7C7C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 10,
+  },
   exerciseRow: {
     height: 40,
     borderRadius: 16,
@@ -183,10 +298,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 14,
     marginBottom: 12,
-  },
-  exerciseRowSelected: {
-    borderWidth: 1,
-    borderColor: "#656565",
   },
   exerciseText: {
     flex: 1,
@@ -216,9 +327,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "500",
   },
-  exercisePanelContent: {
-  paddingBottom: 14,
-  },
   emptyText: {
     color: "#7C7C7C",
     fontSize: 15,
@@ -247,14 +355,6 @@ const styles = StyleSheet.create({
     marginTop: 18,
     height: 118,
     marginBottom: 12,
-  },
-  setRow: {
-    minHeight: 46,
-    borderRadius: 16,
-    backgroundColor: "#212121",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
   },
   setIndex: {
     width: 34,

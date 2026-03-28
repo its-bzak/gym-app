@@ -1,59 +1,167 @@
 import React, { createContext, useContext, useState } from "react";
 import { Exercise } from "@/types/exercise";
-import { ActiveWorkout, ActiveWorkoutExercise } from "@/types/workout";
+import { ActiveWorkout, ActiveWorkoutExercise, WorkoutSet } from "@/types/workout";
 
 type ActiveWorkoutContextType = {
   workout: ActiveWorkout;
   startWorkout: () => void;
   addExercise: (exercise: Exercise) => void;
+  selectExercise: (exerciseId: string) => void;
+  addSetToSelectedExercise: () => void;
+  updateSet: (
+    exerciseId: string,
+    setId: string,
+    field: "weight" | "reps",
+    value: string
+  ) => void;
+  removeSet: (exerciseId: string, setId: string) => void;
+  removeExercise: (exerciseId: string) => void;
   clearWorkout: () => void;
 };
 
 const ActiveWorkoutContext = createContext<ActiveWorkoutContextType | undefined>(undefined);
 
+function createWorkoutSet(): WorkoutSet {
+  return {
+    id: `set-${Date.now()}-${Math.random()}`,
+    weight: "",
+    reps: "",
+  };
+}
+
 function createActiveWorkoutExercise(exercise: Exercise): ActiveWorkoutExercise {
   return {
-    id: `${exercise.id}-${Date.now()}`,
+    id: `active-ex-${exercise.id}-${Date.now()}-${Math.random()}`,
     exerciseId: exercise.id,
     name: exercise.name,
     sets: [],
   };
 }
 
-export function ActiveWorkoutProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function ActiveWorkoutProvider({ children }: { children: React.ReactNode }) {
   const [workout, setWorkout] = useState<ActiveWorkout>({
     startedAt: null,
     exercises: [],
+    selectedExerciseId: null,
   });
 
   const startWorkout = () => {
     setWorkout({
       startedAt: new Date().toISOString(),
       exercises: [],
+      selectedExerciseId: null,
     });
   };
 
   const addExercise = (exercise: Exercise) => {
+    const newExercise = createActiveWorkoutExercise(exercise);
+
     setWorkout((prev) => ({
       ...prev,
-      exercises: [...prev.exercises, createActiveWorkoutExercise(exercise)],
+      exercises: [...prev.exercises, newExercise],
+      selectedExerciseId: newExercise.id,
     }));
+  };
+
+  const selectExercise = (exerciseId: string) => {
+    setWorkout((prev) => ({
+      ...prev,
+      selectedExerciseId: exerciseId,
+    }));
+  };
+
+  const addSetToSelectedExercise = () => {
+    setWorkout((prev) => {
+      if (!prev.selectedExerciseId) return prev;
+
+      return {
+        ...prev,
+        exercises: prev.exercises.map((exercise) =>
+          exercise.id === prev.selectedExerciseId
+            ? {
+                ...exercise,
+                sets: [...exercise.sets, createWorkoutSet()],
+              }
+            : exercise
+        ),
+      };
+    });
+  };
+
+  const updateSet = (
+    exerciseId: string,
+    setId: string,
+    field: "weight" | "reps",
+    value: string
+  ) => {
+    setWorkout((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise) =>
+        exercise.id === exerciseId
+          ? {
+              ...exercise,
+              sets: exercise.sets.map((set) =>
+                set.id === setId ? { ...set, [field]: value } : set
+              ),
+            }
+          : exercise
+      ),
+    }));
+  };
+
+  const removeSet = (exerciseId: string, setId: string) => {
+    setWorkout((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise) =>
+        exercise.id === exerciseId
+          ? {
+              ...exercise,
+              sets: exercise.sets.filter((set) => set.id !== setId),
+            }
+          : exercise
+      ),
+    }));
+  };
+
+  const removeExercise = (exerciseId: string) => {
+    setWorkout((prev) => {
+      const nextExercises = prev.exercises.filter((exercise) => exercise.id !== exerciseId);
+
+      let nextSelectedExerciseId = prev.selectedExerciseId;
+
+      if (prev.selectedExerciseId === exerciseId) {
+        nextSelectedExerciseId = nextExercises.length > 0 ? nextExercises[0].id : null;
+      }
+
+      return {
+        ...prev,
+        exercises: nextExercises,
+        selectedExerciseId: nextSelectedExerciseId,
+      };
+    });
   };
 
   const clearWorkout = () => {
     setWorkout({
       startedAt: null,
       exercises: [],
+      selectedExerciseId: null,
     });
   };
 
   return (
     <ActiveWorkoutContext.Provider
-      value={{ workout, startWorkout, addExercise, clearWorkout }}
+      value={{
+        workout,
+        startWorkout,
+        addExercise,
+        selectExercise,
+        addSetToSelectedExercise,
+        updateSet,
+        removeSet,
+        removeExercise,
+        clearWorkout,
+      }}
     >
       {children}
     </ActiveWorkoutContext.Provider>

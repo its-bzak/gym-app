@@ -1,7 +1,7 @@
 export type WorkoutSet = {
   id: string;
-  reps: number;
-  weight: number;
+  weight: string;
+  reps: string;
 };
 
 export type ActiveWorkoutExercise = {
@@ -14,4 +14,5 @@ export type ActiveWorkoutExercise = {
 export type ActiveWorkout = {
   startedAt: string | null;
   exercises: ActiveWorkoutExercise[];
+  selectedExerciseId: string | null;
 };
