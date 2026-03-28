@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { ScrollView } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-const router = useRouter();
+import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 
 function formatElapsedTime(totalSeconds: number) {
   const hours = Math.floor(totalSeconds / 3600);
@@ -17,9 +15,17 @@ function formatElapsedTime(totalSeconds: number) {
 }
 
 export default function ActiveScreen() {
+  const router = useRouter();
+  const { workout, clearWorkout } = useActiveWorkout();
+
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
-  const [workoutStartTime] = useState(() => Date.now());
+
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  const workoutStartTime = useMemo(() => {
+    return workout.startedAt ? new Date(workout.startedAt).getTime() : Date.now();
+  }, [workout.startedAt]);
+
 
   useEffect(() => {
     const updateElapsedTime = () => {
@@ -45,6 +51,7 @@ export default function ActiveScreen() {
 
   const handleConfirmCancel = () => {
     setIsCancelModalVisible(false);
+    clearWorkout();
     router.push("/workout");
   };
 
@@ -58,12 +65,25 @@ export default function ActiveScreen() {
           <Text style={styles.timerText}>{formatElapsedTime(elapsedSeconds)}</Text>
         </View>
 
-        <ScrollView style={styles.exercisePanel}>
+        <ScrollView style={styles.exercisePanel} contentContainerStyle={styles.exercisePanelContent}>
+          {workout.exercises.length === 0 ? (
+            <Text style={styles.emptyText}>No exercises added yet.</Text>
+          ) : (
+            workout.exercises.map((exercise) => (
+              <View key={exercise.id} style={styles.exerciseRow}>
+                <Text style={styles.exerciseText}>{exercise.name}</Text>
+              </View>
+            ))
+          )}
 
-          <Pressable style={styles.addExerciseButton} onPress={() => {router.push("/workout/exercises")}}>
+          <Pressable
+            style={styles.addExerciseButton}
+            onPress={() => {
+              router.push("/workout/exercises");
+            }}
+          >
             <Text style={styles.addExerciseText}>+</Text>
           </Pressable>
-
         </ScrollView>
 
         <ScrollView style={styles.setsSection}>
@@ -75,7 +95,7 @@ export default function ActiveScreen() {
         </ScrollView>
 
         <View style={styles.finishButtonContainer}>
-          <Pressable style={styles.finishButton} onPress={() => {router.push("/workout")}}>
+          <Pressable style={styles.finishButton} onPress={() => {clearWorkout(); router.push("/workout")}}>
             <Text style={styles.finishButtonText}>
               Finish Workout</Text>
           </Pressable>
@@ -195,6 +215,15 @@ const styles = StyleSheet.create({
     color: "#7C7C7C",
     fontSize: 20,
     fontWeight: "500",
+  },
+  exercisePanelContent: {
+  paddingBottom: 14,
+  },
+  emptyText: {
+    color: "#7C7C7C",
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 14,
   },
   paginationRow: {
     marginTop: "auto",

@@ -16,11 +16,13 @@ import WeightTrendSection from "@/components/main/WeightTrend";
 import GoalProgressSection from "@/components/main/GoalProgress";
 import { mockGoal } from "@/mock/MainScreen/DailyMetricsSection";
 import { BodyMap } from "@/components/ui/BodyMap";
+import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 
 export default function WorkoutScreen() {
   const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
   const dailyMacroMetrics = getDailyMacroMetrics(selectedDate);
   const dailyExerciseMetrics = getDailyExerciseMetrics(selectedDate);
+  const { startWorkout } = useActiveWorkout();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -63,7 +65,10 @@ export default function WorkoutScreen() {
             </Pressable>
           </View>
 
-          <Pressable style={styles.startButton} onPress={() => router.push("/workout/active")}>
+          <Pressable style={styles.startButton} onPress={() => {
+            startWorkout();
+            router.push("/workout/active");
+          }}>
               <Text style={styles.startButtonText}>Start Workout</Text>
           </Pressable>
 
