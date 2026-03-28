@@ -1,5 +1,6 @@
 import { navigate } from "expo-router/build/global-state/routing";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ActiveScreen() {
@@ -21,13 +22,31 @@ export default function ActiveScreen() {
 
         </View>
 
-        <View style={styles.setsSection}>
+        <ScrollView style={styles.setsSection}>
 
           <View style={styles.addSetButton}>
             <Text style={styles.addSetText}>Add Set</Text>
           </View>
+          <View style={styles.addSetButton}>
+            <Text style={styles.addSetText}>Add Set</Text>
+          </View>
+          <View style={styles.addSetButton}>
+            <Text style={styles.addSetText}>Add Set</Text>
+          </View>
+          <View style={styles.addSetButton}>
+            <Text style={styles.addSetText}>Add Set</Text>
+          </View>
+          <View style={styles.addSetButton}>
+            <Text style={styles.addSetText}>Add Set</Text>
+          </View>
+          <View style={styles.addSetButton}>
+            <Text style={styles.addSetText}>Add Set</Text>
+          </View>
+          <View style={styles.addSetButton}>
+            <Text style={styles.addSetText}>Add Set</Text>
+          </View>
 
-        </View>
+        </ScrollView>
 
         <View style={styles.finishButtonContainer}>
           <Pressable style={styles.finishButton} onPress={() => {navigate("/workout")}}>
@@ -147,7 +166,8 @@ const styles = StyleSheet.create({
   },
   setsSection: {
     marginTop: 18,
-    gap: 12,
+    height: 118,
+    marginBottom: 12,
   },
   setRow: {
     minHeight: 46,
@@ -197,7 +217,8 @@ const styles = StyleSheet.create({
   addSetButton: {
     height: 44,
     borderRadius: 16,
-    width: "100%",
+    width: "90%",
+    marginBottom: 8,
     backgroundColor: "#212121",
     alignSelf: "center",
     justifyContent: "center",
