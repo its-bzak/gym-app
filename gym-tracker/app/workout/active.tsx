@@ -1,14 +1,30 @@
+import { useState } from "react";
 import { navigate } from "expo-router/build/global-state/routing";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ActiveScreen() {
+  const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
+
+  const handleCancelWorkout = () => {
+    setIsCancelModalVisible(true);
+  };
+
+  const handleDismissCancelModal = () => {
+    setIsCancelModalVisible(false);
+  };
+
+  const handleConfirmCancel = () => {
+    setIsCancelModalVisible(false);
+    navigate("/workout");
+  };
+
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <View style={styles.screen}>
         <View style={styles.topRow}>
-          <Pressable style={styles.cancelButton} onPress={() => {navigate("/workout")}}>
+          <Pressable style={styles.cancelButton} onPress={handleCancelWorkout}>
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
           <Text style={styles.timerText}>1:13:37</Text>
@@ -36,6 +52,30 @@ export default function ActiveScreen() {
               Finish Workout</Text>
           </Pressable>
         </View>
+
+        <Modal
+          animationType="slide"
+          transparent
+          visible={isCancelModalVisible}
+          onRequestClose={handleDismissCancelModal}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Cancel workout?</Text>
+              <Text style={styles.modalMessage}>
+                Cancelling will discard your active workout. This action cannot be undone.
+              </Text>
+
+              <View style={styles.modalButtonRow}>
+                <Pressable style={styles.modalSecondaryButton} onPress={handleDismissCancelModal}>
+                  <Text style={styles.modalSecondaryButtonText}>Nevermind</Text>
+                </Pressable>
+                <Pressable style={styles.modalPrimaryButton} onPress={handleConfirmCancel}>
+                  <Text style={styles.modalPrimaryButtonText}>Confirm</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -227,5 +267,61 @@ const styles = StyleSheet.create({
   finishButtonText: {
     color: "#7C7C7C",
     fontSize: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    borderRadius: 24,
+    backgroundColor: "#1A1A1A",
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 18,
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+  },
+  modalTitle: {
+    color: "#F4F4F4",
+    fontSize: 20,
+    fontWeight: "600",
+  },
+  modalMessage: {
+    marginTop: 10,
+    color: "#A0A0A0",
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  modalButtonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 22,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#212121",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#3C3C3C",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSecondaryButtonText: {
+    color: "#B0B0B0",
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  modalPrimaryButtonText: {
+    color: "#F4F4F4",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
