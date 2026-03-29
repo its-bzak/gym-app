@@ -25,17 +25,7 @@ export default function ProfileScreen() {
         <Text style={styles.usernameText}>
           @{mockProfile.username}
         </Text>
-        <View style={styles.buttonsContainer}>
-          <Pressable style={styles.routinesButton}>
-            <Text style={styles.routinesButtonText}>Routines</Text>
-          </Pressable>
-          <Pressable style={styles.goalsButton}>
-            <Text style={styles.goalsButtonText}>Goals</Text>
-          </Pressable>
-          <Pressable style={styles.exercisesButton}>
-            <Text style={styles.exercisesButtonText}>Exercises</Text>
-          </Pressable>
-        </View>
+        
         <View style={styles.bodyMapContainer}>
           {/* Placeholder for BodyMap component */}
         </View>
