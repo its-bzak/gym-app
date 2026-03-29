@@ -270,17 +270,18 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   metricInput: {
-    minWidth: 82,
+    width: 52,
     height: 28,
     borderRadius: 14,
     backgroundColor: "#333333",
     color: "#7C7C7C",
+    maxWidth: 82,
     fontSize: 14,
     textAlign: "center",
     paddingHorizontal: 10,
   },
   repsInput: {
-    minWidth: 52,
+    width: 52,
     height: 28,
     borderRadius: 14,
     backgroundColor: "#333333",
@@ -310,6 +311,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     width: 14,
     textAlign: "center",
+    alignSelf: "flex-end",
   },
   addExerciseButton: {
     alignSelf: "center",
