@@ -39,6 +39,7 @@ export default function ActiveScreen() {
   workout.exercises.find((exercise) => exercise.id === workout.selectedExerciseId) ?? null;
 
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
+  const [isFinishBlockedModalVisible, setIsFinishBlockedModalVisible] = useState(false);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -73,6 +74,16 @@ export default function ActiveScreen() {
     setIsCancelModalVisible(false);
     clearWorkout();
     router.push("/workout");
+  };
+
+  const handleFinishWorkout = () => {
+    if (workout.exercises.length === 0) {
+      setIsFinishBlockedModalVisible(true);
+      return;
+    }
+
+    finishWorkout();
+    router.push("/workout/summary");
   };
 
   return (
@@ -176,7 +187,7 @@ export default function ActiveScreen() {
         </ScrollView>
 
         <View style={styles.finishButtonContainer}>
-          <Pressable style={styles.finishButton} onPress={() => {finishWorkout(); router.push("/workout/summary")}}>
+          <Pressable style={styles.finishButton} onPress={handleFinishWorkout}>
             <Text style={styles.finishButtonText}>
               Finish Workout</Text>
           </Pressable>
@@ -202,6 +213,27 @@ export default function ActiveScreen() {
                   <Text style={styles.modalPrimaryButtonText}>Confirm</Text>
                 </Pressable>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          animationType="slide"
+          transparent
+          visible={isFinishBlockedModalVisible}
+          onRequestClose={() => setIsFinishBlockedModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Add an exercise first</Text>
+              <Text style={styles.modalMessage}>
+                You cannot finish a workout before adding at least one exercise.
+              </Text>
+
+              <Pressable
+                style={styles.modalSingleButton}
+                onPress={() => setIsFinishBlockedModalVisible(false)}>
+                <Text style={styles.modalPrimaryButtonText}>Okay</Text>
+              </Pressable>
             </View>
           </View>
         </Modal>
@@ -492,5 +524,13 @@ const styles = StyleSheet.create({
     color: "hsl(0, 100%, 80%)",
     fontSize: 15,
     fontWeight: "600",
+  },
+  modalSingleButton: {
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#333333",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 22,
   },
 });
