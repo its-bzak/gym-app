@@ -1,6 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Tabs } from "expo-router";
 import { View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { HapticTab } from "@/components/haptic-tab";
 
