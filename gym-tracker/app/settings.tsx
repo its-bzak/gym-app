@@ -5,11 +5,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <View style={styles.screen}>
         <Pressable style={styles.returnButton} onPress={() => router.back()}>
           <Text style={styles.returnButtonText}>back</Text>
         </Pressable>
         <Text>settings screen</Text>
+        <Pressable style={styles.confirmChangesButton}>
+          <Text style={styles.confirmChangesButtonText}>confirm changes</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -20,10 +23,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#151515",
   },
-  container: {
+  screen: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: "#151515",
+    paddingHorizontal: 18,
+    paddingTop: 9,
   },
   returnButton: {
     position: "absolute",
@@ -42,4 +48,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+  confirmChangesButton: {
+    marginTop: 20,
+    width: "100%",
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confirmChangesButtonText: {
+    color: "#F4F4F4",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+
 });

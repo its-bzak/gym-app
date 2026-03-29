@@ -4,11 +4,18 @@ import { StyleSheet } from "react-native";
 import { mockProfile } from "@/mock/MainScreen/DailyMetricsSection";
 import { Ionicons } from '@expo/vector-icons';
 import { router } from "expo-router";
+import { ScrollView } from "react-native";
+import { mockBadgeCategories } from "@/mock/badges";
 
 export default function ProfileScreen() {
+  const displayedBadges = mockBadgeCategories
+    .flatMap((category) => category.badges)
+    .filter((badge) => badge.isDisplayed)
+    .slice(0, 3);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.mainContentContainer}>
+      <ScrollView style={styles.screen}>
         <Pressable style={styles.settingsButton} onPress={() => router.push("/settings")}>
           <Ionicons name="settings-outline" size={24} color="#F4F4F4" />
         </Pressable>
@@ -17,8 +24,34 @@ export default function ProfileScreen() {
         </View>
         <Text style={styles.usernameText}>
           @{mockProfile.username}
-          </Text>
-      </View>
+        </Text>
+        <View style={styles.buttonsContainer}>
+          <Pressable style={styles.routinesButton}>
+            <Text style={styles.routinesButtonText}>Routines</Text>
+          </Pressable>
+          <Pressable style={styles.goalsButton}>
+            <Text style={styles.goalsButtonText}>Goals</Text>
+          </Pressable>
+          <Pressable style={styles.exercisesButton}>
+            <Text style={styles.exercisesButtonText}>Exercises</Text>
+          </Pressable>
+        </View>
+        <View style={styles.bodyMapContainer}>
+          {/* Placeholder for BodyMap component */}
+        </View>
+        <View style={styles.badgesContainer}>
+          <View style={styles.badgeRow}>
+            {displayedBadges.map((badge) => (
+              <View key={badge.id} style={styles.badge}>
+                <Text style={styles.badgeText}>{badge.name}</Text>
+              </View>
+            ))}
+          </View>
+          <Pressable style={styles.seeMoreBadgesButton}>
+            <Text style={styles.seeMoreBadgesButtonText}>See More Badges</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -28,10 +61,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#151515",
   },
-  mainContentContainer: {
+  screen: {
     flex: 1,
+    display: "flex",
+    flexDirection: "column",
     backgroundColor: "#151515",
-    padding: 18,
+    paddingHorizontal: 18,
+    paddingTop: 9,
   },
   settingsButton: {
     position: "absolute",
@@ -63,5 +99,95 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "400",
     textAlign: "center",
+  },
+  buttonsContainer: {
+    marginTop: 20,
+    width: "100%",
+    alignSelf: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  routinesButton: {
+    flex: 1,
+    height: 30,
+    borderRadius: 20,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 5,
+  },
+  routinesButtonText: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  goalsButton: {
+    flex: 1,
+    height: 30,
+    borderRadius: 20,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 5,
+  },
+  goalsButtonText: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  exercisesButton: {
+    flex: 1,
+    height: 30,
+    borderRadius: 20,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 5,
+  },
+  exercisesButtonText: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "500",
+    },
+  bodyMapContainer: {
+    marginTop: 20,
+    height: 360,
+    backgroundColor: "#1A1A1A",
+    borderRadius: 10,
+  },
+  badgesContainer: {
+    marginTop: 20,
+  },
+  badgeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  badge: {
+    flex: 1,
+    height: 100,
+    borderRadius: 10,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 5,
+  },
+  badgeText: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  seeMoreBadgesButton: {
+    height: 30,
+    borderRadius: 20,
+    marginBottom: 40,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  seeMoreBadgesButtonText: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "500",
   },
 });
