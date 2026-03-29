@@ -1,4 +1,5 @@
 import { MacroBarProps } from "@/utils/calculateMacroBar";
+import { getCurrentDate } from "@/utils/dateFormat";
 
 export type DatedMacroMetrics = MacroBarProps & {
     date: string;
@@ -147,7 +148,7 @@ export const mockGoal: WeightGoal = {
 };
 
 
-export const DEFAULT_METRICS_DATE = "2026-03-27";
+export const DEFAULT_METRICS_DATE = getCurrentDate();
 
 export const defaultDailyMacroMetrics: MacroBarProps = stripDateFromMacroMetrics(
     dailyMacroMetricsByDate.find((entry) => entry.date === DEFAULT_METRICS_DATE) ?? dailyMacroMetricsByDate[0]

@@ -17,6 +17,7 @@ import GoalProgressSection from "@/components/main/GoalProgress";
 import { mockGoal } from "@/mock/MainScreen/DailyMetricsSection";
 import { BodyMap } from "@/components/ui/BodyMap";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function WorkoutScreen() {
   const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
@@ -57,12 +58,17 @@ export default function WorkoutScreen() {
     
           <View style={styles.secondaryButtonContainer}>
             <Pressable style={styles.logFoodButton}>
-                <Text style={styles.secondaryButtonText}>Log Food</Text>
+                <Ionicons name="fast-food-outline" size={20} color="#7C7C7C" />
             </Pressable>
 
             <Pressable style={styles.logWeightButton}>
-                <Text style={styles.secondaryButtonText}>Log Weight</Text>
+                <Ionicons name="scale-outline" size={20} color="#7C7C7C" />
             </Pressable>
+
+            <Pressable style={styles.routinesAndExercisesButton}>
+                <Text style={styles.secondaryButtonText}>Routines / Exercises</Text>
+            </Pressable>
+
           </View>
 
           <Pressable style={styles.startButton} onPress={() => {
@@ -153,7 +159,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 6,
   },
 
   logWeightButton: {
@@ -165,6 +170,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 6,
   },
+  routinesAndExercisesButton: {
+    flex: 2,
+    height: 40,
+    backgroundColor: "#1A1A1A",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 6,
+  },
+
   secondaryButtonText: {
     color: "#7C7C7C",
     fontSize: 16,
