@@ -134,6 +134,9 @@ export default function ExercisesScreen() {
             </Pressable>
           )}
         />
+        <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backButtonText}>Back to Workout</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -253,5 +256,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 6,
     textAlign: "center",
+  },
+  backButton: {
+    height: 50,
+    borderRadius: 18,
+    backgroundColor: "#333333",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+  },
+  backButtonText: {
+    color: "#7C7C7C",
+    fontSize: 18,
   },
 });
