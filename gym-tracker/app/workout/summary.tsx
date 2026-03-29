@@ -57,7 +57,6 @@ export default function WorkoutSummaryScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.screen}>
         <Text style={styles.title}>Workout Summary</Text>
-        <Text style={styles.subtitle}>{durationLabel}</Text>
 
         <View style={styles.muscleMapCard}>
           <Text style={styles.sectionTitle}>Muscles Worked</Text>
@@ -171,6 +170,7 @@ const styles = StyleSheet.create({
   title: {
     color: "#F4F4F4",
     fontSize: 28,
+    marginBottom: 8,
     fontWeight: "600",
   },
   subtitle: {
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   muscleMapPlaceholder: {
-    height: 180,
+    height: 320,
     borderRadius: 16,
     backgroundColor: "#212121",
     alignItems: "center",
