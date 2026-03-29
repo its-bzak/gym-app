@@ -15,7 +15,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.screen}>
+      <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
         <Pressable style={styles.settingsButton} onPress={() => router.push("/settings")}>
           <Ionicons name="settings-outline" size={24} color="#F4F4F4" />
         </Pressable>
@@ -47,7 +47,7 @@ export default function ProfileScreen() {
               </View>
             ))}
           </View>
-          <Pressable style={styles.seeMoreBadgesButton}>
+          <Pressable style={styles.seeMoreBadgesButton} onPress={() => router.push("/badges")}>
             <Text style={styles.seeMoreBadgesButtonText}>See More Badges</Text>
           </Pressable>
         </View>
@@ -176,6 +176,7 @@ const styles = StyleSheet.create({
     color: "#F4F4F4",
     fontSize: 14,
     fontWeight: "500",
+    textAlign: "center",
   },
   seeMoreBadgesButton: {
     height: 30,

@@ -30,6 +30,7 @@ export default function RootLayout() {
           <Stack.Screen name="workout/summary" options={{ headerShown: false }} />
           <Stack.Screen name="workout/exercises" options={{ headerShown: false }} />
           <Stack.Screen name="settings" options={{ headerShown: false }} />
+          <Stack.Screen name="badges" options={{ headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>
