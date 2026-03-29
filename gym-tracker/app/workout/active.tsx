@@ -158,7 +158,11 @@ export default function ActiveScreen() {
                     />
                   </View>
 
-                  <Pressable onPress={() => removeSet(selectedExercise.id, set.id)} hitSlop={8}>
+                  <Pressable
+                    style={styles.removeSetButton}
+                    onPress={() => removeSet(selectedExercise.id, set.id)}
+                    hitSlop={8}
+                  >
                     <Text style={styles.removeText}>×</Text>
                   </Pressable>
                 </View>
@@ -313,6 +317,11 @@ const styles = StyleSheet.create({
     width: 14,
     textAlign: "center",
     alignSelf: "flex-end",
+  },
+  removeSetButton: {
+    marginLeft: "auto",
+    alignSelf: "stretch",
+    justifyContent: "center",
   },
   addExerciseButton: {
     alignSelf: "center",
