@@ -22,6 +22,7 @@ export default function WorkoutSummaryScreen() {
   const totalVolume = getTotalVolume(workout.exercises);
   const prAchievements = getWorkoutPRs(workout.exercises, mockExercisePRs);
   const workedMuscles = getWorkedMuscles(workout.exercises, mockExercises);
+  
 
   const handleBackToWorkout = () => {
     resumeWorkout();
