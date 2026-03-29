@@ -157,6 +157,7 @@ const styles = StyleSheet.create({
   },
   badgesContainer: {
     marginTop: 20,
+    justifyContent: "space-between",
   },
   badgeRow: {
     flexDirection: "row",

@@ -57,9 +57,9 @@ export default function TabsLayout() {
         },
       }}>
       <Tabs.Screen
-        name="profile"
+        name="discover"
         options={{
-          title: "Profile",
+          title: "Discover",
           tabBarButton: HapticTab,
           tabBarIcon: ({ focused }) => <TabIcon focused={focused} />,
         }}
@@ -76,6 +76,14 @@ export default function TabsLayout() {
         name="performance"
         options={{
           title: "Performance",
+          tabBarButton: HapticTab,
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
           tabBarButton: HapticTab,
           tabBarIcon: ({ focused }) => <TabIcon focused={focused} />,
         }}
