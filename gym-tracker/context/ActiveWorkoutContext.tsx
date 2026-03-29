@@ -17,6 +17,8 @@ type ActiveWorkoutContextType = {
   removeSet: (exerciseId: string, setId: string) => void;
   removeExercise: (exerciseId: string) => void;
   clearWorkout: () => void;
+  finishWorkout: () => void;
+  resumeWorkout: () => void;
 };
 
 const ActiveWorkoutContext = createContext<ActiveWorkoutContextType | undefined>(undefined);
@@ -41,6 +43,7 @@ function createActiveWorkoutExercise(exercise: Exercise): ActiveWorkoutExercise 
 export function ActiveWorkoutProvider({ children }: { children: React.ReactNode }) {
   const [workout, setWorkout] = useState<ActiveWorkout>({
     startedAt: null,
+    endedAt: null,
     exercises: [],
     selectedExerciseId: null,
   });
@@ -48,6 +51,7 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
   const startWorkout = () => {
     setWorkout({
       startedAt: new Date().toISOString(),
+      endedAt: null,
       exercises: [],
       selectedExerciseId: null,
     });
@@ -141,9 +145,24 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
     });
   };
 
+  const finishWorkout = () => {
+    setWorkout((prev) => ({
+      ...prev,
+      endedAt: new Date().toISOString(),
+    }));
+  };
+
+  const resumeWorkout = () => {
+    setWorkout((prev) => ({
+      ...prev,
+      endedAt: null,
+    }));
+  };
+
   const clearWorkout = () => {
     setWorkout({
       startedAt: null,
+      endedAt: null,
       exercises: [],
       selectedExerciseId: null,
     });
@@ -160,6 +179,8 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
         updateSet,
         removeSet,
         removeExercise,
+        finishWorkout,
+        resumeWorkout,
         clearWorkout,
       }}
     >

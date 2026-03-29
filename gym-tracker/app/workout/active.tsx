@@ -32,6 +32,7 @@ export default function ActiveScreen() {
   updateSet,
   removeSet,
   removeExercise,
+  finishWorkout,
   } = useActiveWorkout();
 
   const selectedExercise =
@@ -171,7 +172,7 @@ export default function ActiveScreen() {
         </ScrollView>
 
         <View style={styles.finishButtonContainer}>
-          <Pressable style={styles.finishButton} onPress={() => {clearWorkout(); router.push("/workout")}}>
+          <Pressable style={styles.finishButton} onPress={() => {finishWorkout(); router.push("/workout/summary")}}>
             <Text style={styles.finishButtonText}>
               Finish Workout</Text>
           </Pressable>

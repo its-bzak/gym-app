@@ -13,6 +13,7 @@ export type ActiveWorkoutExercise = {
 
 export type ActiveWorkout = {
   startedAt: string | null;
+  endedAt: string | null;
   exercises: ActiveWorkoutExercise[];
   selectedExerciseId: string | null;
 };
