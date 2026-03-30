@@ -130,6 +130,18 @@ export default function ActiveScreen() {
           >
             <Text style={styles.addSetText}>Add Exercise</Text>
           </Pressable>
+
+          <Text style={styles.emptyText}>or</Text>
+
+          <Pressable
+            style={styles.addExerciseButton}
+            onPress={() => {
+              router.push("/workout/routines");
+            }}
+          >
+            <Text style={styles.addSetText}>Choose Routine</Text>
+          </Pressable>
+          
         </ScrollView>
 
         <ScrollView style={styles.setsSection} contentContainerStyle={styles.setsContent}>
@@ -357,7 +369,8 @@ const styles = StyleSheet.create({
   },
   addExerciseButton: {
     alignSelf: "center",
-    marginTop: 10,
+    marginTop: 4,
+    marginBottom: 10,
     height: 42,
     width: "50%",
     borderRadius: 16,
@@ -375,7 +388,7 @@ const styles = StyleSheet.create({
     color: "#7C7C7C",
     fontSize: 15,
     textAlign: "center",
-    marginBottom: 14,
+    marginBottom: 6,
   },
   paginationRow: {
     marginTop: "auto",
@@ -449,7 +462,7 @@ const styles = StyleSheet.create({
   addSetText: {
     color: "#7C7C7C",
     alignSelf: "center",
-    fontSize: 16,
+    fontSize: 14,
   },
   finishButtonContainer: {
     flex: 1,

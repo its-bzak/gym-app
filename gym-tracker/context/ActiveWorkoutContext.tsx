@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState } from "react";
 import { Exercise } from "@/types/exercise";
+import { Routine } from "@/types/routine";
 import { ActiveWorkout, ActiveWorkoutExercise, WorkoutSet } from "@/types/workout";
 
 type ActiveWorkoutContextType = {
   workout: ActiveWorkout;
   startWorkout: () => void;
   addExercise: (exercise: Exercise) => void;
+  addRoutine: (routine: Routine) => void;
   selectExercise: (exerciseId: string) => void;
   addSetToSelectedExercise: () => void;
   updateSet: (
@@ -31,12 +33,31 @@ function createWorkoutSet(): WorkoutSet {
   };
 }
 
+function createWorkoutSetFromValues(weight: number | null, reps: number | null): WorkoutSet {
+  return {
+    id: `set-${Date.now()}-${Math.random()}`,
+    weight: weight?.toString() ?? "",
+    reps: reps?.toString() ?? "",
+  };
+}
+
 function createActiveWorkoutExercise(exercise: Exercise): ActiveWorkoutExercise {
   return {
     id: `active-ex-${exercise.id}-${Date.now()}-${Math.random()}`,
     exerciseId: exercise.id,
     name: exercise.name,
     sets: [],
+  };
+}
+
+function createActiveWorkoutExerciseFromRoutine(
+  exercise: Routine["exercises"][number]
+): ActiveWorkoutExercise {
+  return {
+    id: `active-ex-${exercise.exercise.id}-${Date.now()}-${Math.random()}`,
+    exerciseId: exercise.exercise.id,
+    name: exercise.exercise.name,
+    sets: exercise.sets.map((set) => createWorkoutSetFromValues(set.weight, set.reps)),
   };
 }
 
@@ -64,6 +85,22 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
       ...prev,
       exercises: [...prev.exercises, newExercise],
       selectedExerciseId: newExercise.id,
+    }));
+  };
+
+  const addRoutine = (routine: Routine) => {
+    const routineExercises = routine.exercises.map((exercise) =>
+      createActiveWorkoutExerciseFromRoutine(exercise)
+    );
+
+    if (routineExercises.length === 0) {
+      return;
+    }
+
+    setWorkout((prev) => ({
+      ...prev,
+      exercises: [...prev.exercises, ...routineExercises],
+      selectedExerciseId: routineExercises[0].id,
     }));
   };
 
@@ -174,6 +211,7 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
         workout,
         startWorkout,
         addExercise,
+        addRoutine,
         selectExercise,
         addSetToSelectedExercise,
         updateSet,
