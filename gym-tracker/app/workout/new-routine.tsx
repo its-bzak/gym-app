@@ -85,12 +85,7 @@ export default function NewRoutineScreen() {
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
             <>
-              <Text style={styles.title}>New Routine</Text>
-              <Text style={styles.subtitle}>
-                Build a routine from exercises already available in your library.
-              </Text>
 
-              <Text style={styles.label}>Routine Name</Text>
               <TextInput
                 style={styles.input}
                 value={routineName}
@@ -98,11 +93,10 @@ export default function NewRoutineScreen() {
                   setRoutineName(value);
                   setErrorMessage(null);
                 }}
-                placeholder="Ex: Pull Day A"
+                placeholder="&apos;My Awesome Routine&apos;"
                 placeholderTextColor="#6F6F6F"
               />
 
-              <Text style={styles.label}>Search Exercises</Text>
               <TextInput
                 style={styles.input}
                 value={searchQuery}
@@ -111,11 +105,12 @@ export default function NewRoutineScreen() {
                 placeholderTextColor="#6F6F6F"
               />
 
-              <Text style={styles.label}>Selected Exercises</Text>
+                {/* Placeholder for filter button (filter by primary muscle) */}
+
               {selectedExercises.length === 0 ? (
                 <View style={styles.emptySelectedState}>
                   <Text style={styles.emptySelectedText}>
-                    Tap exercises below to add them to this routine.
+                    Selected exercises will appear here
                   </Text>
                 </View>
               ) : (
@@ -239,8 +234,11 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   selectedChip: {
+    height: 44,
     backgroundColor: "#2A2A2A",
     borderRadius: 999,
+    justifyContent: "center",
+    alignContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -257,6 +255,7 @@ const styles = StyleSheet.create({
   emptySelectedText: {
     color: "#A0A0A0",
     fontSize: 14,
+    alignSelf: "center",
   },
   errorText: {
     color: "#F28B82",

@@ -45,12 +45,12 @@ export default function RoutinesScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>Choose Routine</Text>
+          <Text style={styles.title}>Routines</Text>
           <Pressable
             style={styles.headerButton}
             onPress={() => router.push("/workout/new-routine")}
           >
-            <Text style={styles.headerButtonText}>New</Text>
+            <Text style={styles.headerButtonText}>+</Text>
           </Pressable>
         </View>
 

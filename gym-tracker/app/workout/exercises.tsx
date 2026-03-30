@@ -58,12 +58,12 @@ export default function ExercisesScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>Exercise Library</Text>
+          <Text style={styles.title}>Exercises</Text>
           <Pressable
             style={styles.headerButton}
             onPress={() => router.push("/workout/new-exercise")}
           >
-            <Text style={styles.headerButtonText}>New</Text>
+            <Text style={styles.headerButtonText}>+</Text>
           </Pressable>
         </View>
 
