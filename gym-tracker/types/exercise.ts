@@ -8,4 +8,6 @@ export type Exercise = {
   muscleGroup: string;
   primaryMuscles?: string[];
   secondaryMuscles?: string[];
+  createdAt: string;
+  updatedAt: string;
 };
