@@ -11,17 +11,18 @@ import {
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
-import { mockRoutines } from "@/mock/routines";
+import { useLibrary } from "@/context/LibraryContext";
 import { Routine } from "@/types/routine";
 
 export default function RoutinesScreen() {
   const { addRoutine } = useActiveWorkout();
+  const { routines } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredRoutines = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return mockRoutines.filter((routine) => {
+    return routines.filter((routine) => {
       if (normalizedQuery.length === 0) {
         return true;
       }
@@ -33,7 +34,7 @@ export default function RoutinesScreen() {
         )
       );
     });
-  }, [searchQuery]);
+  }, [routines, searchQuery]);
 
   const handleSelectRoutine = (routine: Routine) => {
     addRoutine(routine);
@@ -43,7 +44,15 @@ export default function RoutinesScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>Choose Routine</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>Choose Routine</Text>
+          <Pressable
+            style={styles.headerButton}
+            onPress={() => router.push("/workout/new-routine")}
+          >
+            <Text style={styles.headerButtonText}>New</Text>
+          </Pressable>
+        </View>
 
         <TextInput
           style={styles.searchInput}
@@ -112,7 +121,27 @@ const styles = StyleSheet.create({
   title: {
     color: "#F4F4F4",
     fontSize: 24,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 20,
+    gap: 12,
+  },
+  headerButton: {
+    minWidth: 72,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: "#2A2A2A",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  headerButtonText: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "600",
   },
   searchInput: {
     height: 48,

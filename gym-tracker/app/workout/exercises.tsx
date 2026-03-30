@@ -9,29 +9,30 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
-import { mockExercises } from "@/mock/exercises";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
+import { useLibrary } from "@/context/LibraryContext";
 import { Exercise } from "@/types/exercise";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ExercisesScreen() {
   const { addExercise } = useActiveWorkout();
+  const { exercises } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState("All");
   const [isFilterMenuVisible, setIsFilterMenuVisible] = useState(false);
 
   const primaryMuscleOptions = useMemo(() => {
     const uniquePrimaryMuscles = Array.from(
-      new Set(mockExercises.flatMap((exercise) => exercise.primaryMuscles ?? []))
+      new Set(exercises.flatMap((exercise) => exercise.primaryMuscles ?? []))
     ).sort((first, second) => first.localeCompare(second));
 
     return ["All", ...uniquePrimaryMuscles];
-  }, []);
+  }, [exercises]);
 
   const filteredExercises = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return mockExercises.filter((exercise) => {
+    return exercises.filter((exercise) => {
       const matchesPrimaryMuscle =
         selectedPrimaryMuscle === "All" ||
         (exercise.primaryMuscles ?? []).includes(selectedPrimaryMuscle);
@@ -46,7 +47,7 @@ export default function ExercisesScreen() {
 
       return matchesPrimaryMuscle && matchesSearch;
     });
-  }, [searchQuery, selectedPrimaryMuscle]);
+  }, [exercises, searchQuery, selectedPrimaryMuscle]);
 
   const handleSelectExercise = (exercise: Exercise) => {
     addExercise(exercise);
@@ -56,7 +57,15 @@ export default function ExercisesScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>Exercise Library</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>Exercise Library</Text>
+          <Pressable
+            style={styles.headerButton}
+            onPress={() => router.push("/workout/new-exercise")}
+          >
+            <Text style={styles.headerButtonText}>New</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.controlsContainer}>
           <View style={styles.controlsRow}>
@@ -155,7 +164,27 @@ const styles = StyleSheet.create({
   title: {
     color: "#fff",
     fontSize: 24,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 20,
+    gap: 12,
+  },
+  headerButton: {
+    minWidth: 72,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: "#2A2A2A",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  headerButtonText: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "600",
   },
   controlsContainer: {
     position: "relative",

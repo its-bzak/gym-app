@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { ActiveWorkoutProvider } from "@/context/ActiveWorkoutContext";
+import { LibraryProvider } from "@/context/LibraryContext";
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { initDB } from '@/db/sqlite';
@@ -21,19 +22,24 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ActiveWorkoutProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="workout/active" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          <Stack.Screen name="workout/summary" options={{ headerShown: false }} />
-          <Stack.Screen name="workout/exercises" options={{ headerShown: false }} />
-          <Stack.Screen name="settings" options={{ headerShown: false }} />
-          <Stack.Screen name="badges" options={{ headerShown: false }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </ActiveWorkoutProvider>
+    <LibraryProvider>
+      <ActiveWorkoutProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="workout/active" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            <Stack.Screen name="workout/summary" options={{ headerShown: false }} />
+            <Stack.Screen name="workout/exercises" options={{ headerShown: false }} />
+            <Stack.Screen name="workout/new-exercise" options={{ headerShown: false }} />
+            <Stack.Screen name="workout/routines" options={{ headerShown: false }} />
+            <Stack.Screen name="workout/new-routine" options={{ headerShown: false }} />
+            <Stack.Screen name="settings" options={{ headerShown: false }} />
+            <Stack.Screen name="badges" options={{ headerShown: false }} />
+          </Stack>
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </ActiveWorkoutProvider>
+    </LibraryProvider>
   );
 }
