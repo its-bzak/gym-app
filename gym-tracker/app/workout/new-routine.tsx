@@ -205,7 +205,7 @@ export default function NewRoutineScreen() {
               />
 
               <View style={styles.controlsContainer}>
-                <View style={styles.controlsRow}>
+                
                   <TextInput
                     style={styles.searchInput}
                     value={searchQuery}
@@ -213,7 +213,7 @@ export default function NewRoutineScreen() {
                     placeholder="Search by exercise or muscle"
                     placeholderTextColor="#6F6F6F"
                   />
-
+                <View style={styles.controlsRow}>
                   <Pressable
                     style={styles.filterButton}
                     onPress={() =>
@@ -425,6 +425,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     borderRadius: 16,
+    marginBottom: 12,
     backgroundColor: "#1A1A1A",
     color: "#F4F4F4",
     paddingHorizontal: 16,
@@ -446,8 +447,8 @@ const styles = StyleSheet.create({
   },
   filterDropdown: {
     position: "absolute",
-    top: 56,
-    right: 0,
+    top: 120,
+    right: 70,
     width: 220,
     maxHeight: 240,
     zIndex: 40,

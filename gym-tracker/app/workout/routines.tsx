@@ -199,7 +199,7 @@ export default function RoutinesScreen() {
                 )
               }>
               <Text style={styles.filterButtonText} numberOfLines={1}>
-                {selectedPrimaryMuscle === "All" ? "Filter" : selectedPrimaryMuscle}
+                {selectedPrimaryMuscle === "All" ? "Primary" : selectedPrimaryMuscle}
               </Text>
             </Pressable>
 

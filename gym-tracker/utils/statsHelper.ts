@@ -64,11 +64,12 @@ export function getWorkoutPRs(
   const achievements: PRAchievement[] = [];
 
   for (const exercise of exercises) {
-    const baseline = previousPRs[exercise.exerciseId];
-    if (!baseline) continue;
-
     const currentMaxWeight = getExerciseMaxWeight(exercise);
     const currentVolume = getExerciseVolume(exercise);
+    const baseline = previousPRs[exercise.exerciseId] ?? {
+      maxWeight: 0,
+      maxVolume: 0,
+    };
 
     if (currentMaxWeight > baseline.maxWeight) {
       achievements.push({
