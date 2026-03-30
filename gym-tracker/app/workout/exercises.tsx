@@ -63,7 +63,7 @@ export default function ExercisesScreen() {
             style={styles.headerButton}
             onPress={() => router.push("/workout/new-exercise")}
           >
-            <Text style={styles.headerButtonText}>+</Text>
+            <Text style={styles.headerButtonText}>Create New</Text>
           </Pressable>
         </View>
 
