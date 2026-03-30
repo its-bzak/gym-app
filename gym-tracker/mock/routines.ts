@@ -1,5 +1,15 @@
-import { Exercise } from "@/types/exercise";
+import { exercises as baseExercises } from "@/mock/gymImplementation";
 import { Routine } from "@/types/routine";
+
+function getExerciseById(exerciseId: string) {
+    const exercise = baseExercises.find((item) => item.id === exerciseId);
+
+    if (!exercise) {
+        throw new Error(`Missing base exercise for routine seed: ${exerciseId}`);
+    }
+
+    return exercise;
+}
 
 export const mockRoutines: Routine[] = [
     {
@@ -7,28 +17,12 @@ export const mockRoutines: Routine[] = [
         name: "Chest Day",
         exercises: [
             {
-                exercise: {
-                    id: "1",
-                    name: "Dumbbell Chest Press",
-                    muscleGroup: "Chest",
-                    primaryMuscles: ["Chest"],
-                    secondaryMuscles: ["Front Delts", "Triceps"],
-                } as Exercise,
-                sets: [
-                    { reps: null, weight: null },
-                ],
+                exercise: getExerciseById("ex_barbell_bench_press"),
+                sets: [{ reps: null, weight: null }],
             },
             {
-                exercise: {
-                    id: "2",
-                    name: "Pec Deck",
-                    muscleGroup: "Chest",
-                    primaryMuscles: ["Chest"],
-                    secondaryMuscles: ["Front Delts"],
-                } as Exercise,
-                sets: [
-                    { reps: null, weight: null },
-                ],
+                exercise: getExerciseById("ex_machine_chest_fly"),
+                sets: [{ reps: null, weight: null }],
             },
         ],
     },
@@ -37,28 +31,12 @@ export const mockRoutines: Routine[] = [
         name: "Leg Day",
         exercises: [
             {
-                exercise: {
-                    id: "6",
-                    name: "Barbell Squat",
-                    muscleGroup: "Legs",
-                    primaryMuscles: ["Quadriceps", "Glutes"],
-                    secondaryMuscles: ["Hamstrings", "Lower Back"],
-                } as Exercise,
-                sets: [
-                    { reps: null, weight: null },
-                ],
+                exercise: getExerciseById("ex_back_squat"),
+                sets: [{ reps: null, weight: null }],
             },
             {
-                exercise: {
-                    id: "7",
-                    name: "Leg Press",
-                    muscleGroup: "Legs",
-                    primaryMuscles: ["Quadriceps", "Glutes"],
-                    secondaryMuscles: ["Hamstrings"],
-                } as Exercise,
-                sets: [
-                    { reps: null, weight: null },
-                ],
+                exercise: getExerciseById("ex_leg_press"),
+                sets: [{ reps: null, weight: null }],
             },
         ],
     },

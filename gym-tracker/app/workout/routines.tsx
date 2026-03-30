@@ -63,7 +63,7 @@ export default function RoutinesScreen() {
   const categoryOptions = useMemo(() => {
     const uniqueCategories = Array.from(
       new Set(
-        exercises.map((exercise) => normalizeCategory(exercise.type)).filter(Boolean)
+        exercises.map((exercise) => normalizeCategory(exercise.category)).filter(Boolean)
       )
     ).sort((first, second) => first.localeCompare(second));
 
@@ -130,7 +130,7 @@ export default function RoutinesScreen() {
 
       const matchesCategory =
         selectedCategory === "all" ||
-        routineExercises.some((exercise) => normalizeCategory(exercise.type) === selectedCategory);
+        routineExercises.some((exercise) => normalizeCategory(exercise.category) === selectedCategory);
 
       const matchesSearch =
         normalizedQuery.length === 0 ||

@@ -11,16 +11,43 @@ import {
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibrary } from "@/context/LibraryContext";
+import { getExercisesForGym, getUserGymOptions } from "@/mock/mockDataService";
+
+const CURRENT_USER_ID = "user_ryan";
+
+function normalizeText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizeCategory(value?: string) {
+  return value ? normalizeText(value).replace(/\s+/g, "_") : "unknown";
+}
+
+function formatCategoryLabel(value: string) {
+  return value === "all"
+    ? "Category"
+    : value
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
 
 export default function NewRoutineScreen() {
   const { exercises, addCustomRoutine, hasRoutineNamed } = useLibrary();
   const [routineName, setRoutineName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState("All");
-  const [isFilterMenuVisible, setIsFilterMenuVisible] = useState(false);
+  const [selectedGymId, setSelectedGymId] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [openFilterMenu, setOpenFilterMenu] = useState<"primary" | "gym" | "category" | null>(null);
   const [selectedExerciseIds, setSelectedExerciseIds] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasMissingNameError = errorMessage === "Routine name is required.";
+
+  const gymOptions = useMemo(
+    () => [{ gymId: "all", gymName: "All Gyms" }, ...getUserGymOptions(CURRENT_USER_ID)],
+    []
+  );
 
   const primaryMuscleOptions = useMemo(() => {
     const uniquePrimaryMuscles = Array.from(
@@ -30,6 +57,46 @@ export default function NewRoutineScreen() {
     return ["All", ...uniquePrimaryMuscles];
   }, [exercises]);
 
+  const categoryOptions = useMemo(() => {
+    const uniqueCategories = Array.from(
+      new Set(exercises.map((exercise) => normalizeCategory(exercise.category)).filter(Boolean))
+    ).sort((first, second) => first.localeCompare(second));
+
+    return ["all", ...uniqueCategories];
+  }, [exercises]);
+
+  const availableGymExerciseNames = useMemo(() => {
+    if (selectedGymId === "all") {
+      return null;
+    }
+
+    return new Set(
+      getExercisesForGym(selectedGymId).map((exercise) => normalizeText(exercise.name))
+    );
+  }, [selectedGymId]);
+
+  const activeFilterOptions = useMemo(() => {
+    if (openFilterMenu === "primary") {
+      return primaryMuscleOptions.map((muscle) => ({ label: muscle, value: muscle }));
+    }
+
+    if (openFilterMenu === "gym") {
+      return gymOptions.map((gym) => ({ label: gym.gymName, value: gym.gymId }));
+    }
+
+    if (openFilterMenu === "category") {
+      return categoryOptions.map((category) => ({
+        label: formatCategoryLabel(category),
+        value: category,
+      }));
+    }
+
+    return [];
+  }, [categoryOptions, gymOptions, openFilterMenu, primaryMuscleOptions]);
+
+  const selectedGymLabel =
+    gymOptions.find((gym) => gym.gymId === selectedGymId)?.gymName ?? "Gym";
+
   const filteredExercises = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -38,8 +105,15 @@ export default function NewRoutineScreen() {
         selectedPrimaryMuscle === "All" ||
         (exercise.primaryMuscles ?? []).includes(selectedPrimaryMuscle);
 
+      const matchesGym =
+        availableGymExerciseNames === null ||
+        availableGymExerciseNames.has(normalizeText(exercise.name));
+
+      const matchesCategory =
+        selectedCategory === "all" || normalizeCategory(exercise.category) === selectedCategory;
+
       if (normalizedQuery.length === 0) {
-        return matchesPrimaryMuscle;
+        return matchesPrimaryMuscle && matchesGym && matchesCategory;
       }
 
       const matchesSearch =
@@ -49,9 +123,9 @@ export default function NewRoutineScreen() {
           muscle.toLowerCase().includes(normalizedQuery)
         );
 
-      return matchesPrimaryMuscle && matchesSearch;
+      return matchesPrimaryMuscle && matchesGym && matchesCategory && matchesSearch;
     });
-  }, [exercises, searchQuery, selectedPrimaryMuscle]);
+  }, [availableGymExerciseNames, exercises, searchQuery, selectedCategory, selectedPrimaryMuscle]);
 
   const selectedExercises = useMemo(() => {
     return selectedExerciseIds
@@ -67,6 +141,22 @@ export default function NewRoutineScreen() {
 
       return [...prev, exerciseId];
     });
+  };
+
+  const handleFilterSelect = (value: string) => {
+    if (openFilterMenu === "primary") {
+      setSelectedPrimaryMuscle(value);
+    }
+
+    if (openFilterMenu === "gym") {
+      setSelectedGymId(value);
+    }
+
+    if (openFilterMenu === "category") {
+      setSelectedCategory(value);
+    }
+
+    setOpenFilterMenu(null);
   };
 
   const handleSaveRoutine = () => {
@@ -126,36 +216,64 @@ export default function NewRoutineScreen() {
 
                   <Pressable
                     style={styles.filterButton}
-                    onPress={() => setIsFilterMenuVisible((currentValue) => !currentValue)}>
+                    onPress={() =>
+                      setOpenFilterMenu((currentValue) =>
+                        currentValue === "primary" ? null : "primary"
+                      )
+                    }>
                     <Text style={styles.filterButtonText} numberOfLines={1}>
                       {selectedPrimaryMuscle === "All" ? "Filter" : selectedPrimaryMuscle}
                     </Text>
                   </Pressable>
+
+                  <Pressable
+                    style={styles.filterButton}
+                    onPress={() =>
+                      setOpenFilterMenu((currentValue) =>
+                        currentValue === "gym" ? null : "gym"
+                      )
+                    }>
+                    <Text style={styles.filterButtonText} numberOfLines={1}>
+                      {selectedGymId === "all" ? "Gym" : selectedGymLabel}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.filterButton}
+                    onPress={() =>
+                      setOpenFilterMenu((currentValue) =>
+                        currentValue === "category" ? null : "category"
+                      )
+                    }>
+                    <Text style={styles.filterButtonText} numberOfLines={1}>
+                      {formatCategoryLabel(selectedCategory)}
+                    </Text>
+                  </Pressable>
                 </View>
 
-                {isFilterMenuVisible && (
+                {openFilterMenu !== null && (
                   <View style={styles.filterDropdown}>
                     <ScrollView
                       nestedScrollEnabled
                       showsVerticalScrollIndicator={false}
                       contentContainerStyle={styles.filterDropdownContent}>
-                      {primaryMuscleOptions.map((muscle) => {
-                        const isSelected = muscle === selectedPrimaryMuscle;
+                      {activeFilterOptions.map((option) => {
+                        const isSelected =
+                          (openFilterMenu === "primary" && option.value === selectedPrimaryMuscle) ||
+                          (openFilterMenu === "gym" && option.value === selectedGymId) ||
+                          (openFilterMenu === "category" && option.value === selectedCategory);
 
                         return (
                           <Pressable
-                            key={muscle}
+                            key={`${openFilterMenu}-${option.value}`}
                             style={styles.filterOption}
-                            onPress={() => {
-                              setSelectedPrimaryMuscle(muscle);
-                              setIsFilterMenuVisible(false);
-                            }}>
+                            onPress={() => handleFilterSelect(option.value)}>
                             <Text
                               style={[
                                 styles.filterOptionText,
                                 isSelected && styles.filterOptionTextSelected,
                               ]}>
-                              {muscle}
+                              {option.label}
                             </Text>
                           </Pressable>
                         );
@@ -199,7 +317,7 @@ export default function NewRoutineScreen() {
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateTitle}>No matching exercises</Text>
               <Text style={styles.emptyStateText}>
-                Adjust the search or create a new exercise first.
+                Adjust the search or change the gym, category, or primary muscle filters.
               </Text>
             </View>
           }
@@ -313,7 +431,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   filterButton: {
-    width: 120,
+    flex: 1,
     height: 48,
     borderRadius: 16,
     backgroundColor: "#1A1A1A",
@@ -330,7 +448,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 56,
     right: 0,
-    width: 200,
+    width: 220,
     maxHeight: 240,
     zIndex: 40,
     elevation: 40,

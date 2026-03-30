@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
 import { exercises as baseExercises } from "@/mock/gymImplementation";
 import { mockRoutines } from "@/mock/routines";
-import { Exercise } from "@/types/exercise";
+import { Exercise } from "@/mock/gymImplementation";
 import { Routine } from "@/types/routine";
 
 type CreateExerciseInput = Omit<Exercise, "id">;

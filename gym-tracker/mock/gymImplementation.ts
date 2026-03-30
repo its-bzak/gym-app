@@ -56,8 +56,8 @@ export type GymEquipment = {
 export type Exercise = {
   id: string
   name: string
-  primaryMuscles: string[]
-  secondaryMuscles: string[]
+  primaryMuscles?: string[]
+  secondaryMuscles?: string[]
   muscleGroup: string
   category?: string
   createdAt: string
