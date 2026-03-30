@@ -163,6 +163,12 @@ export function getExercisesForGym(gymId: string): Exercise[] {
   return exercises.filter((exercise) => isExerciseAvailableAtGym(exercise.id, gymId));
 }
 
+export function getUserJoinDateForGym(userId: string, gymId: string): string | null {
+  const membership = getActiveMembershipsForUser(userId).find((membership) => membership.gymId === gymId);
+
+    return membership ? membership.joinedAt : null;
+}
+
 export function getUserGymOptions(
   userId: string
 ): Array<{ gymId: string; gymName: string }> {

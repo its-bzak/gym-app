@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
-import { mockExercises } from "@/mock/exercises";
+import { exercises as baseExercises } from "@/mock/gymImplementation";
 import { mockRoutines } from "@/mock/routines";
 import { Exercise } from "@/types/exercise";
 import { Routine } from "@/types/routine";
@@ -29,7 +29,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [customExercises, setCustomExercises] = useState<Exercise[]>([]);
   const [customRoutines, setCustomRoutines] = useState<Routine[]>([]);
 
-  const exercises = useMemo(() => [...mockExercises, ...customExercises], [customExercises]);
+  const exercises = useMemo(() => [...baseExercises, ...customExercises], [customExercises]);
   const routines = useMemo(() => [...mockRoutines, ...customRoutines], [customRoutines]);
 
   const hasExerciseNamed = (name: string) => {

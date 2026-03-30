@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 import { mockExercisePRs } from "@/mock/exercisePRs";
-import { mockExercises } from "@/mock/exercises";
+import { exercises as baseExercises } from "@/mock/gymImplementation";
 import {
   formatWorkoutDuration,
   getTotalSets,
@@ -21,7 +21,7 @@ export default function WorkoutSummaryScreen() {
   const totalSets = getTotalSets(workout.exercises);
   const totalVolume = getTotalVolume(workout.exercises);
   const prAchievements = getWorkoutPRs(workout.exercises, mockExercisePRs);
-  const workedMuscles = getWorkedMuscles(workout.exercises, mockExercises);
+  const workedMuscles = getWorkedMuscles(workout.exercises, baseExercises);
   
 
   const handleBackToWorkout = () => {

@@ -5,7 +5,7 @@ export type Equipment = {
     name: string;
     brand?: string;
     model?: string;
-    category?: 'machine' | 'free_weight' | 'cable' | 'calisthenics' | 'other';
+    category?: 'machine' | 'free_weight' | 'cable' | 'bodyweight' | 'calisthenics' | 'other';
     primaryMuscles?: Muscles[];
     secondaryMuscles?: Muscles[];
     resistanceType?: string; // e.g., "weight stack", "plates", "bodyweight", etc.

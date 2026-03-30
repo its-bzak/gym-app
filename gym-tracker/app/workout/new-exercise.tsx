@@ -66,6 +66,8 @@ export default function NewExerciseScreen() {
       muscleGroup: primaryMuscles.length > 0 ? primaryMuscles[0] : "",
       primaryMuscles: primaryMuscles.length > 0 ? primaryMuscles : [primaryMuscles[0]],
       secondaryMuscles,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     router.back();

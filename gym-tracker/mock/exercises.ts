@@ -10,6 +10,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Chest",
     primaryMuscles: ["Chest"],
     secondaryMuscles: ["Front Delts", "Triceps"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "2",
@@ -20,6 +22,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Chest",
     primaryMuscles: ["Chest"],
     secondaryMuscles: ["Front Delts"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "3",
@@ -30,6 +34,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Chest",
     primaryMuscles: ["Chest"],
     secondaryMuscles: ["Triceps", "Front Delts"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "4",
@@ -40,6 +46,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Chest",
     primaryMuscles: ["Upper Chest"],
     secondaryMuscles: ["Front Delts", "Triceps"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "5",
@@ -50,6 +58,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Chest",
     primaryMuscles: ["Chest"],
     secondaryMuscles: ["Front Delts"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "6",
@@ -60,6 +70,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Legs",
     primaryMuscles: ["Quadriceps", "Glutes"],
     secondaryMuscles: ["Hamstrings", "Lower Back"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "7",
@@ -70,6 +82,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Legs",
     primaryMuscles: ["Quadriceps", "Glutes"],
     secondaryMuscles: ["Hamstrings"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "8",
@@ -80,6 +94,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Legs",
     primaryMuscles: ["Hamstrings", "Glutes"],
     secondaryMuscles: ["Lower Back"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "9",
@@ -90,6 +106,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Legs",
     primaryMuscles: ["Quadriceps", "Glutes"],
     secondaryMuscles: ["Hamstrings"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "10",
@@ -100,6 +118,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Legs",
     primaryMuscles: ["Quadriceps"],
     secondaryMuscles: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "11",
@@ -110,6 +130,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Arms",
     primaryMuscles: ["Biceps"],
     secondaryMuscles: ["Forearms"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "12",
@@ -120,6 +142,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Arms",
     primaryMuscles: ["Triceps"],
     secondaryMuscles: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "13",
@@ -130,6 +154,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Arms",
     primaryMuscles: ["Biceps", "Forearms"],
     secondaryMuscles: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "14",
@@ -140,6 +166,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Arms",
     primaryMuscles: ["Triceps"],
     secondaryMuscles: ["Shoulders"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "15",
@@ -150,6 +178,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Arms",
     primaryMuscles: ["Biceps"],
     secondaryMuscles: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "16",
@@ -160,6 +190,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Arms",
     primaryMuscles: ["Triceps", "Chest"],
     secondaryMuscles: ["Front Delts"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "17",
@@ -170,6 +202,8 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Core",
     primaryMuscles: ["Abdominals", "Obliques"],
     secondaryMuscles: ["Lower Back"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: "18",
@@ -180,5 +214,7 @@ export const mockExercises: Exercise[] = [
     muscleGroup: "Core",
     primaryMuscles: ["Obliques"],
     secondaryMuscles: ["Abdominals"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 ];

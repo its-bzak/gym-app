@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getEquipmentForGym, getExercisesForGym, getGymsForUser } from "@/mock/mockDataService";
+import { getEquipmentForGym, getExercisesForGym, getGymsForUser, getUserJoinDateForGym } from "@/mock/mockDataService";
+import { formatDate } from "@/utils/dateFormat";
 
 const CURRENT_USER_ID = "user_ryan";
 
@@ -31,6 +32,7 @@ export default function GymsScreen() {
           gyms.map((gym) => {
             const equipmentCount = getEquipmentForGym(gym.id).length;
             const exerciseCount = getExercisesForGym(gym.id).length;
+            const joinDate = getUserJoinDateForGym(CURRENT_USER_ID, gym.id);
 
             return (
               <View key={gym.id} style={styles.gymCard}>
@@ -43,13 +45,7 @@ export default function GymsScreen() {
 
                 <View style={styles.statsRow}>
                   <View style={styles.statCard}>
-                    <Text style={styles.statValue}>{equipmentCount}</Text>
-                    <Text style={styles.statLabel}>Joined On:</Text>
-                  </View>
-
-                  <View style={styles.statCard}>
-                    <Text style={styles.statValue}>{exerciseCount}</Text>
-                    <Text style={styles.statLabel}>Exercises</Text>
+                    <Text style={styles.statValue}>Member Since: <Text style={styles.statLabel}>{joinDate ? formatDate(joinDate) : "N/A"}</Text></Text>
                   </View>
                 </View>
               </View>

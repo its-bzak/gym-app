@@ -1,10 +1,84 @@
-import { User } from "../types/user";
-import { Gym } from "../types/gym";
-import { UserGymMembership } from "../types/userGymMembership";
-import { Equipment } from "../types/equipment";
-import { GymEquipment } from "../types/gymEquipment";
-import { Exercise } from "../types/exercise";
-import { ExerciseEquipmentRequirement } from "../types/exerciseEquipmentRequirement";
+//import { User } from "../types/user";
+//import { Gym } from "../types/gym";
+//import { UserGymMembership } from "../types/userGymMembership";
+//import { Equipment } from "../types/equipment";
+//import { GymEquipment } from "../types/gymEquipment";
+//import { Exercise } from "../types/exercise";
+//import { ExerciseEquipmentRequirement } from "../types/exerciseEquipmentRequirement";
+
+export type User = {
+  id: string
+  name: string
+  email?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type Gym = {
+  id: string
+  name: string
+  code: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type UserGymMembership = {
+  id: string
+  userId: string
+  gymId: string
+  joinedAt: string
+  isActive: boolean
+  role: 'member' | 'admin' | 'owner'
+  createdAt: string
+  updatedAt: string
+}
+
+export type EquipmentCategory =
+  | 'machine'
+  | 'free_weight'
+  | 'cable'
+  | 'bodyweight'
+  | 'calisthenics'
+  | 'other'
+
+export type Equipment = {
+  id: string
+  name: string
+  brand?: string
+  category: EquipmentCategory
+  createdAt: string
+  updatedAt: string
+}
+
+export type GymEquipment = {
+  id: string
+  gymId: string
+  equipmentId: string
+  quantity: number
+  isAvailable: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type Exercise = {
+  id: string
+  name: string
+  primaryMuscles: string[]
+  secondaryMuscles: string[]
+  muscleGroup: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type ExerciseEquipmentRequirement = {
+  id: string
+  exerciseId: string
+  equipmentId: string
+  isRequired: boolean
+  createdAt: string
+  updatedAt: string
+}
 
 const now = new Date().toISOString();
 
