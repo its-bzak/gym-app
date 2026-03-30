@@ -34,19 +34,11 @@ export type UserGymMembership = {
   updatedAt: string
 }
 
-export type EquipmentCategory =
-  | 'machine'
-  | 'free_weight'
-  | 'cable'
-  | 'bodyweight'
-  | 'calisthenics'
-  | 'other'
-
 export type Equipment = {
   id: string
   name: string
   brand?: string
-  category: EquipmentCategory
+  category: 'Machine' | 'Free Weight' | 'Cable' | 'Calisthenics' | 'Other'
   createdAt: string
   updatedAt: string
 }
@@ -67,6 +59,7 @@ export type Exercise = {
   primaryMuscles: string[]
   secondaryMuscles: string[]
   muscleGroup: string
+  category?: string
   createdAt: string
   updatedAt: string
 }
@@ -182,28 +175,28 @@ export const equipment: Equipment[] = [
     id: 'eq_pec_deck',
     name: 'Pec Deck',
     brand: 'Life Fitness',
-    category: 'machine',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_barbell',
     name: 'Barbell',
-    category: 'free_weight',
+    category: 'Free Weight',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_bench',
     name: 'Bench',
-    category: 'other',
+    category: 'Other',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_dumbbells',
     name: 'Dumbbells',
-    category: 'free_weight',
+    category: 'Free Weight',
     createdAt: now,
     updatedAt: now,
   },
@@ -211,35 +204,35 @@ export const equipment: Equipment[] = [
     id: 'eq_cable_stack',
     name: 'Cable Stack',
     brand: 'Cybex',
-    category: 'cable',
+    category: 'Cable',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_lat_pulldown',
     name: 'Lat Pulldown Machine',
-    category: 'machine',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_leg_press',
     name: 'Leg Press',
-    category: 'machine',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_squat_rack',
     name: 'Squat Rack',
-    category: 'other',
+    category: 'Other',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_pullup_bar',
     name: 'Pull-Up Bar',
-    category: 'calisthenics',
+    category: 'Calisthenics',
     createdAt: now,
     updatedAt: now,
   },
@@ -247,21 +240,21 @@ export const equipment: Equipment[] = [
     id: 'eq_treadmill',
     name: 'Treadmill',
     brand: 'Precor',
-    category: 'other',
+    category: 'Other',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_leg_extension',
     name: 'Leg Extension Machine',
-    category: 'machine',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'eq_hack_squat',
     name: 'Hack Squat',
-    category: 'machine',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
@@ -479,90 +472,100 @@ export const exercises: Exercise[] = [
   {
     id: 'ex_machine_chest_fly',
     name: 'Machine Chest Fly',
-    primaryMuscles: ['chest'],
-    secondaryMuscles: ['front_delts'],
-    muscleGroup: 'chest',
+    primaryMuscles: ['Chest'],
+    secondaryMuscles: ['Front Delts'],
+    muscleGroup: 'Chest',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_barbell_bench_press',
     name: 'Barbell Bench Press',
-    primaryMuscles: ['chest'],
-    secondaryMuscles: ['triceps', 'front_delts'],
-    muscleGroup: 'chest',
+    primaryMuscles: ['Chest'],
+    secondaryMuscles: ['Triceps', 'Front Delts'],
+    muscleGroup: 'Chest',
+    category: 'Free Weight',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_dumbbell_curl',
     name: 'Dumbbell Curl',
-    primaryMuscles: ['biceps'],
-    secondaryMuscles: ['forearms'],
-    muscleGroup: 'arms',
+    primaryMuscles: ['Biceps'],
+    secondaryMuscles: ['Forearms'],
+    muscleGroup: 'Arms',
+    category: 'Free Weight',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_cable_tricep_pushdown',
     name: 'Cable Tricep Pushdown',
-    primaryMuscles: ['triceps'],
+    primaryMuscles: ['Triceps'],
     secondaryMuscles: [],
-    muscleGroup: 'arms',
+    muscleGroup: 'Arms',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_lat_pulldown',
     name: 'Lat Pulldown',
-    primaryMuscles: ['lats'],
-    secondaryMuscles: ['biceps', 'upper_back'],
-    muscleGroup: 'back',
+    primaryMuscles: ['Lats'],
+    secondaryMuscles: ['Biceps', 'Upper Back'],
+    muscleGroup: 'Back',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_leg_press',
     name: 'Leg Press',
-    primaryMuscles: ['quads'],
-    secondaryMuscles: ['glutes', 'hamstrings'],
-    muscleGroup: 'legs',
+    primaryMuscles: ['Quads'],
+    secondaryMuscles: ['Glutes', 'Hamstrings'],
+    muscleGroup: 'Legs',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_pull_up',
     name: 'Pull-Up',
-    primaryMuscles: ['lats'],
-    secondaryMuscles: ['biceps', 'upper_back'],
-    muscleGroup: 'back',
+    primaryMuscles: ['Lats'],
+    secondaryMuscles: ['Biceps', 'Upper Back'],
+    muscleGroup: 'Back',
+    category: 'Bodyweight',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_back_squat',
     name: 'Back Squat',
-    primaryMuscles: ['quads'],
-    secondaryMuscles: ['glutes', 'hamstrings', 'core'],
-    muscleGroup: 'legs',
+    primaryMuscles: ['Quads'],
+    secondaryMuscles: ['Glutes', 'Hamstrings', 'Core'],
+    muscleGroup: 'Legs',
+    category: 'Free Weight',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_hack_squat',
     name: 'Hack Squat',
-    primaryMuscles: ['quads'],
-    secondaryMuscles: ['glutes'],
-    muscleGroup: 'legs',
+    primaryMuscles: ['Quads'],
+    secondaryMuscles: ['Glutes', 'Hamstrings'],
+    muscleGroup: 'Legs',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },
   {
     id: 'ex_leg_extension',
     name: 'Leg Extension',
-    primaryMuscles: ['quads'],
+    primaryMuscles: ['Quads'],
     secondaryMuscles: [],
-    muscleGroup: 'legs',
+    muscleGroup: 'Legs',
+    category: 'Machine',
     createdAt: now,
     updatedAt: now,
   },

@@ -12,7 +12,7 @@ import { router } from "expo-router";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 import { useLibrary } from "@/context/LibraryContext";
 import { getExercisesForGym, getUserGymOptions } from "@/mock/mockDataService";
-import { Exercise } from "@/types/exercise";
+import { Exercise } from "@/mock/gymImplementation";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const CURRENT_USER_ID = "user_ryan";
@@ -58,7 +58,7 @@ export default function ExercisesScreen() {
 
   const categoryOptions = useMemo(() => {
     const uniqueCategories = Array.from(
-      new Set(exercises.map((exercise) => normalizeCategory(exercise.type)).filter(Boolean))
+      new Set(exercises.map((exercise) => normalizeCategory(exercise.category)).filter(Boolean))
     ).sort((first, second) => first.localeCompare(second));
 
     return ["all", ...uniqueCategories];
@@ -95,7 +95,7 @@ export default function ExercisesScreen() {
         availableGymExerciseNames.has(normalizeText(exercise.name));
 
       const matchesCategory =
-        selectedCategory === "all" || normalizeCategory(exercise.type) === selectedCategory;
+        selectedCategory === "all" || normalizeCategory(exercise.category) === selectedCategory;
 
       return matchesPrimaryMuscle && matchesSearch && matchesGym && matchesCategory;
     });
@@ -175,7 +175,7 @@ export default function ExercisesScreen() {
                 )
               }>
               <Text style={styles.filterButtonText} numberOfLines={1}>
-                {selectedPrimaryMuscle === "All" ? "Filter" : selectedPrimaryMuscle}
+                {selectedPrimaryMuscle === "All" ? "Primary" : selectedPrimaryMuscle}
               </Text>
             </Pressable>
 
@@ -199,7 +199,7 @@ export default function ExercisesScreen() {
                 )
               }>
               <Text style={styles.filterButtonText} numberOfLines={1}>
-                {formatCategoryLabel(selectedCategory)}
+                {selectedCategory === "all" ? "Category" : formatCategoryLabel(selectedCategory)}
               </Text>
             </Pressable>
           </View>
