@@ -34,6 +34,7 @@ export default function RootLayout() {
             <Stack.Screen name="workout/new-exercise" options={{ headerShown: false }} />
             <Stack.Screen name="workout/routines" options={{ headerShown: false }} />
             <Stack.Screen name="workout/new-routine" options={{ headerShown: false }} />
+            <Stack.Screen name="gyms" options={{ headerShown: false }} />
             <Stack.Screen name="settings" options={{ headerShown: false }} />
             <Stack.Screen name="badges" options={{ headerShown: false }} />
           </Stack>

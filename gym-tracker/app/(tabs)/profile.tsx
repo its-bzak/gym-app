@@ -16,6 +16,9 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
+        <Pressable style={styles.gymsButton} onPress={() => router.push("/gyms")}>
+          <Text style={styles.gymsButtonText}>Gyms</Text>
+        </Pressable>
         <Pressable style={styles.settingsButton} onPress={() => router.push("/settings")}>
           <Ionicons name="settings-outline" size={24} color="#F4F4F4" />
         </Pressable>
@@ -59,6 +62,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 9,
   },
+  gymsButton: {
+    position: "absolute",
+    top: 18,
+    left: 18,
+    zIndex: 10,
+    width: 56,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   settingsButton: {
     position: "absolute",
     top: 18,
@@ -71,7 +86,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  settingsButtonText: {
+  gymsButtonText: {
     color: "#F4F4F4",
     fontSize: 16,
     fontWeight: "500",
