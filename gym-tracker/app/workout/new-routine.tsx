@@ -16,26 +16,42 @@ export default function NewRoutineScreen() {
   const { exercises, addCustomRoutine, hasRoutineNamed } = useLibrary();
   const [routineName, setRoutineName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState("All");
+  const [isFilterMenuVisible, setIsFilterMenuVisible] = useState(false);
   const [selectedExerciseIds, setSelectedExerciseIds] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasMissingNameError = errorMessage === "Routine name is required.";
+
+  const primaryMuscleOptions = useMemo(() => {
+    const uniquePrimaryMuscles = Array.from(
+      new Set(exercises.flatMap((exercise) => exercise.primaryMuscles ?? []))
+    ).sort((first, second) => first.localeCompare(second));
+
+    return ["All", ...uniquePrimaryMuscles];
+  }, [exercises]);
 
   const filteredExercises = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
     return exercises.filter((exercise) => {
+      const matchesPrimaryMuscle =
+        selectedPrimaryMuscle === "All" ||
+        (exercise.primaryMuscles ?? []).includes(selectedPrimaryMuscle);
+
       if (normalizedQuery.length === 0) {
-        return true;
+        return matchesPrimaryMuscle;
       }
 
-      return (
+      const matchesSearch =
         exercise.name.toLowerCase().includes(normalizedQuery) ||
         exercise.muscleGroup.toLowerCase().includes(normalizedQuery) ||
         (exercise.primaryMuscles ?? []).some((muscle) =>
           muscle.toLowerCase().includes(normalizedQuery)
-        )
-      );
+        );
+
+      return matchesPrimaryMuscle && matchesSearch;
     });
-  }, [exercises, searchQuery]);
+  }, [exercises, searchQuery, selectedPrimaryMuscle]);
 
   const selectedExercises = useMemo(() => {
     return selectedExerciseIds
@@ -62,7 +78,7 @@ export default function NewRoutineScreen() {
     }
 
     if (hasRoutineNamed(trimmedName)) {
-      setErrorMessage("That routine already exists in your library.");
+      setErrorMessage("You already have a routine with this name.");
       return;
     }
 
@@ -83,11 +99,12 @@ export default function NewRoutineScreen() {
           keyExtractor={(item) => item.id}
           style={styles.list}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponentStyle={styles.listHeader}
           ListHeaderComponent={
             <>
 
               <TextInput
-                style={styles.input}
+                style={[styles.input, hasMissingNameError && styles.inputError]}
                 value={routineName}
                 onChangeText={(value) => {
                   setRoutineName(value);
@@ -97,15 +114,56 @@ export default function NewRoutineScreen() {
                 placeholderTextColor="#6F6F6F"
               />
 
-              <TextInput
-                style={styles.input}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search by exercise or muscle"
-                placeholderTextColor="#6F6F6F"
-              />
+              <View style={styles.controlsContainer}>
+                <View style={styles.controlsRow}>
+                  <TextInput
+                    style={styles.searchInput}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Search by exercise or muscle"
+                    placeholderTextColor="#6F6F6F"
+                  />
 
-                {/* Placeholder for filter button (filter by primary muscle) */}
+                  <Pressable
+                    style={styles.filterButton}
+                    onPress={() => setIsFilterMenuVisible((currentValue) => !currentValue)}>
+                    <Text style={styles.filterButtonText} numberOfLines={1}>
+                      {selectedPrimaryMuscle === "All" ? "Filter" : selectedPrimaryMuscle}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {isFilterMenuVisible && (
+                  <View style={styles.filterDropdown}>
+                    <ScrollView
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator={false}
+                      contentContainerStyle={styles.filterDropdownContent}>
+                      {primaryMuscleOptions.map((muscle) => {
+                        const isSelected = muscle === selectedPrimaryMuscle;
+
+                        return (
+                          <Pressable
+                            key={muscle}
+                            style={styles.filterOption}
+                            onPress={() => {
+                              setSelectedPrimaryMuscle(muscle);
+                              setIsFilterMenuVisible(false);
+                            }}>
+                            <Text
+                              style={[
+                                styles.filterOptionText,
+                                isSelected && styles.filterOptionTextSelected,
+                              ]}>
+                              {muscle}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
 
               {selectedExercises.length === 0 ? (
                 <View style={styles.emptySelectedState}>
@@ -199,6 +257,10 @@ const styles = StyleSheet.create({
     padding: 18,
     paddingBottom: 32,
   },
+  listHeader: {
+    zIndex: 20,
+    elevation: 20,
+  },
   title: {
     color: "#F4F4F4",
     fontSize: 28,
@@ -225,6 +287,74 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     marginBottom: 14,
+  },
+  inputError: {
+    borderWidth: 1,
+    borderColor: "#F28B82",
+  },
+  controlsContainer: {
+    position: "relative",
+    zIndex: 30,
+    elevation: 30,
+    marginBottom: 14,
+  },
+  controlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#1A1A1A",
+    color: "#F4F4F4",
+    paddingHorizontal: 16,
+    fontSize: 16,
+  },
+  filterButton: {
+    width: 120,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#1A1A1A",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  filterButtonText: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  filterDropdown: {
+    position: "absolute",
+    top: 56,
+    right: 0,
+    width: 200,
+    maxHeight: 240,
+    zIndex: 40,
+    elevation: 40,
+    borderRadius: 18,
+    backgroundColor: "#1A1A1A",
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+    overflow: "hidden",
+  },
+  filterDropdownContent: {
+    paddingVertical: 8,
+  },
+  filterOption: {
+    minHeight: 42,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  filterOptionText: {
+    color: "#A0A0A0",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  filterOptionTextSelected: {
+    color: "#F4F4F4",
   },
   selectedScroll: {
     marginBottom: 14,
@@ -267,6 +397,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    zIndex: 0,
+    elevation: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
