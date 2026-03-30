@@ -9,6 +9,7 @@
 export type User = {
   id: string
   name: string
+  username: string
   email?: string
   createdAt: string
   updatedAt: string
@@ -79,6 +80,7 @@ export const users: User[] = [
   {
     id: 'user_ryan',
     name: 'Ryan',
+    username: 'ryan123',
     email: 'ryan@example.com',
     createdAt: now,
     updatedAt: now,
@@ -86,6 +88,7 @@ export const users: User[] = [
   {
     id: 'user_alex',
     name: 'Alex',
+    username: 'alexthegreat',
     email: 'alex@example.com',
     createdAt: now,
     updatedAt: now,

@@ -135,6 +135,11 @@ export function joinGymByCode(userId: string, code: string): JoinGymResult {
   };
 }
 
+export function getUsernameById(userId: string): string | null {
+  const user = users.find((user) => user.id === userId);
+  return user ? user.username : null;
+}
+
 export function getEquipmentForGym(gymId: string): Equipment[] {
   const availableEquipmentIds = getAvailableEquipmentIdsForGym(gymId);
 

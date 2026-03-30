@@ -1,11 +1,15 @@
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native";
-import { mockProfile } from "@/mock/MainScreen/DailyMetricsSection";
+import { getUsernameById } from "@/mock/mockDataService";
 import { Ionicons } from '@expo/vector-icons';
 import { router } from "expo-router";
 import { ScrollView } from "react-native";
 import { mockBadgeCategories } from "@/mock/badges";
+
+const CURRENT_USER_ID = "user_ryan";
+
+const username = getUsernameById(CURRENT_USER_ID) ?? "guest";
 
 export default function ProfileScreen() {
   const displayedBadges = mockBadgeCategories
@@ -26,7 +30,7 @@ export default function ProfileScreen() {
 
         </View>
         <Text style={styles.usernameText}>
-          @{mockProfile.username}
+          @{username}
         </Text>
         
         <View style={styles.bodyMapContainer}>
@@ -60,7 +64,7 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     backgroundColor: "#151515",
     paddingHorizontal: 18,
-    paddingTop: 9,
+    paddingTop: 14,
   },
   gymsButton: {
     position: "absolute",
