@@ -21,6 +21,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { supabase } from "@/lib/supabase";
 
 const CURRENT_USER_ID = "user_ryan";
 const CONTACT_EMAIL = "support@gymtracker.app";
@@ -158,7 +159,16 @@ export default function SettingsScreen() {
       {
         text: "Log out",
         style: "destructive",
-        onPress: () => router.replace("/login"),
+        onPress: async () => {
+          const { error } = await supabase.auth.signOut();
+
+          if (error) {
+            Alert.alert("Logout failed", error.message);
+            return;
+          }
+
+          router.replace("/login");
+        },
       },
     ]);
   };
