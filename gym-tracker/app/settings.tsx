@@ -2,19 +2,22 @@ import {
   getDisplayUnitPreference,
   getUserProfileById,
   setDisplayUnitPreference,
+  updateUserProfile,
   type DisplayUnitPreference,
 } from "@/mock/mockDataService";
 import { formatDate } from "@/utils/dateFormat";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -44,17 +47,96 @@ export default function SettingsScreen() {
   const [selectedUnit, setSelectedUnit] = useState<DisplayUnitPreference>(() =>
     getDisplayUnitPreference(CURRENT_USER_ID)
   );
+  const [name, setName] = useState(profile?.name ?? "");
+  const [username, setUsername] = useState(profile?.username ?? "");
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    if (!profile?.dateOfBirth) {
+      return 6;
+    }
 
-  const profileRows = [
-    { label: "Username", value: profile ? `@${profile.username}` : "Unavailable" },
-    { label: "Name", value: profile?.name ?? "Unavailable" },
-    {
-      label: "Date of birth",
-      value: profile?.dateOfBirth ? formatDate(profile.dateOfBirth) : "Unavailable",
-    },
+    return Number(profile.dateOfBirth.split("-")[1]);
+  });
+  const [selectedDay, setSelectedDay] = useState(() => {
+    if (!profile?.dateOfBirth) {
+      return 14;
+    }
+
+    return Number(profile.dateOfBirth.split("-")[2]);
+  });
+  const [selectedYear, setSelectedYear] = useState(() => {
+    if (!profile?.dateOfBirth) {
+      return 1998;
+    }
+
+    return Number(profile.dateOfBirth.split("-")[0]);
+  });
+  const [isBirthDateModalVisible, setIsBirthDateModalVisible] = useState(false);
+  const [nameError, setNameError] = useState(false);
+  const [usernameError, setUsernameError] = useState(false);
+
+  const monthOptions = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
 
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+
+    return Array.from({ length: 90 }, (_, index) => currentYear - 13 - index);
+  }, []);
+
+  const dayOptions = useMemo(() => {
+    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+
+    return Array.from({ length: daysInMonth }, (_, index) => index + 1);
+  }, [selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    if (selectedDay > dayOptions.length) {
+      setSelectedDay(dayOptions.length);
+    }
+  }, [dayOptions, selectedDay]);
+
+  const dateOfBirthIso = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}-${String(
+    Math.min(selectedDay, dayOptions.length)
+  ).padStart(2, "0")}`;
+  const formattedBirthDate = formatDate(dateOfBirthIso);
+
   const handleSave = () => {
+    const trimmedName = name.trim();
+    const trimmedUsername = username.trim();
+    const hasNameError = trimmedName.length === 0;
+    const hasUsernameError = trimmedUsername.length === 0;
+
+    setNameError(hasNameError);
+    setUsernameError(hasUsernameError);
+
+    if (hasNameError || hasUsernameError) {
+      Alert.alert("Missing information", "Name and username are required.");
+      return;
+    }
+
+    const updatedProfileResult = updateUserProfile(CURRENT_USER_ID, {
+      name: trimmedName,
+      username: trimmedUsername,
+      dateOfBirth: dateOfBirthIso,
+    });
+
+    if (!updatedProfileResult.success) {
+      Alert.alert("Could not save profile", updatedProfileResult.error ?? "Please try again.");
+      return;
+    }
+
     const savedUnit = setDisplayUnitPreference(CURRENT_USER_ID, selectedUnit);
 
     Alert.alert("Settings updated", `Display units set to ${savedUnit}.`);
@@ -83,6 +165,107 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <Modal
+        animationType="slide"
+        transparent
+        visible={isBirthDateModalVisible}
+        onRequestClose={() => setIsBirthDateModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select date of birth</Text>
+              <Pressable onPress={() => setIsBirthDateModalVisible(false)}>
+                <Text style={styles.modalDoneText}>Done</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.birthPickerColumns}>
+              <View style={styles.birthPickerColumn}>
+                <Text style={styles.birthPickerLabel}>Month</Text>
+                <ScrollView style={styles.birthPickerScroll} showsVerticalScrollIndicator={false}>
+                  {monthOptions.map((month, index) => {
+                    const monthValue = index + 1;
+                    const isSelected = selectedMonth === monthValue;
+
+                    return (
+                      <Pressable
+                        key={month}
+                        style={[
+                          styles.birthPickerOption,
+                          isSelected && styles.birthPickerOptionSelected,
+                        ]}
+                        onPress={() => setSelectedMonth(monthValue)}>
+                        <Text
+                          style={[
+                            styles.birthPickerOptionText,
+                            isSelected && styles.birthPickerOptionTextSelected,
+                          ]}>
+                          {month}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              <View style={styles.birthPickerColumnDay}>
+                <Text style={styles.birthPickerLabel}>Day</Text>
+                <ScrollView style={styles.birthPickerScroll} showsVerticalScrollIndicator={false}>
+                  {dayOptions.map((day) => {
+                    const isSelected = selectedDay === day;
+
+                    return (
+                      <Pressable
+                        key={day}
+                        style={[
+                          styles.birthPickerOption,
+                          isSelected && styles.birthPickerOptionSelected,
+                        ]}
+                        onPress={() => setSelectedDay(day)}>
+                        <Text
+                          style={[
+                            styles.birthPickerOptionText,
+                            isSelected && styles.birthPickerOptionTextSelected,
+                          ]}>
+                          {day}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              <View style={styles.birthPickerColumnDay}>
+                <Text style={styles.birthPickerLabel}>Year</Text>
+                <ScrollView style={styles.birthPickerScroll} showsVerticalScrollIndicator={false}>
+                  {yearOptions.map((year) => {
+                    const isSelected = selectedYear === year;
+
+                    return (
+                      <Pressable
+                        key={year}
+                        style={[
+                          styles.birthPickerOption,
+                          isSelected && styles.birthPickerOptionSelected,
+                        ]}
+                        onPress={() => setSelectedYear(year)}>
+                        <Text
+                          style={[
+                            styles.birthPickerOptionText,
+                            isSelected && styles.birthPickerOptionTextSelected,
+                          ]}>
+                          {year}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView
         style={styles.screen}
         contentContainerStyle={styles.content}
@@ -91,10 +274,6 @@ export default function SettingsScreen() {
           <Text style={styles.returnButtonText}>Back</Text>
         </Pressable>
 
-        <View style={styles.header}>
-          <Text style={styles.title}>Settings</Text>
-          <Text style={styles.subtitle}>Profile details, app units, and account actions.</Text>
-        </View>
 
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
@@ -103,23 +282,58 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.profileHeaderText}>
               <Text style={styles.sectionTitle}>Profile</Text>
-              <Text style={styles.sectionSubtitle}>Current signed-in account</Text>
             </View>
           </View>
 
           <View style={styles.infoList}>
-            {profileRows.map((row) => (
-              <View key={row.label} style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{row.label}</Text>
-                <Text style={styles.infoValue}>{row.value}</Text>
-              </View>
-            ))}
+            <View style={styles.fieldBlock}>
+              <Text style={styles.infoLabel}>Name</Text>
+              <TextInput
+                value={name}
+                onChangeText={(value) => {
+                  setName(value);
+                  if (nameError) {
+                    setNameError(false);
+                  }
+                }}
+                placeholder="Enter your name"
+                placeholderTextColor="#6F6F6F"
+                style={[styles.textInput, nameError && styles.textInputError]}
+              />
+            </View>
+
+            <View style={styles.fieldBlock}>
+              <Text style={styles.infoLabel}>Username</Text>
+              <TextInput
+                value={username}
+                onChangeText={(value) => {
+                  setUsername(value);
+                  if (usernameError) {
+                    setUsernameError(false);
+                  }
+                }}
+                placeholder="Choose a username"
+                placeholderTextColor="#6F6F6F"
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={[styles.textInput, usernameError && styles.textInputError]}
+              />
+            </View>
+
+            <View style={styles.fieldBlock}>
+              <Text style={styles.infoLabel}>Date of birth</Text>
+              <Pressable
+                style={styles.birthDateButton}
+                onPress={() => setIsBirthDateModalVisible(true)}>
+                <Text style={styles.birthDateButtonText}>{formattedBirthDate}</Text>
+                <Ionicons name="chevron-down" size={18} color="#A8A8A8" />
+              </Pressable>
+            </View>
           </View>
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Display units</Text>
-          <Text style={styles.sectionSubtitle}>Choose how measurements appear across the app.</Text>
+          <Text style={styles.sectionTitle}>Unit System</Text>
 
           <View style={styles.unitOptionList}>
             {unitOptions.map((option) => {
@@ -154,8 +368,6 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <Text style={styles.sectionSubtitle}>End the current session on this device.</Text>
 
           <Pressable style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={18} color="#F27979" />
@@ -248,6 +460,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: "#F4F4F4",
     fontSize: 19,
+    marginBottom: 8,
     fontWeight: "600",
   },
   sectionSubtitle: {
@@ -260,20 +473,40 @@ const styles = StyleSheet.create({
   infoList: {
     gap: 12,
   },
-  infoRow: {
-    backgroundColor: "#212121",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+  fieldBlock: {
+    gap: 8,
   },
   infoLabel: {
     color: "#8B8B8B",
     fontSize: 13,
-    marginBottom: 6,
   },
-  infoValue: {
+  textInput: {
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: "#212121",
+    borderWidth: 1,
+    borderColor: "#212121",
     color: "#F4F4F4",
-    fontSize: 17,
+    fontSize: 16,
+    fontWeight: "600",
+    paddingHorizontal: 14,
+  },
+  textInputError: {
+    borderColor: "#A94A4A",
+    backgroundColor: "#261B1B",
+  },
+  birthDateButton: {
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: "#212121",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexDirection: "row",
+    paddingHorizontal: 14,
+  },
+  birthDateButtonText: {
+    color: "#F4F4F4",
+    fontSize: 16,
     fontWeight: "600",
   },
   unitOptionList: {
@@ -355,6 +588,78 @@ const styles = StyleSheet.create({
     color: "#F27979",
     fontSize: 15,
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: "#161616",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 28,
+    minHeight: 420,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  modalTitle: {
+    color: "#F4F4F4",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  modalDoneText: {
+    color: "#7CA2FF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  birthPickerColumns: {
+    flexDirection: "row",
+    gap: 12,
+    flex: 1,
+  },
+  birthPickerColumn: {
+    flex: 1.4,
+  },
+  birthPickerColumnDay: {
+    flex: 1,
+  },
+  birthPickerLabel: {
+    color: "#8B8B8B",
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  birthPickerScroll: {
+    maxHeight: 300,
+  },
+  birthPickerOption: {
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: "#212121",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  birthPickerOptionSelected: {
+    backgroundColor: "#20273A",
+    borderWidth: 1,
+    borderColor: "#5E8BFF",
+  },
+  birthPickerOptionText: {
+    color: "#C7C7C7",
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  birthPickerOptionTextSelected: {
+    color: "#F4F4F4",
+    fontWeight: "700",
   },
   confirmChangesButton: {
     marginTop: 8,

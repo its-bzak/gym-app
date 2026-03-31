@@ -9,9 +9,9 @@ import { mockBadgeCategories } from "@/mock/badges";
 
 const CURRENT_USER_ID = "user_ryan";
 
-const username = getUsernameById(CURRENT_USER_ID) ?? "guest";
-
 export default function ProfileScreen() {
+  const username = getUsernameById(CURRENT_USER_ID) ?? "guest";
+
   const displayedBadges = mockBadgeCategories
     .flatMap((category) => category.badges)
     .filter((badge) => badge.isDisplayed)

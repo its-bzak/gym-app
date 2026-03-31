@@ -22,6 +22,18 @@ export type UserProfile = {
   dateOfBirth: string | null;
 };
 
+export type UpdateUserProfileInput = {
+  name: string;
+  username: string;
+  dateOfBirth: string | null;
+};
+
+export type UpdateUserProfileResult = {
+  success: boolean;
+  error?: string;
+  profile?: UserProfile;
+};
+
 const userDisplayUnitsById: Record<string, DisplayUnitPreference> = {
   user_ryan: "imperial",
   user_alex: "metric",
@@ -168,6 +180,59 @@ export function getUserProfileById(userId: string): UserProfile | null {
     username: user.username,
     email: user.email ?? null,
     dateOfBirth: user.dateOfBirth ?? null,
+  };
+}
+
+export function updateUserProfile(
+  userId: string,
+  input: UpdateUserProfileInput
+): UpdateUserProfileResult {
+  const user = users.find((entry) => entry.id === userId);
+
+  if (!user) {
+    return {
+      success: false,
+      error: "User not found.",
+    };
+  }
+
+  const name = input.name.trim();
+  const username = input.username.trim();
+
+  if (!name) {
+    return {
+      success: false,
+      error: "Name is required.",
+    };
+  }
+
+  if (!username) {
+    return {
+      success: false,
+      error: "Username is required.",
+    };
+  }
+
+  const normalizedUsername = username.toLowerCase();
+  const usernameExists = users.some(
+    (entry) => entry.id !== userId && entry.username.toLowerCase() === normalizedUsername
+  );
+
+  if (usernameExists) {
+    return {
+      success: false,
+      error: "That username is already in use.",
+    };
+  }
+
+  user.name = name;
+  user.username = username;
+  user.dateOfBirth = input.dateOfBirth ?? undefined;
+  user.updatedAt = new Date().toISOString();
+
+  return {
+    success: true,
+    profile: getUserProfileById(userId) ?? undefined,
   };
 }
 
