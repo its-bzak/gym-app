@@ -1,16 +1,63 @@
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native";
-import { getUsernameById } from "@/mock/mockDataService";
+import { getUsernameById as getMockUsernameById } from "@/mock/mockDataService";
 import { Ionicons } from '@expo/vector-icons';
 import { router } from "expo-router";
 import { ScrollView } from "react-native";
 import { mockBadgeCategories } from "@/mock/badges";
+import { useEffect, useState } from "react";
+import {
+  getAuthenticatedUserId,
+  getUsernameById as getSupabaseUsernameById,
+} from "@/services/profileService";
 
 const CURRENT_USER_ID = "user_ryan";
 
 export default function ProfileScreen() {
-  const username = getUsernameById(CURRENT_USER_ID) ?? "guest";
+  const fallbackUsername = getMockUsernameById(CURRENT_USER_ID) ?? "guest";
+  const [username, setUsername] = useState(fallbackUsername);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProfile = async () => {
+      try {
+        const authenticatedUserId = await getAuthenticatedUserId();
+
+        if (!isMounted || !authenticatedUserId) {
+          return;
+        }
+
+        const supabaseUsername = await getSupabaseUsernameById(authenticatedUserId);
+
+        if (!isMounted || !supabaseUsername) {
+          return;
+        }
+
+        setUsername(supabaseUsername);
+        setProfileLoadError(null);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setProfileLoadError("Using local profile data right now.");
+      } finally {
+        if (isMounted) {
+          setIsLoadingProfile(false);
+        }
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fallbackUsername]);
 
   const displayedBadges = mockBadgeCategories
     .flatMap((category) => category.badges)
@@ -32,6 +79,13 @@ export default function ProfileScreen() {
         <Text style={styles.usernameText}>
           @{username}
         </Text>
+        {isLoadingProfile ? (
+          <View style={styles.statusRow}>
+            <ActivityIndicator size="small" color="#8B8B8B" />
+            <Text style={styles.statusText}>Syncing profile</Text>
+          </View>
+        ) : null}
+        {profileLoadError ? <Text style={styles.statusText}>{profileLoadError}</Text> : null}
         
         <View style={styles.bodyMapContainer}>
           {/* Placeholder for BodyMap component */}
@@ -108,6 +162,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "400",
     textAlign: "center",
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+  statusText: {
+    color: "#7C7C7C",
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 6,
   },
   buttonsContainer: {
     marginTop: 20,

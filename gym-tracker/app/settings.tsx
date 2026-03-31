@@ -1,15 +1,21 @@
 import {
-  getDisplayUnitPreference,
-  getUserProfileById,
+  getDisplayUnitPreference as getMockDisplayUnitPreference,
+  getUserProfileById as getMockUserProfileById,
   setDisplayUnitPreference,
   updateUserProfile,
   type DisplayUnitPreference,
 } from "@/mock/mockDataService";
+import {
+  getAuthenticatedUserId,
+  getDisplayUnitPreference as getSupabaseDisplayUnitPreference,
+  getUserProfileById as getSupabaseUserProfileById,
+} from "@/services/profileService";
 import { formatDate } from "@/utils/dateFormat";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Linking,
   Modal,
@@ -44,36 +50,98 @@ const unitOptions: Array<{
 ];
 
 export default function SettingsScreen() {
-  const profile = getUserProfileById(CURRENT_USER_ID);
+  const fallbackProfile = getMockUserProfileById(CURRENT_USER_ID);
   const [selectedUnit, setSelectedUnit] = useState<DisplayUnitPreference>(() =>
-    getDisplayUnitPreference(CURRENT_USER_ID)
+    getMockDisplayUnitPreference(CURRENT_USER_ID)
   );
-  const [name, setName] = useState(profile?.name ?? "");
-  const [username, setUsername] = useState(profile?.username ?? "");
+  const [name, setName] = useState(fallbackProfile?.name ?? "");
+  const [username, setUsername] = useState(fallbackProfile?.username ?? "");
   const [selectedMonth, setSelectedMonth] = useState(() => {
-    if (!profile?.dateOfBirth) {
+    if (!fallbackProfile?.dateOfBirth) {
       return 6;
     }
 
-    return Number(profile.dateOfBirth.split("-")[1]);
+    return Number(fallbackProfile.dateOfBirth.split("-")[1]);
   });
   const [selectedDay, setSelectedDay] = useState(() => {
-    if (!profile?.dateOfBirth) {
+    if (!fallbackProfile?.dateOfBirth) {
       return 14;
     }
 
-    return Number(profile.dateOfBirth.split("-")[2]);
+    return Number(fallbackProfile.dateOfBirth.split("-")[2]);
   });
   const [selectedYear, setSelectedYear] = useState(() => {
-    if (!profile?.dateOfBirth) {
+    if (!fallbackProfile?.dateOfBirth) {
       return 1998;
     }
 
-    return Number(profile.dateOfBirth.split("-")[0]);
+    return Number(fallbackProfile.dateOfBirth.split("-")[0]);
   });
   const [isBirthDateModalVisible, setIsBirthDateModalVisible] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [usernameError, setUsernameError] = useState(false);
+  const [isSyncingProfile, setIsSyncingProfile] = useState(true);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const applyLoadedDateOfBirth = (dateOfBirth: string | null) => {
+      if (!dateOfBirth) {
+        return;
+      }
+
+      const [year, month, day] = dateOfBirth.split("-").map(Number);
+
+      setSelectedYear(year);
+      setSelectedMonth(month);
+      setSelectedDay(day);
+    };
+
+    const loadProfileSettings = async () => {
+      try {
+        const authenticatedUserId = await getAuthenticatedUserId();
+
+        if (!isMounted || !authenticatedUserId) {
+          return;
+        }
+
+        const [profile, unitPreference] = await Promise.all([
+          getSupabaseUserProfileById(authenticatedUserId),
+          getSupabaseDisplayUnitPreference(authenticatedUserId),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (profile) {
+          setName(profile.name);
+          setUsername(profile.username);
+          applyLoadedDateOfBirth(profile.dateOfBirth);
+        }
+
+        setSelectedUnit(unitPreference);
+        setProfileLoadError(null);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setProfileLoadError("Using local settings data right now.");
+      } finally {
+        if (isMounted) {
+          setIsSyncingProfile(false);
+        }
+      }
+    };
+
+    void loadProfileSettings();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const monthOptions = [
     "January",
@@ -284,6 +352,18 @@ export default function SettingsScreen() {
           <Text style={styles.returnButtonText}>Back</Text>
         </Pressable>
 
+        {isSyncingProfile ? (
+          <View style={styles.statusBanner}>
+            <ActivityIndicator size="small" color="#BFBFBF" />
+            <Text style={styles.statusBannerText}>Syncing settings</Text>
+          </View>
+        ) : null}
+        {profileLoadError ? (
+          <View style={styles.statusBanner}>
+            <Text style={styles.statusBannerText}>{profileLoadError}</Text>
+          </View>
+        ) : null}
+
 
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
@@ -406,6 +486,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 72,
     paddingBottom: 36,
+  },
+  statusBanner: {
+    minHeight: 42,
+    borderRadius: 16,
+    backgroundColor: "#1A1A1A",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  statusBannerText: {
+    color: "#A8A8A8",
+    fontSize: 13,
+    textAlign: "center",
   },
   returnButton: {
     position: "absolute",
