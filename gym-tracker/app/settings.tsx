@@ -1,14 +1,16 @@
 import {
   getDisplayUnitPreference as getMockDisplayUnitPreference,
   getUserProfileById as getMockUserProfileById,
-  setDisplayUnitPreference,
-  updateUserProfile,
+  setDisplayUnitPreference as setMockDisplayUnitPreference,
+  updateUserProfile as updateMockUserProfile,
   type DisplayUnitPreference,
 } from "@/mock/mockDataService";
 import {
   getAuthenticatedUserId,
   getDisplayUnitPreference as getSupabaseDisplayUnitPreference,
   getUserProfileById as getSupabaseUserProfileById,
+  setDisplayUnitPreference as setSupabaseDisplayUnitPreference,
+  updateUserProfile as updateSupabaseUserProfile,
 } from "@/services/profileService";
 import { formatDate } from "@/utils/dateFormat";
 import { Ionicons } from "@expo/vector-icons";
@@ -81,6 +83,7 @@ export default function SettingsScreen() {
   const [nameError, setNameError] = useState(false);
   const [usernameError, setUsernameError] = useState(false);
   const [isSyncingProfile, setIsSyncingProfile] = useState(true);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -181,7 +184,7 @@ export default function SettingsScreen() {
   ).padStart(2, "0")}`;
   const formattedBirthDate = formatDate(dateOfBirthIso);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const trimmedName = name.trim();
     const trimmedUsername = username.trim();
     const hasNameError = trimmedName.length === 0;
@@ -195,20 +198,71 @@ export default function SettingsScreen() {
       return;
     }
 
-    const updatedProfileResult = updateUserProfile(CURRENT_USER_ID, {
-      name: trimmedName,
-      username: trimmedUsername,
-      dateOfBirth: dateOfBirthIso,
-    });
+    setIsSavingSettings(true);
 
-    if (!updatedProfileResult.success) {
-      Alert.alert("Could not save profile", updatedProfileResult.error ?? "Please try again.");
-      return;
+    try {
+      const authenticatedUserId = await getAuthenticatedUserId();
+
+      if (!authenticatedUserId) {
+        const localProfileResult = updateMockUserProfile(CURRENT_USER_ID, {
+          name: trimmedName,
+          username: trimmedUsername,
+          dateOfBirth: dateOfBirthIso,
+        });
+
+        if (!localProfileResult.success) {
+          Alert.alert("Could not save profile", localProfileResult.error ?? "Please try again.");
+          return;
+        }
+
+        setMockDisplayUnitPreference(CURRENT_USER_ID, selectedUnit);
+        setProfileLoadError("Saved locally while account sync is unavailable.");
+        Alert.alert("Settings updated", "Your changes were saved locally.");
+        return;
+      }
+
+      const updatedProfileResult = await updateSupabaseUserProfile(authenticatedUserId, {
+        name: trimmedName,
+        username: trimmedUsername,
+        dateOfBirth: dateOfBirthIso,
+      });
+
+      if (!updatedProfileResult.success) {
+        Alert.alert("Could not save profile", updatedProfileResult.error ?? "Please try again.");
+        return;
+      }
+
+      await setSupabaseDisplayUnitPreference(authenticatedUserId, selectedUnit);
+
+      updateMockUserProfile(CURRENT_USER_ID, {
+        name: trimmedName,
+        username: trimmedUsername,
+        dateOfBirth: dateOfBirthIso,
+      });
+      setMockDisplayUnitPreference(CURRENT_USER_ID, selectedUnit);
+      setProfileLoadError(null);
+
+      Alert.alert("Settings updated", "Your changes have been saved.");
+    } catch (error) {
+      const localProfileResult = updateMockUserProfile(CURRENT_USER_ID, {
+        name: trimmedName,
+        username: trimmedUsername,
+        dateOfBirth: dateOfBirthIso,
+      });
+
+      if (!localProfileResult.success) {
+        Alert.alert("Could not save profile", localProfileResult.error ?? "Please try again.");
+        return;
+      }
+
+      setMockDisplayUnitPreference(CURRENT_USER_ID, selectedUnit);
+      setProfileLoadError("Saved locally while account sync is unavailable.");
+
+      const message = error instanceof Error ? error.message : "Please try again.";
+      Alert.alert("Saved locally only", message);
+    } finally {
+      setIsSavingSettings(false);
     }
-
-    const savedUnit = setDisplayUnitPreference(CURRENT_USER_ID, selectedUnit);
-
-    Alert.alert("Settings updated", "Your changes have been saved.");
   };
 
   const handleContact = async () => {
@@ -465,8 +519,15 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
-        <Pressable style={styles.confirmChangesButton} onPress={handleSave}>
-          <Text style={styles.confirmChangesButtonText}>Confirm changes</Text>
+        <Pressable
+          style={[styles.confirmChangesButton, isSavingSettings && styles.confirmChangesButtonDisabled]}
+          onPress={() => void handleSave()}
+          disabled={isSavingSettings}>
+          {isSavingSettings ? (
+            <ActivityIndicator color="#151515" />
+          ) : (
+            <Text style={styles.confirmChangesButtonText}>Confirm changes</Text>
+          )}
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -776,6 +837,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F4F4F4",
     alignItems: "center",
     justifyContent: "center",
+  },
+  confirmChangesButtonDisabled: {
+    opacity: 0.7,
   },
   confirmChangesButtonText: {
     color: "#151515",

@@ -124,12 +124,17 @@ export async function updateUserProfile(
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .update({
-        name,
-        username,
-        date_of_birth: input.dateOfBirth,
-      })
-      .eq("id", userId)
+      .upsert(
+        {
+          id: userId,
+          name,
+          username,
+          date_of_birth: input.dateOfBirth,
+        },
+        {
+          onConflict: "id",
+        }
+      )
       .select("id, name, username, date_of_birth")
       .single<ProfileRow>();
 
