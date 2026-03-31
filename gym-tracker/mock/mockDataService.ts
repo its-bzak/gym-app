@@ -12,6 +12,21 @@ import {
   users,
 } from "./gymImplementation";
 
+export type DisplayUnitPreference = "imperial" | "metric";
+
+export type UserProfile = {
+  id: string;
+  name: string;
+  username: string;
+  email: string | null;
+  dateOfBirth: string | null;
+};
+
+const userDisplayUnitsById: Record<string, DisplayUnitPreference> = {
+  user_ryan: "imperial",
+  user_alex: "metric",
+};
+
 export type JoinGymResult = {
   success: boolean;
   error?: string;
@@ -138,6 +153,35 @@ export function joinGymByCode(userId: string, code: string): JoinGymResult {
 export function getUsernameById(userId: string): string | null {
   const user = users.find((user) => user.id === userId);
   return user ? user.username : null;
+}
+
+export function getUserProfileById(userId: string): UserProfile | null {
+  const user = users.find((entry) => entry.id === userId);
+
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    name: user.name,
+    username: user.username,
+    email: user.email ?? null,
+    dateOfBirth: user.dateOfBirth ?? null,
+  };
+}
+
+export function getDisplayUnitPreference(userId: string): DisplayUnitPreference {
+  return userDisplayUnitsById[userId] ?? "imperial";
+}
+
+export function setDisplayUnitPreference(
+  userId: string,
+  unit: DisplayUnitPreference
+): DisplayUnitPreference {
+  userDisplayUnitsById[userId] = unit;
+
+  return userDisplayUnitsById[userId];
 }
 
 export function getEquipmentForGym(gymId: string): Equipment[] {
