@@ -139,7 +139,7 @@ export default function SettingsScreen() {
 
     const savedUnit = setDisplayUnitPreference(CURRENT_USER_ID, selectedUnit);
 
-    Alert.alert("Settings updated", `Display units set to ${savedUnit}.`);
+    Alert.alert("Settings updated", "Your changes have been saved.");
   };
 
   const handleContact = async () => {
