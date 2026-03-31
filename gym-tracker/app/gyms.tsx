@@ -1,13 +1,89 @@
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getEquipmentForGym, getExercisesForGym, getGymsForUser, getUserJoinDateForGym } from "@/mock/mockDataService";
+import {
+  getGymsForUser as getMockGymsForUser,
+  getUserJoinDateForGym as getMockUserJoinDateForGym,
+} from "@/mock/mockDataService";
+import {
+  getGymsForUser as getSupabaseGymsForUser,
+  getUserJoinDateForGym as getSupabaseUserJoinDateForGym,
+} from "@/services/gymService";
+import { getAuthenticatedUserId } from "@/services/profileService";
 import { formatDate } from "@/utils/dateFormat";
+import { useEffect, useState } from "react";
 
 const CURRENT_USER_ID = "user_ryan";
 
+type GymCard = {
+  id: string;
+  name: string;
+  joinDate: string | null;
+};
+
+function buildFallbackGymCards(): GymCard[] {
+  return getMockGymsForUser(CURRENT_USER_ID).map((gym) => ({
+    id: gym.id,
+    name: gym.name,
+    joinDate: getMockUserJoinDateForGym(CURRENT_USER_ID, gym.id),
+  }));
+}
+
 export default function GymsScreen() {
-  const gyms = getGymsForUser(CURRENT_USER_ID);
+  const [gymCards, setGymCards] = useState<GymCard[]>(() => buildFallbackGymCards());
+  const [isLoadingGyms, setIsLoadingGyms] = useState(true);
+  const [gymLoadError, setGymLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadGyms = async () => {
+      try {
+        const authenticatedUserId = await getAuthenticatedUserId();
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!authenticatedUserId) {
+          setGymLoadError("Using local gym data right now.");
+          return;
+        }
+
+        const gyms = await getSupabaseGymsForUser(authenticatedUserId);
+        const cards = await Promise.all(
+          gyms.map(async (gym) => ({
+            id: gym.id,
+            name: gym.name,
+            joinDate: await getSupabaseUserJoinDateForGym(authenticatedUserId, gym.id),
+          }))
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        setGymCards(cards);
+        setGymLoadError(null);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setGymLoadError("Using local gym data right now.");
+      } finally {
+        if (isMounted) {
+          setIsLoadingGyms(false);
+        }
+      }
+    };
+
+    void loadGyms();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -21,7 +97,19 @@ export default function GymsScreen() {
 
         <Text style={styles.title}>My Gyms</Text>
 
-        {gyms.length === 0 ? (
+        {isLoadingGyms ? (
+          <View style={styles.statusBanner}>
+            <ActivityIndicator size="small" color="#BFBFBF" />
+            <Text style={styles.statusBannerText}>Syncing gyms</Text>
+          </View>
+        ) : null}
+        {gymLoadError ? (
+          <View style={styles.statusBanner}>
+            <Text style={styles.statusBannerText}>{gymLoadError}</Text>
+          </View>
+        ) : null}
+
+        {gymCards.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateTitle}>No gyms yet</Text>
             <Text style={styles.emptyStateText}>
@@ -29,11 +117,7 @@ export default function GymsScreen() {
             </Text>
           </View>
         ) : (
-          gyms.map((gym) => {
-            const equipmentCount = getEquipmentForGym(gym.id).length;
-            const exerciseCount = getExercisesForGym(gym.id).length;
-            const joinDate = getUserJoinDateForGym(CURRENT_USER_ID, gym.id);
-
+          gymCards.map((gym) => {
             return (
               <View key={gym.id} style={styles.gymCard}>
                 <View style={styles.gymHeaderRow}>
@@ -45,7 +129,7 @@ export default function GymsScreen() {
 
                 <View style={styles.statsRow}>
                   <View style={styles.statCard}>
-                    <Text style={styles.statValue}>Member Since: <Text style={styles.statLabel}>{joinDate ? formatDate(joinDate) : "N/A"}</Text></Text>
+                    <Text style={styles.statValue}>Member Since: <Text style={styles.statLabel}>{gym.joinDate ? formatDate(gym.joinDate) : "N/A"}</Text></Text>
                   </View>
                 </View>
               </View>
@@ -70,6 +154,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 68,
     paddingBottom: 32,
+  },
+  statusBanner: {
+    minHeight: 42,
+    borderRadius: 16,
+    backgroundColor: "#1A1A1A",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  statusBannerText: {
+    color: "#A8A8A8",
+    fontSize: 13,
+    textAlign: "center",
   },
   returnButton: {
     position: "absolute",

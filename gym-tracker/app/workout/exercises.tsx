@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   ScrollView,
@@ -11,8 +12,17 @@ import {
 import { router } from "expo-router";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 import { useLibrary } from "@/context/LibraryContext";
-import { getExercisesForGym, getUserGymOptions } from "@/mock/mockDataService";
+import {
+  getExercisesForGym as getMockExercisesForGym,
+  getUserGymOptions as getMockUserGymOptions,
+} from "@/mock/mockDataService";
 import { Exercise } from "@/mock/gymImplementation";
+import {
+  getExercisesForGym as getSupabaseExercisesForGym,
+  getUserGymOptions as getSupabaseUserGymOptions,
+  type GymOption,
+} from "@/services/gymService";
+import { getAuthenticatedUserId } from "@/services/profileService";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const CURRENT_USER_ID = "user_ryan";
@@ -42,10 +52,102 @@ export default function ExercisesScreen() {
   const [selectedGymId, setSelectedGymId] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [openFilterMenu, setOpenFilterMenu] = useState<"primary" | "gym" | "category" | null>(null);
+  const [userGymOptions, setUserGymOptions] = useState<GymOption[]>(() => getMockUserGymOptions(CURRENT_USER_ID));
+  const [availableGymExerciseNames, setAvailableGymExerciseNames] = useState<Set<string> | null>(null);
+  const [isSyncingGymData, setIsSyncingGymData] = useState(true);
+  const [gymDataStatus, setGymDataStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadGymOptions = async () => {
+      try {
+        const authenticatedUserId = await getAuthenticatedUserId();
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!authenticatedUserId) {
+          setGymDataStatus("Using local gym data right now.");
+          return;
+        }
+
+        const nextGymOptions = await getSupabaseUserGymOptions(authenticatedUserId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setUserGymOptions(nextGymOptions);
+        setGymDataStatus(null);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setUserGymOptions(getMockUserGymOptions(CURRENT_USER_ID));
+        setGymDataStatus("Using local gym data right now.");
+      } finally {
+        if (isMounted) {
+          setIsSyncingGymData(false);
+        }
+      }
+    };
+
+    void loadGymOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedGymId === "all") {
+      setAvailableGymExerciseNames(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadAvailableExercises = async () => {
+      try {
+        setAvailableGymExerciseNames(new Set());
+
+        const availableExercises = await getSupabaseExercisesForGym(selectedGymId);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setAvailableGymExerciseNames(
+          new Set(availableExercises.map((exercise) => normalizeText(exercise.name)))
+        );
+        setGymDataStatus(null);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setAvailableGymExerciseNames(
+          new Set(
+            getMockExercisesForGym(selectedGymId).map((exercise) => normalizeText(exercise.name))
+          )
+        );
+        setGymDataStatus("Using local gym data right now.");
+      }
+    };
+
+    void loadAvailableExercises();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedGymId]);
 
   const gymOptions = useMemo(
-    () => [{ gymId: "all", gymName: "All Gyms" }, ...getUserGymOptions(CURRENT_USER_ID)],
-    []
+    () => [{ gymId: "all", gymName: "All Gyms" }, ...userGymOptions],
+    [userGymOptions]
   );
 
   const primaryMuscleOptions = useMemo(() => {
@@ -63,16 +165,6 @@ export default function ExercisesScreen() {
 
     return ["all", ...uniqueCategories];
   }, [exercises]);
-
-  const availableGymExerciseNames = useMemo(() => {
-    if (selectedGymId === "all") {
-      return null;
-    }
-
-    return new Set(
-      getExercisesForGym(selectedGymId).map((exercise) => normalizeText(exercise.name))
-    );
-  }, [selectedGymId]);
 
   const filteredExercises = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -158,6 +250,18 @@ export default function ExercisesScreen() {
         </View>
 
         <View style={styles.controlsContainer}>
+          {isSyncingGymData ? (
+            <View style={styles.statusBanner}>
+              <ActivityIndicator size="small" color="#BFBFBF" />
+              <Text style={styles.statusBannerText}>Syncing gym filters</Text>
+            </View>
+          ) : null}
+          {gymDataStatus ? (
+            <View style={styles.statusBanner}>
+              <Text style={styles.statusBannerText}>{gymDataStatus}</Text>
+            </View>
+          ) : null}
+
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
@@ -308,6 +412,23 @@ const styles = StyleSheet.create({
     position: "relative",
     zIndex: 10,
     marginBottom: 14,
+  },
+  statusBanner: {
+    minHeight: 42,
+    borderRadius: 16,
+    backgroundColor: "#1A1A1A",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  statusBannerText: {
+    color: "#A8A8A8",
+    fontSize: 13,
+    textAlign: "center",
   },
   controlsRow: {
     flexDirection: "row",
