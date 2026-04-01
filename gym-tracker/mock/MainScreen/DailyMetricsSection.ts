@@ -3,6 +3,10 @@ import { getCurrentDate } from "@/utils/dateFormat";
 import type {
     DailyExerciseMetrics,
     DatedMacroMetrics,
+    FoodLogDaySummary,
+    FoodLogEntry,
+    FoodLogMealSlot,
+    NutritionGoal,
     WeightEntry,
     WeightGoal,
 } from "@/types/dashboard";
@@ -139,6 +143,45 @@ export const mockNutritionGoal = {
     calorieGoal: 2500,
 };
 
+export const mockFoodLogEntries: FoodLogEntry[] = [
+    {
+        id: "food_log_1",
+        entryDate: "2026-04-01",
+        loggedAt: "2026-04-01T14:00:00.000Z",
+        mealSlot: "snack",
+        name: "Smacks By Kellogg's",
+        energyKcal: 302,
+        protein: 6,
+        fat: 1,
+        carbs: 65,
+        alcoholGrams: 0,
+    },
+    {
+        id: "food_log_2",
+        entryDate: "2026-04-01",
+        loggedAt: "2026-04-01T14:10:00.000Z",
+        mealSlot: "snack",
+        name: "Whey 80 Profesional Proteina Chocolate",
+        energyKcal: 117,
+        protein: 22,
+        fat: 2,
+        carbs: 3,
+        alcoholGrams: 0,
+    },
+    {
+        id: "food_log_3",
+        entryDate: "2026-04-01",
+        loggedAt: "2026-04-01T14:20:00.000Z",
+        mealSlot: "snack",
+        name: "Peanut Butter Crema De Cacahuete",
+        energyKcal: 204,
+        protein: 9,
+        fat: 17,
+        carbs: 3,
+        alcoholGrams: 0,
+    },
+];
+
 
 export const DEFAULT_METRICS_DATE = getCurrentDate();
 
@@ -232,6 +275,116 @@ export function addFoodLogEntry(
     return stripDateFromMacroMetrics(newEntry);
 }
 
+export function getFoodLogEntriesForDate(date: Date | string): FoodLogEntry[] {
+    const dateKey = getDateKey(date);
+
+    return mockFoodLogEntries
+        .filter((entry) => entry.entryDate === dateKey)
+        .sort((left, right) => left.loggedAt.localeCompare(right.loggedAt));
+}
+
+export function getFoodLogDay(date: Date | string): {
+    date: string;
+    summary: FoodLogDaySummary;
+    entries: FoodLogEntry[];
+    nutritionGoal: NutritionGoal;
+} {
+    const entries = getFoodLogEntriesForDate(date);
+
+    const totals = entries.reduce(
+        (aggregate, entry) => {
+            aggregate.protein += entry.protein;
+            aggregate.fat += entry.fat;
+            aggregate.carbs += entry.carbs;
+            aggregate.consumedCalories += entry.energyKcal;
+
+            return aggregate;
+        },
+        {
+            protein: 0,
+            fat: 0,
+            carbs: 0,
+            consumedCalories: 0,
+        }
+    );
+
+    return {
+        date: getDateKey(date),
+        summary: {
+            protein: totals.protein,
+            fat: totals.fat,
+            carbs: totals.carbs,
+            consumedCalories: totals.consumedCalories,
+            ...mockNutritionGoal,
+        },
+        entries,
+        nutritionGoal: mockNutritionGoal,
+    };
+}
+
+function buildFoodLogId(): string {
+    return `food_log_${Date.now()}`;
+}
+
+function buildLoggedAt(date: Date | string, mealSlot?: FoodLogMealSlot): string {
+    const dateKey = getDateKey(date);
+
+    if (mealSlot === "breakfast") {
+        return `${dateKey}T08:00:00.000Z`;
+    }
+
+    if (mealSlot === "lunch") {
+        return `${dateKey}T12:00:00.000Z`;
+    }
+
+    if (mealSlot === "dinner") {
+        return `${dateKey}T18:00:00.000Z`;
+    }
+
+    if (mealSlot === "snack") {
+        return `${dateKey}T15:00:00.000Z`;
+    }
+
+    return `${dateKey}T12:00:00.000Z`;
+}
+
+export function appendFoodLogEntryDetailed(
+    date: Date | string,
+    entry: {
+        name?: string;
+        mealSlot?: FoodLogMealSlot;
+        energyKcal?: number;
+        protein: number;
+        fat: number;
+        carbs: number;
+        alcoholGrams?: number;
+    }
+): FoodLogEntry {
+    const dateKey = getDateKey(date);
+    const nextEntry: FoodLogEntry = {
+        id: buildFoodLogId(),
+        entryDate: dateKey,
+        loggedAt: buildLoggedAt(date, entry.mealSlot),
+        mealSlot: entry.mealSlot ?? "custom",
+        name: entry.name?.trim() || "Quick entry",
+        energyKcal:
+            entry.energyKcal ?? entry.protein * 4 + entry.fat * 9 + entry.carbs * 4 + (entry.alcoholGrams ?? 0) * 7,
+        protein: entry.protein,
+        fat: entry.fat,
+        carbs: entry.carbs,
+        alcoholGrams: entry.alcoholGrams ?? 0,
+    };
+
+    mockFoodLogEntries.push(nextEntry);
+    addFoodLogEntry(date, {
+        protein: entry.protein,
+        fat: entry.fat,
+        carbs: entry.carbs,
+    });
+
+    return nextEntry;
+}
+
 export function upsertWeightEntry(date: Date | string, weightKg: number): WeightEntry {
     const dateKey = getDateKey(date);
     const existingEntry = mockWeightEntries.find((entry) => entry.date === dateKey);
@@ -248,6 +401,22 @@ export function upsertWeightEntry(date: Date | string, weightKg: number): Weight
     mockWeightEntries.sort((left, right) => left.date.localeCompare(right.date));
 
     return mockWeightEntries.find((entry) => entry.date === dateKey) as WeightEntry;
+}
+
+export function upsertNutritionGoal(goal: NutritionGoal): NutritionGoal {
+    mockNutritionGoal.proteinGoal = goal.proteinGoal;
+    mockNutritionGoal.fatGoal = goal.fatGoal;
+    mockNutritionGoal.carbsGoal = goal.carbsGoal;
+    mockNutritionGoal.calorieGoal = goal.calorieGoal;
+
+    return { ...mockNutritionGoal };
+}
+
+export function upsertWeightGoal(goal: WeightGoal): WeightGoal {
+    mockGoal.startWeightKg = goal.startWeightKg;
+    mockGoal.targetWeightKg = goal.targetWeightKg;
+
+    return { ...mockGoal };
 }
 
 function stripDateFromMacroMetrics({ date, ...metrics }: DatedMacroMetrics): MacroBarProps {

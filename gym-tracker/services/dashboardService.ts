@@ -1,5 +1,13 @@
 import { supabase } from "@/lib/supabase";
-import type { DailyExerciseMetrics, WeightEntry, WeightGoal } from "@/types/dashboard";
+import type {
+  DailyExerciseMetrics,
+  FoodLogDaySummary,
+  FoodLogEntry,
+  FoodLogMealSlot,
+  NutritionGoal,
+  WeightEntry,
+  WeightGoal,
+} from "@/types/dashboard";
 import type { MacroBarProps } from "@/utils/calculateMacroBar";
 
 export type DashboardWriteResult<T> = {
@@ -42,9 +50,14 @@ type FoodLogEntryRow = {
   id: string;
   user_id: string;
   entry_date: string;
+  logged_at: string;
+  meal_slot: string | null;
+  name: string | null;
+  energy_kcal: number | null;
   protein_grams: number;
   fat_grams: number;
   carbs_grams: number;
+  alcohol_grams: number;
   created_at: string;
   updated_at: string;
 };
@@ -88,10 +101,34 @@ export type WorkoutDashboardSnapshot = {
   weightGoal: WeightGoal | null;
 };
 
+export type NutritionGoalInput = {
+  proteinGoal: number;
+  fatGoal: number;
+  carbsGoal: number;
+  calorieGoal: number;
+};
+
+export type WeightGoalInput = {
+  startWeightKg: number;
+  targetWeightKg: number;
+};
+
 export type FoodLogInput = {
+  name?: string;
+  loggedAt?: string;
+  mealSlot?: FoodLogMealSlot;
+  energyKcal?: number | null;
   protein: number;
   fat: number;
   carbs: number;
+  alcoholGrams?: number;
+};
+
+export type FoodLogDaySnapshot = {
+  date: string;
+  summary: FoodLogDaySummary;
+  entries: FoodLogEntry[];
+  nutritionGoal: NutritionGoal | null;
 };
 
 export function getDateKey(date: Date | string): string {
@@ -130,6 +167,15 @@ function mapNutritionGoalRow(row: NutritionGoalRow): Pick<
   };
 }
 
+function mapNutritionGoalToGoal(row: NutritionGoalRow): NutritionGoal {
+  return {
+    proteinGoal: row.protein_goal_grams,
+    fatGoal: row.fat_goal_grams,
+    carbsGoal: row.carbs_goal_grams,
+    calorieGoal: row.calorie_goal,
+  };
+}
+
 function mapDailyExerciseMetricsRow(
   row: DailyExerciseMetricsRow
 ): Omit<DailyExerciseMetrics, "date"> {
@@ -147,10 +193,85 @@ function mapBodyWeightEntryRow(row: BodyWeightEntryRow): WeightEntry {
   };
 }
 
+function normalizeMealSlot(value?: string | null): FoodLogMealSlot {
+  if (value === "breakfast" || value === "lunch" || value === "dinner" || value === "snack") {
+    return value;
+  }
+
+  return "custom";
+}
+
+function calculateEntryCalories(entry: {
+  protein_grams: number;
+  fat_grams: number;
+  carbs_grams: number;
+  alcohol_grams?: number;
+  energy_kcal?: number | null;
+}): number {
+  if (entry.energy_kcal !== null && entry.energy_kcal !== undefined) {
+    return Number(entry.energy_kcal);
+  }
+
+  const proteinCalories = entry.protein_grams * 4;
+  const fatCalories = entry.fat_grams * 9;
+  const carbCalories = entry.carbs_grams * 4;
+  const alcoholCalories = (entry.alcohol_grams ?? 0) * 7;
+
+  return proteinCalories + fatCalories + carbCalories + alcoholCalories;
+}
+
+function mapFoodLogEntryRow(row: FoodLogEntryRow): FoodLogEntry {
+  return {
+    id: row.id,
+    entryDate: row.entry_date,
+    loggedAt: row.logged_at,
+    mealSlot: normalizeMealSlot(row.meal_slot),
+    name: row.name?.trim() || "Quick entry",
+    energyKcal: calculateEntryCalories(row),
+    protein: row.protein_grams,
+    fat: row.fat_grams,
+    carbs: row.carbs_grams,
+    alcoholGrams: row.alcohol_grams ?? 0,
+  };
+}
+
 function mapWeightGoalRow(row: WeightGoalRow): WeightGoal {
   return {
     startWeightKg: Number(row.start_weight_kg),
     targetWeightKg: Number(row.target_weight_kg),
+  };
+}
+
+function buildFoodLogDaySummary(
+  entries: FoodLogEntry[],
+  nutritionGoal: NutritionGoal | null
+): FoodLogDaySummary {
+  const consumed = entries.reduce(
+    (aggregate, entry) => {
+      aggregate.protein += entry.protein;
+      aggregate.fat += entry.fat;
+      aggregate.carbs += entry.carbs;
+      aggregate.consumedCalories += entry.energyKcal;
+
+      return aggregate;
+    },
+    {
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+      consumedCalories: 0,
+    }
+  );
+
+  return {
+    protein: consumed.protein,
+    fat: consumed.fat,
+    carbs: consumed.carbs,
+    proteinGoal: nutritionGoal?.proteinGoal ?? 0,
+    fatGoal: nutritionGoal?.fatGoal ?? 0,
+    carbsGoal: nutritionGoal?.carbsGoal ?? 0,
+    calorieGoal: nutritionGoal?.calorieGoal ?? 0,
+    consumedCalories: consumed.consumedCalories,
   };
 }
 
@@ -166,69 +287,115 @@ export async function getDailyNutritionMetrics(
   userId: string,
   date: Date | string
 ): Promise<MacroBarProps | null> {
-  const dateKey = getDateKey(date);
+  const daySnapshot = await getFoodLogDay(userId, date);
 
-  const [goalResponse, foodLogResponse] = await Promise.all([
-    supabase
-      .from("nutrition_goals")
-      .select(
-        "id, user_id, protein_goal_grams, fat_goal_grams, carbs_goal_grams, calorie_goal, starts_on, ended_on, is_active, created_at, updated_at"
-      )
-      .eq("user_id", userId)
-      .eq("is_active", true)
-      .maybeSingle<NutritionGoalRow>(),
+  return daySnapshot.summary;
+}
+
+export async function getActiveNutritionGoal(userId: string): Promise<NutritionGoal | null> {
+  const { data, error } = await supabase
+    .from("nutrition_goals")
+    .select(
+      "id, user_id, protein_goal_grams, fat_goal_grams, carbs_goal_grams, calorie_goal, starts_on, ended_on, is_active, created_at, updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .maybeSingle<NutritionGoalRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ? mapNutritionGoalToGoal(data) : null;
+}
+
+export async function getFoodLogEntriesForDate(
+  userId: string,
+  date: Date | string
+): Promise<FoodLogEntry[]> {
+  const { data, error } = await supabase
+    .from("food_log_entries")
+    .select(
+      "id, user_id, entry_date, logged_at, meal_slot, name, energy_kcal, protein_grams, fat_grams, carbs_grams, alcohol_grams, created_at, updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("entry_date", getDateKey(date))
+    .order("logged_at", { ascending: true })
+    .returns<FoodLogEntryRow[]>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.map(mapFoodLogEntryRow);
+}
+
+export async function getFoodLogDay(
+  userId: string,
+  date: Date | string
+): Promise<FoodLogDaySnapshot> {
+  const [nutritionGoal, entries] = await Promise.all([
+    getActiveNutritionGoal(userId),
+    getFoodLogEntriesForDate(userId, date),
+  ]);
+
+  return {
+    date: getDateKey(date),
+    summary: buildFoodLogDaySummary(entries, nutritionGoal),
+    entries,
+    nutritionGoal,
+  };
+}
+
+export async function getFoodLogDays(
+  userId: string,
+  dates: Array<Date | string>
+): Promise<FoodLogDaySnapshot[]> {
+  const dateKeys = Array.from(new Set(dates.map((date) => getDateKey(date))));
+
+  if (dateKeys.length === 0) {
+    return [];
+  }
+
+  const [nutritionGoal, entriesResult] = await Promise.all([
+    getActiveNutritionGoal(userId),
     supabase
       .from("food_log_entries")
       .select(
-        "id, user_id, entry_date, protein_grams, fat_grams, carbs_grams, created_at, updated_at"
+        "id, user_id, entry_date, logged_at, meal_slot, name, energy_kcal, protein_grams, fat_grams, carbs_grams, alcohol_grams, created_at, updated_at"
       )
       .eq("user_id", userId)
-      .eq("entry_date", dateKey)
+      .in("entry_date", dateKeys)
+      .order("logged_at", { ascending: true })
       .returns<FoodLogEntryRow[]>(),
   ]);
 
-  if (goalResponse.error) {
-    throw new Error(goalResponse.error.message);
+  if (entriesResult.error) {
+    throw new Error(entriesResult.error.message);
   }
 
-  if (foodLogResponse.error) {
-    throw new Error(foodLogResponse.error.message);
-  }
+  const entriesByDate = new Map<string, FoodLogEntry[]>();
 
-  const goalMetrics = goalResponse.data
-    ? mapNutritionGoalRow(goalResponse.data)
-    : {
-        proteinGoal: 0,
-        fatGoal: 0,
-        carbsGoal: 0,
-        calorieGoal: 0,
-      };
+  dateKeys.forEach((dateKey) => {
+    entriesByDate.set(dateKey, []);
+  });
 
-  const totals = (foodLogResponse.data ?? []).reduce(
-    (aggregate, entry) => {
-      aggregate.protein += entry.protein_grams;
-      aggregate.fat += entry.fat_grams;
-      aggregate.carbs += entry.carbs_grams;
+  entriesResult.data.map(mapFoodLogEntryRow).forEach((entry) => {
+    const existingEntries = entriesByDate.get(entry.entryDate) ?? [];
+    existingEntries.push(entry);
+    entriesByDate.set(entry.entryDate, existingEntries);
+  });
 
-      return aggregate;
-    },
-    {
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-    }
-  );
+  return dateKeys.map((dateKey) => {
+    const entries = entriesByDate.get(dateKey) ?? [];
 
-  if (!goalResponse.data && (foodLogResponse.data?.length ?? 0) === 0) {
-    return null;
-  }
-
-  return {
-    protein: totals.protein,
-    fat: totals.fat,
-    carbs: totals.carbs,
-    ...goalMetrics,
-  };
+    return {
+      date: dateKey,
+      summary: buildFoodLogDaySummary(entries, nutritionGoal),
+      entries,
+      nutritionGoal,
+    };
+  });
 }
 
 export async function getDailyExerciseMetrics(
@@ -332,9 +499,14 @@ export async function appendFoodLogEntry(
         {
           user_id: userId,
           entry_date: getDateKey(date),
+          logged_at: entry.loggedAt ?? new Date().toISOString(),
+          meal_slot: entry.mealSlot ?? "custom",
+          name: entry.name?.trim() || null,
+          energy_kcal: entry.energyKcal ?? null,
           protein_grams: entry.protein,
           fat_grams: entry.fat,
           carbs_grams: entry.carbs,
+          alcohol_grams: entry.alcoholGrams ?? 0,
         }
       );
 
@@ -413,6 +585,148 @@ export async function upsertWeightEntry(
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not save weight entry.", error),
+      shouldFallback: true,
+    };
+  }
+}
+
+export async function upsertActiveNutritionGoal(
+  userId: string,
+  goal: NutritionGoalInput
+): Promise<DashboardWriteResult<NutritionGoal>> {
+  const values = [goal.proteinGoal, goal.fatGoal, goal.carbsGoal, goal.calorieGoal];
+
+  if (values.some((value) => !Number.isFinite(value) || value < 0)) {
+    return {
+      success: false,
+      error: "Nutrition goals must be non-negative numbers.",
+    };
+  }
+
+  try {
+    const { data: existingGoal, error: existingGoalError } = await supabase
+      .from("nutrition_goals")
+      .select("id, starts_on")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .maybeSingle<{ id: string; starts_on: string }>();
+
+    if (existingGoalError) {
+      return {
+        success: false,
+        error: existingGoalError.message,
+        shouldFallback: true,
+      };
+    }
+
+    const payload = {
+      user_id: userId,
+      protein_goal_grams: goal.proteinGoal,
+      fat_goal_grams: goal.fatGoal,
+      carbs_goal_grams: goal.carbsGoal,
+      calorie_goal: goal.calorieGoal,
+      starts_on: existingGoal?.starts_on ?? getDateKey(new Date()),
+      ended_on: null,
+      is_active: true,
+    };
+
+    const query = existingGoal
+      ? supabase
+          .from("nutrition_goals")
+          .update(payload)
+          .eq("id", existingGoal.id)
+      : supabase.from("nutrition_goals").insert(payload);
+
+    const { error } = await query;
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+        shouldFallback: true,
+      };
+    }
+
+    const updatedGoal = await getActiveNutritionGoal(userId);
+
+    return {
+      success: true,
+      data: updatedGoal ?? goal,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not save nutrition goals.", error),
+      shouldFallback: true,
+    };
+  }
+}
+
+export async function upsertActiveWeightGoal(
+  userId: string,
+  goal: WeightGoalInput
+): Promise<DashboardWriteResult<WeightGoal>> {
+  const values = [goal.startWeightKg, goal.targetWeightKg];
+
+  if (values.some((value) => !Number.isFinite(value) || value <= 0)) {
+    return {
+      success: false,
+      error: "Weight goal values must be greater than zero.",
+    };
+  }
+
+  try {
+    const { data: existingGoal, error: existingGoalError } = await supabase
+      .from("weight_goals")
+      .select("id, started_at")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .maybeSingle<{ id: string; started_at: string }>();
+
+    if (existingGoalError) {
+      return {
+        success: false,
+        error: existingGoalError.message,
+        shouldFallback: true,
+      };
+    }
+
+    const payload = {
+      user_id: userId,
+      start_weight_kg: goal.startWeightKg,
+      target_weight_kg: goal.targetWeightKg,
+      started_at: existingGoal?.started_at ?? new Date().toISOString(),
+      completed_at: null,
+      is_active: true,
+    };
+
+    const query = existingGoal
+      ? supabase
+          .from("weight_goals")
+          .update(payload)
+          .eq("id", existingGoal.id)
+      : supabase.from("weight_goals").insert(payload);
+
+    const { error } = await query;
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+        shouldFallback: true,
+      };
+    }
+
+    const updatedGoal = await getActiveWeightGoal(userId);
+
+    return {
+      success: true,
+      data: updatedGoal ?? goal,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not save weight goal.", error),
       shouldFallback: true,
     };
   }

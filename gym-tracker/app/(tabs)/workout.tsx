@@ -17,29 +17,25 @@ import DailyMacroMetricsSection from "@/components/main/DailyMetrics/DailyMacroM
 import DailyExerciseMetricsSection from "@/components/main/DailyMetrics/DailyExerciseMetricsSection";
 import {
   DEFAULT_METRICS_DATE,
-  addFoodLogEntry as addMockFoodLogEntry,
   getDailyExerciseMetrics,
   getDailyMacroMetrics,
   mockGoal,
-  mockNutritionGoal,
   mockWeightEntries,
   upsertWeightEntry as upsertMockWeightEntry,
 } from "@/mock/MainScreen/DailyMetricsSection";
 import WeightTrendSection from "@/components/main/WeightTrend";
 import GoalProgressSection from "@/components/main/GoalProgress";
-import { BodyMap } from "@/components/ui/BodyMap";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 import { Ionicons } from "@expo/vector-icons";
 import type { WeightEntry, WeightGoal } from "@/types/dashboard";
 import type { MacroBarProps } from "@/utils/calculateMacroBar";
 import {
-  appendFoodLogEntry,
+  getDateKey,
   getWorkoutDashboardSnapshot,
   type WorkoutDashboardSnapshot,
   upsertWeightEntry,
 } from "@/services/dashboardService";
 import { getAuthenticatedUserId } from "@/services/profileService";
-import { getDateKey } from "@/services/dashboardService";
 
 const EMPTY_MACRO_METRICS: MacroBarProps = {
   protein: 0,
@@ -57,7 +53,7 @@ const EMPTY_EXERCISE_METRICS = {
   workoutType: "",
 };
 
-type QuickActionModal = "food" | "weight" | "library" | null;
+type QuickActionModal = "weight" | "library" | null;
 
 export default function WorkoutScreen() {
   const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
@@ -75,20 +71,10 @@ export default function WorkoutScreen() {
   const [activeQuickActionModal, setActiveQuickActionModal] = useState<QuickActionModal>(null);
   const [isSavingQuickAction, setIsSavingQuickAction] = useState(false);
   const [quickActionError, setQuickActionError] = useState<string | null>(null);
-  const [foodForm, setFoodForm] = useState({
-    protein: "",
-    fat: "",
-    carbs: "",
-  });
   const [weightInput, setWeightInput] = useState("");
   const { startWorkout } = useActiveWorkout();
 
   const resetQuickActionForms = () => {
-    setFoodForm({
-      protein: "",
-      fat: "",
-      carbs: "",
-    });
     setWeightInput("");
   };
 
@@ -176,69 +162,6 @@ export default function WorkoutScreen() {
       isMounted = false;
     };
   }, [selectedDate]);
-
-  const handleSaveFood = async () => {
-    const nextEntry = {
-      protein: Number(foodForm.protein || 0),
-      fat: Number(foodForm.fat || 0),
-      carbs: Number(foodForm.carbs || 0),
-    };
-
-    const hasInvalidValue = Object.values(nextEntry).some(
-      (value) => !Number.isFinite(value) || value < 0
-    );
-    const hasAnyPositiveValue = Object.values(nextEntry).some((value) => value > 0);
-
-    if (hasInvalidValue) {
-      setQuickActionError("Enter valid non-negative nutrition values.");
-      return;
-    }
-
-    if (!hasAnyPositiveValue) {
-      setQuickActionError("Enter at least one food value greater than zero.");
-      return;
-    }
-
-    setIsSavingQuickAction(true);
-    setQuickActionError(null);
-
-    try {
-      if (authenticatedUserId) {
-        const result = await appendFoodLogEntry(
-          authenticatedUserId,
-          selectedDate,
-          nextEntry
-        );
-
-        if (result.success && result.data) {
-          try {
-            addMockFoodLogEntry(selectedDate, nextEntry);
-          } catch {
-            // Best-effort local mirror only.
-          }
-
-          setDailyMacroMetrics(result.data);
-          setDashboardLoadError(null);
-          setActiveQuickActionModal(null);
-          resetQuickActionForms();
-          return;
-        }
-
-        if (!result.shouldFallback) {
-          setQuickActionError(result.error ?? "Could not save food entry.");
-          return;
-        }
-      }
-
-      const fallbackMetrics = addMockFoodLogEntry(selectedDate, nextEntry);
-      setDailyMacroMetrics(fallbackMetrics);
-      setDashboardLoadError("Using local dashboard data right now.");
-      setActiveQuickActionModal(null);
-      resetQuickActionForms();
-    } finally {
-      setIsSavingQuickAction(false);
-    }
-  };
 
   const handleSaveWeight = async () => {
     const nextWeightKg = Number(weightInput);
@@ -332,7 +255,18 @@ export default function WorkoutScreen() {
         <View style={styles.mainButtonContainer}>
     
           <View style={styles.secondaryButtonContainer}>
-            <Pressable style={styles.logFoodButton} onPress={() => openQuickActionModal("food")}>
+            <Pressable
+              style={styles.logFoodButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/discover",
+                  params: {
+                    quickAdd: "1",
+                    date: getDateKey(selectedDate),
+                    hour: "12",
+                  },
+                })
+              }>
                 <Ionicons name="fast-food-outline" size={20} color="#7C7C7C" />
             </Pressable>
 
@@ -368,49 +302,6 @@ export default function WorkoutScreen() {
             <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
               <View style={styles.modalSheet}>
                 <View style={styles.modalHandle} />
-
-                {activeQuickActionModal === "food" ? (
-                  <>
-                    <Text style={styles.modalTitle}>Log Food</Text>
-
-                    <Text style={styles.modalSubtitle}>
-                      Add intake for this date. These values will be added to your running daily total.
-                    </Text>
-
-                    <View style={styles.metricGrid}>
-                      <View style={styles.metricField}>
-                        <Text style={styles.metricLabel}>Protein</Text>
-                        <TextInput
-                          style={styles.metricInput}
-                          value={foodForm.protein}
-                          onChangeText={(value) => setFoodForm((current) => ({ ...current, protein: value }))}
-                          keyboardType="numeric"
-                          editable={!isSavingQuickAction}
-                        />
-                      </View>
-                      <View style={styles.metricField}>
-                        <Text style={styles.metricLabel}>Fat</Text>
-                        <TextInput
-                          style={styles.metricInput}
-                          value={foodForm.fat}
-                          onChangeText={(value) => setFoodForm((current) => ({ ...current, fat: value }))}
-                          keyboardType="numeric"
-                          editable={!isSavingQuickAction}
-                        />
-                      </View>
-                      <View style={styles.metricField}>
-                        <Text style={styles.metricLabel}>Carbs</Text>
-                        <TextInput
-                          style={styles.metricInput}
-                          value={foodForm.carbs}
-                          onChangeText={(value) => setFoodForm((current) => ({ ...current, carbs: value }))}
-                          keyboardType="numeric"
-                          editable={!isSavingQuickAction}
-                        />
-                      </View>
-                    </View>
-                  </>
-                ) : null}
 
                 {activeQuickActionModal === "weight" ? (
                   <>
@@ -463,16 +354,6 @@ export default function WorkoutScreen() {
                   <Pressable style={styles.modalSecondaryButton} onPress={closeQuickActionModal}>
                     <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
                   </Pressable>
-
-                  {activeQuickActionModal === "food" ? (
-                    <Pressable style={styles.modalPrimaryButton} onPress={handleSaveFood}>
-                      {isSavingQuickAction ? (
-                        <ActivityIndicator size="small" color="#F4F4F4" />
-                      ) : (
-                        <Text style={styles.modalPrimaryButtonText}>Save Food</Text>
-                      )}
-                    </Pressable>
-                  ) : null}
 
                   {activeQuickActionModal === "weight" ? (
                     <Pressable style={styles.modalPrimaryButton} onPress={handleSaveWeight}>

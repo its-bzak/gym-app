@@ -1,11 +1,16 @@
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Tabs } from "expo-router";
 import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { HapticTab } from "@/components/haptic-tab";
 
-function TabIcon({ focused }: { focused: boolean }) {
+function TabIcon({
+  focused,
+  name,
+}: {
+  focused: boolean;
+  name: React.ComponentProps<typeof Ionicons>["name"];
+}) {
   if (focused) {
     return (
       <View
@@ -17,22 +22,12 @@ function TabIcon({ focused }: { focused: boolean }) {
           alignItems: "center",
           justifyContent: "center",
         }}>
-        <MaterialIcons
-          name="play-arrow"
-          size={34}
-          color="#E4E4E4"
-        />
+        <Ionicons name={name} size={24} color="#E4E4E4" />
       </View>
     );
   }
 
-  return (
-    <MaterialIcons
-      name="play-arrow"
-      size={34}
-      color="#E4E4E4"
-    />
-  );
+  return <Ionicons name={name} size={24} color="#BFBFBF" />;
 }
 
 export default function TabsLayout() {
@@ -60,9 +55,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="discover"
         options={{
-          title: "Discover",
+          title: "Food Log",
           tabBarButton: HapticTab,
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="restaurant-outline" />,
         }}
       />
       <Tabs.Screen
@@ -70,7 +65,7 @@ export default function TabsLayout() {
         options={{
           title: "Workout",
           tabBarButton: HapticTab,
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="barbell-outline" />,
         }}
       />
       <Tabs.Screen
@@ -78,7 +73,7 @@ export default function TabsLayout() {
         options={{
           title: "Performance",
           tabBarButton: HapticTab,
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="stats-chart-outline" />,
         }}
       />
       <Tabs.Screen
@@ -86,7 +81,7 @@ export default function TabsLayout() {
         options={{
           title: "Profile",
           tabBarButton: HapticTab,
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="person-outline" />,
         }}
       />
     </Tabs>
