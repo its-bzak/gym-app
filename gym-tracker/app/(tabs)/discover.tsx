@@ -39,10 +39,10 @@ type TimeSlot = {
     label: string;
 };
 
-type TimelineEntryLayout = {
-    entry: FoodLogEntry;
-    top: number;
-    timeLabel: string;
+type TimelineHourGroup = {
+    slot: TimeSlot;
+    entries: FoodLogEntry[];
+    totals: Pick<FoodLogEntry, "protein" | "fat" | "carbs" | "energyKcal">;
 };
 
 type QuickAddModalMode = "create" | "edit" | "time" | null;
@@ -77,10 +77,10 @@ const TIME_SLOTS: TimeSlot[] = Array.from({ length: 24 }, (_, hour) => ({
 const MAX_DATE_CIRCLE_SIZE = 58;
 const MIN_DATE_CIRCLE_SIZE = 38;
 const DATE_CIRCLE_STROKE = 4;
-const TIMELINE_HOUR_HEIGHT = 48;
+const TIMELINE_HOUR_HEIGHT = 44;
 const TIMELINE_LEFT_GUTTER = 48;
 const TIMELINE_ENTRY_HEIGHT = 28;
-const TIMELINE_ENTRY_GAP = 8;
+const TIMELINE_ENTRY_GAP = 6;
 
 function formatNowTimeInput() {
     return formatEntryTimeLabel(new Date().toISOString());
@@ -139,20 +139,6 @@ function formatEntryTimeLabel(loggedAt: string) {
 
 function formatAxisHourLabel(hour: number) {
     return formatTimeSlotLabel(hour).replace(" ", "").toLowerCase();
-}
-
-function getSlotLabelForEntry(entry: FoodLogEntry) {
-    const hour = new Date(entry.loggedAt).getHours();
-    const matchingSlot = TIME_SLOTS.find((slot) => slot.hour === hour);
-
-    if (matchingSlot) {
-        return matchingSlot.label;
-    }
-
-    return new Date(entry.loggedAt).toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-    });
 }
 
 function buildLoggedAtForSlot(date: Date, hour: number): string {
@@ -310,7 +296,6 @@ export default function DiscoverScreen() {
 
         return Math.max(MIN_DATE_CIRCLE_SIZE, Math.min(MAX_DATE_CIRCLE_SIZE, nextSize));
     }, [windowWidth]);
-    const timelineHeight = TIME_SLOTS.length * TIMELINE_HOUR_HEIGHT;
 
     const applyFoodLogSnapshots = (
         date: Date,
@@ -386,20 +371,32 @@ export default function DiscoverScreen() {
         [editingEntryId, entries]
     );
 
-    const timelineEntries = useMemo<TimelineEntryLayout[]>(() => {
-        const sortedEntries = [...entries].sort((left, right) => left.loggedAt.localeCompare(right.loggedAt));
-        let lastTop = -TIMELINE_ENTRY_HEIGHT;
+    const timelineGroups = useMemo<TimelineHourGroup[]>(() => {
+        return TIME_SLOTS.map((slot) => {
+            const hourEntries = entries
+                .filter((entry) => new Date(entry.loggedAt).getHours() === slot.hour)
+                .sort((left, right) => left.loggedAt.localeCompare(right.loggedAt));
 
-        return sortedEntries.map((entry) => {
-            const loggedAt = new Date(entry.loggedAt);
-            const rawTop = ((loggedAt.getHours() * 60 + loggedAt.getMinutes()) / 60) * TIMELINE_HOUR_HEIGHT;
-            const nextTop = Math.max(rawTop, lastTop + TIMELINE_ENTRY_HEIGHT + TIMELINE_ENTRY_GAP);
-            lastTop = nextTop;
+            const totals = hourEntries.reduce<Pick<FoodLogEntry, "protein" | "fat" | "carbs" | "energyKcal">>(
+                (aggregate, entry) => {
+                    aggregate.protein += entry.protein;
+                    aggregate.fat += entry.fat;
+                    aggregate.carbs += entry.carbs;
+                    aggregate.energyKcal += entry.energyKcal;
+                    return aggregate;
+                },
+                {
+                    protein: 0,
+                    fat: 0,
+                    carbs: 0,
+                    energyKcal: 0,
+                }
+            );
 
             return {
-                entry,
-                top: nextTop,
-                timeLabel: formatEntryTimeLabel(entry.loggedAt),
+                slot,
+                entries: hourEntries,
+                totals,
             };
         });
     }, [entries]);
@@ -830,49 +827,60 @@ export default function DiscoverScreen() {
                     style={styles.timeline}
                     contentContainerStyle={styles.timelineContent}
                     showsVerticalScrollIndicator={false}>
-                    <View style={[styles.timelineCanvas, { height: timelineHeight }]}> 
-                        {TIME_SLOTS.map((slot) => (
-                            <View
-                                key={slot.label}
-                                style={[styles.timelineHourRow, { top: slot.hour * TIMELINE_HOUR_HEIGHT }]}>
-                                <Text style={styles.timeSlotLabel}>{formatAxisHourLabel(slot.hour)}</Text>
-                                <Pressable style={styles.timelineHourTapArea} onPress={() => openQuickAdd(slot)}>
-                                    <View style={styles.timelineHourRule} />
-                                </Pressable>
-                            </View>
-                        ))}
+                    {entries.length === 0 ? (
+                        <View style={styles.timelineEmptyState}>
+                            <Text style={styles.emptySlotText}>No foods logged for this day yet.</Text>
+                        </View>
+                    ) : null}
 
-                        {timelineEntries.length === 0 ? (
-                            <View style={styles.timelineEmptyState}>
-                                <Text style={styles.emptySlotText}>No foods logged for this day yet.</Text>
-                            </View>
-                        ) : null}
+                    {timelineGroups.map(({ slot, entries: hourEntries, totals }) => {
+                        const hasEntries = hourEntries.length > 0;
 
-                        {timelineEntries.map(({ entry, top, timeLabel }) => {
-                            const isSelected = entry.id === selectedEntryId;
-
-                            return (
-                                <View key={entry.id} style={[styles.timelineEntryRow, { top }]}> 
-                                    <Text style={styles.entryTimeLabel}>{timeLabel}</Text>
-                                    <Pressable
-                                        style={[styles.timelineEntryCard, isSelected && styles.timelineEntryCardSelected]}
-                                        onPress={() => {
-                                            setSelectedEntryId((current) => (current === entry.id ? null : entry.id));
-                                            setQuickAddModalMode(null);
-                                            setEditingEntryId(null);
-                                            setQuickAddError(null);
-                                        }}>
-                                        <Text style={styles.timelineEntryName} numberOfLines={1}>
-                                            {entry.name}
-                                        </Text>
-                                        <Text style={styles.timelineEntryMeta} numberOfLines={1}>
-                                            {formatCompactEntryMeta(entry)}
-                                        </Text>
+                        return (
+                            <View key={slot.label} style={[styles.timelineHourBlock, hasEntries && styles.timelineHourBlockExpanded]}>
+                                <View style={styles.timelineHourHeaderRow}>
+                                    <Text style={styles.timeSlotLabel}>{formatAxisHourLabel(slot.hour)}</Text>
+                                    <Pressable style={styles.timelineHourHeaderContent} onPress={() => openQuickAdd(slot)}>
+                                        <View style={styles.timelineHourRule} />
+                                        {hasEntries ? (
+                                            <Text style={styles.timelineHourTotals} numberOfLines={1}>
+                                                {formatCompactEntryMeta(totals)}
+                                            </Text>
+                                        ) : null}
                                     </Pressable>
                                 </View>
-                            );
-                        })}
-                    </View>
+
+                                {hasEntries ? (
+                                    <View style={styles.timelineHourEntries}>
+                                        {hourEntries.map((entry) => {
+                                            const isSelected = entry.id === selectedEntryId;
+
+                                            return (
+                                                <View key={entry.id} style={styles.timelineEntryRow}>
+                                                    <Text style={styles.entryTimeLabel}>{formatEntryTimeLabel(entry.loggedAt)}</Text>
+                                                    <Pressable
+                                                        style={[styles.timelineEntryCard, isSelected && styles.timelineEntryCardSelected]}
+                                                        onPress={() => {
+                                                            setSelectedEntryId((current) => (current === entry.id ? null : entry.id));
+                                                            setQuickAddModalMode(null);
+                                                            setEditingEntryId(null);
+                                                            setQuickAddError(null);
+                                                        }}>
+                                                        <Text style={styles.timelineEntryName} numberOfLines={1}>
+                                                            {entry.name}
+                                                        </Text>
+                                                        <Text style={styles.timelineEntryMeta} numberOfLines={1}>
+                                                            {formatCompactEntryMeta(entry)}
+                                                        </Text>
+                                                    </Pressable>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                ) : null}
+                            </View>
+                        );
+                    })}
                 </ScrollView>
 
                 <View style={styles.bottomActionBar}>
@@ -1175,17 +1183,17 @@ const styles = StyleSheet.create({
     timelineContent: {
         paddingBottom: 300,
     },
-    timelineCanvas: {
-        position: "relative",
-        marginTop: 10,
+    timelineHourBlock: {
+        minHeight: TIMELINE_HOUR_HEIGHT,
+        marginBottom: 2,
     },
-    timelineHourRow: {
-        position: "absolute",
-        left: 0,
-        right: 0,
+    timelineHourBlockExpanded: {
+        marginBottom: 8,
+    },
+    timelineHourHeaderRow: {
         flexDirection: "row",
         alignItems: "center",
-        height: TIMELINE_HOUR_HEIGHT,
+        minHeight: TIMELINE_HOUR_HEIGHT,
     },
     timeSlotLabel: {
         width: TIMELINE_LEFT_GUTTER,
@@ -1193,30 +1201,39 @@ const styles = StyleSheet.create({
         fontSize: 12,
         lineHeight: 14,
     },
-    timelineHourTapArea: {
+    timelineHourHeaderContent: {
         flex: 1,
-        height: TIMELINE_HOUR_HEIGHT,
-        justifyContent: "center",
+        minHeight: TIMELINE_HOUR_HEIGHT,
+        justifyContent: "flex-start",
+        paddingTop: 12,
     },
     timelineHourRule: {
         height: 1,
         backgroundColor: "#242424",
         marginLeft: 12,
     },
+    timelineHourTotals: {
+        color: "#5E5E5E",
+        alignSelf: "flex-end",
+        fontSize: 12,
+        fontWeight: "500",
+        marginTop: 8,
+        marginLeft: 12,
+    },
     timelineEmptyState: {
-        position: "absolute",
-        top: TIMELINE_HOUR_HEIGHT * 8,
-        left: TIMELINE_LEFT_GUTTER + 24,
-        right: 0,
+        paddingTop: 48,
+        paddingLeft: TIMELINE_LEFT_GUTTER + 24,
+        paddingBottom: 24,
         alignItems: "flex-start",
     },
+    timelineHourEntries: {
+        paddingTop: 2,
+    },
     timelineEntryRow: {
-        position: "absolute",
-        left: 0,
-        right: 0,
         height: TIMELINE_ENTRY_HEIGHT,
         flexDirection: "row",
         alignItems: "center",
+        marginBottom: TIMELINE_ENTRY_GAP,
     },
     entryTimeLabel: {
         width: TIMELINE_LEFT_GUTTER,
@@ -1247,7 +1264,7 @@ const styles = StyleSheet.create({
     },
     timelineEntryMeta: {
         color: "#6E6E6E",
-        fontSize: 10,
+        fontSize: 12,
         flexShrink: 0,
     },
     emptySlotText: {
