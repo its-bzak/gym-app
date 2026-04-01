@@ -1,12 +1,23 @@
 import { router } from "expo-router";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   getGymsForUser as getMockGymsForUser,
+  joinGymByCode as joinMockGymByCode,
   getUserJoinDateForGym as getMockUserJoinDateForGym,
 } from "@/mock/mockDataService";
 import {
   getGymsForUser as getSupabaseGymsForUser,
+  joinGymByCode as joinSupabaseGymByCode,
   getUserJoinDateForGym as getSupabaseUserJoinDateForGym,
 } from "@/services/gymService";
 import { getAuthenticatedUserId } from "@/services/profileService";
@@ -29,60 +40,130 @@ function buildFallbackGymCards(): GymCard[] {
   }));
 }
 
+async function buildSupabaseGymCards(userId: string): Promise<GymCard[]> {
+  const gyms = await getSupabaseGymsForUser(userId);
+
+  return Promise.all(
+    gyms.map(async (gym) => ({
+      id: gym.id,
+      name: gym.name,
+      joinDate: await getSupabaseUserJoinDateForGym(userId, gym.id),
+    }))
+  );
+}
+
 export default function GymsScreen() {
   const [gymCards, setGymCards] = useState<GymCard[]>(() => buildFallbackGymCards());
   const [isLoadingGyms, setIsLoadingGyms] = useState(true);
   const [gymLoadError, setGymLoadError] = useState<string | null>(null);
+  const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
+  const [isJoinModalVisible, setIsJoinModalVisible] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinCodeError, setJoinCodeError] = useState<string | null>(null);
+  const [isJoiningGym, setIsJoiningGym] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
+  const closeJoinModal = () => {
+    if (isJoiningGym) {
+      return;
+    }
 
-    const loadGyms = async () => {
-      try {
-        const authenticatedUserId = await getAuthenticatedUserId();
+    setIsJoinModalVisible(false);
+    setJoinCode("");
+    setJoinCodeError(null);
+  };
 
-        if (!isMounted) {
-          return;
-        }
+  const openJoinModal = () => {
+    setJoinCode("");
+    setJoinCodeError(null);
+    setIsJoinModalVisible(true);
+  };
 
-        if (!authenticatedUserId) {
-          setGymLoadError("Using local gym data right now.");
-          return;
-        }
+  const resetJoinModal = () => {
+    setIsJoinModalVisible(false);
+    setJoinCode("");
+    setJoinCodeError(null);
+  };
 
-        const gyms = await getSupabaseGymsForUser(authenticatedUserId);
-        const cards = await Promise.all(
-          gyms.map(async (gym) => ({
-            id: gym.id,
-            name: gym.name,
-            joinDate: await getSupabaseUserJoinDateForGym(authenticatedUserId, gym.id),
-          }))
-        );
+  const loadGyms = async () => {
+    setIsLoadingGyms(true);
 
-        if (!isMounted) {
-          return;
-        }
+    try {
+      const nextAuthenticatedUserId = await getAuthenticatedUserId();
+      setAuthenticatedUserId(nextAuthenticatedUserId);
 
-        setGymCards(cards);
-        setGymLoadError(null);
-      } catch {
-        if (!isMounted) {
-          return;
-        }
-
+      if (!nextAuthenticatedUserId) {
+        setGymCards(buildFallbackGymCards());
         setGymLoadError("Using local gym data right now.");
-      } finally {
-        if (isMounted) {
-          setIsLoadingGyms(false);
+        return;
+      }
+
+      const cards = await buildSupabaseGymCards(nextAuthenticatedUserId);
+      setGymCards(cards);
+      setGymLoadError(null);
+    } catch {
+      setGymCards(buildFallbackGymCards());
+      setGymLoadError("Using local gym data right now.");
+    } finally {
+      setIsLoadingGyms(false);
+    }
+  };
+
+  const handleJoinGym = async () => {
+    const trimmedJoinCode = joinCode.trim();
+
+    if (!trimmedJoinCode) {
+      setJoinCodeError("Join code is required.");
+      return;
+    }
+
+    setIsJoiningGym(true);
+    setJoinCodeError(null);
+
+    try {
+      if (authenticatedUserId) {
+        const result = await joinSupabaseGymByCode(authenticatedUserId, trimmedJoinCode);
+
+        if (result.success) {
+          try {
+            joinMockGymByCode(CURRENT_USER_ID, trimmedJoinCode);
+          } catch {
+            // Best-effort local mirror only.
+          }
+
+          await loadGyms();
+          resetJoinModal();
+          return;
+        }
+
+        if (!result.shouldFallback) {
+          setJoinCodeError(result.error ?? "Could not join gym.");
+          return;
         }
       }
+
+      const fallbackResult = joinMockGymByCode(CURRENT_USER_ID, trimmedJoinCode);
+
+      if (!fallbackResult.success) {
+        setJoinCodeError(fallbackResult.error ?? "Could not join gym.");
+        setGymLoadError("Using local gym data right now.");
+        setGymCards(buildFallbackGymCards());
+        return;
+      }
+
+      setGymLoadError("Using local gym data right now.");
+      setGymCards(buildFallbackGymCards());
+      resetJoinModal();
+    } finally {
+      setIsJoiningGym(false);
+    }
+  };
+
+  useEffect(() => {
+    const hydrateGyms = async () => {
+      await loadGyms();
     };
 
-    void loadGyms();
-
-    return () => {
-      isMounted = false;
-    };
+    void hydrateGyms();
   }, []);
 
   return (
@@ -96,6 +177,10 @@ export default function GymsScreen() {
         </Pressable>
 
         <Text style={styles.title}>My Gyms</Text>
+
+        <Pressable style={styles.joinButton} onPress={openJoinModal}>
+          <Text style={styles.joinButtonText}>Join with Code</Text>
+        </Pressable>
 
         {isLoadingGyms ? (
           <View style={styles.statusBanner}>
@@ -137,6 +222,51 @@ export default function GymsScreen() {
           })
         )}
       </ScrollView>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isJoinModalVisible}
+        onRequestClose={closeJoinModal}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Join a gym</Text>
+            <Text style={styles.modalMessage}>
+              Enter the gym join code to add it to your account.
+            </Text>
+
+            <TextInput
+              style={styles.modalInput}
+              value={joinCode}
+              onChangeText={(value) => {
+                setJoinCode(value);
+                setJoinCodeError(null);
+              }}
+              placeholder="Enter join code"
+              placeholderTextColor="#6F6F6F"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              editable={!isJoiningGym}
+            />
+
+            {joinCodeError ? <Text style={styles.modalErrorText}>{joinCodeError}</Text> : null}
+
+            <View style={styles.modalButtonRow}>
+              <Pressable style={styles.modalSecondaryButton} onPress={closeJoinModal}>
+                <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable style={styles.modalPrimaryButton} onPress={handleJoinGym}>
+                {isJoiningGym ? (
+                  <ActivityIndicator size="small" color="#F4F4F4" />
+                ) : (
+                  <Text style={styles.modalPrimaryButtonText}>Join Gym</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -193,7 +323,20 @@ const styles = StyleSheet.create({
     color: "#F4F4F4",
     fontSize: 28,
     fontWeight: "600",
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  joinButton: {
+    minHeight: 48,
+    borderRadius: 18,
+    backgroundColor: "#232323",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  joinButtonText: {
+    color: "#F4F4F4",
+    fontSize: 15,
+    fontWeight: "600",
   },
   subtitle: {
     color: "#8B8B8B",
@@ -280,5 +423,72 @@ const styles = StyleSheet.create({
     color: "#8B8B8B",
     fontSize: 13,
     marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  modalCard: {
+    backgroundColor: "#161616",
+    borderRadius: 24,
+    padding: 20,
+  },
+  modalTitle: {
+    color: "#F4F4F4",
+    fontSize: 22,
+    fontWeight: "600",
+  },
+  modalMessage: {
+    color: "#A0A0A0",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  modalInput: {
+    minHeight: 50,
+    borderRadius: 16,
+    backgroundColor: "#202020",
+    color: "#F4F4F4",
+    paddingHorizontal: 16,
+    fontSize: 16,
+    marginTop: 18,
+  },
+  modalErrorText: {
+    color: "#F28B82",
+    fontSize: 13,
+    marginTop: 10,
+  },
+  modalButtonRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "#202020",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "#313131",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSecondaryButtonText: {
+    color: "#B0B0B0",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  modalPrimaryButtonText: {
+    color: "#F4F4F4",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

@@ -3,6 +3,24 @@ import type { Equipment } from "@/types/equipment";
 import type { Exercise } from "@/types/exercise";
 import type { Gym } from "@/types/gym";
 
+export type GymMembershipRecord = {
+  id: string;
+  userId: string;
+  gymId: string;
+  joinedAt: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JoinGymResult = {
+  success: boolean;
+  error?: string;
+  shouldFallback?: boolean;
+  gym?: Gym;
+  membership?: GymMembershipRecord;
+};
+
 type GymRow = {
   id: string;
   name: string;
@@ -105,6 +123,26 @@ function mapExerciseRow(row: ExerciseRow): Exercise {
   };
 }
 
+function mapUserGymMembershipRow(row: UserGymMembershipRow): GymMembershipRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    gymId: row.gym_id,
+    joinedAt: row.joined_at,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function buildUnexpectedErrorMessage(prefix: string, error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return `${prefix} ${error.message}`;
+  }
+
+  return prefix;
+}
+
 function orderByIdList<T extends { id: string }>(items: T[], orderedIds: string[]): T[] {
   const orderLookup = new Map(orderedIds.map((id, index) => [id, index]));
 
@@ -182,6 +220,88 @@ export async function getGymByCode(code: string): Promise<Gym | undefined> {
   }
 
   return data ? mapGymRow(data) : undefined;
+}
+
+export async function joinGymByCode(userId: string, code: string): Promise<JoinGymResult> {
+  const normalizedCode = normalizeCode(code);
+
+  if (!normalizedCode) {
+    return {
+      success: false,
+      error: "Join code is required.",
+    };
+  }
+
+  try {
+    const gym = await getGymByCode(normalizedCode);
+
+    if (!gym) {
+      return {
+        success: false,
+        error: "No gym matches that join code.",
+      };
+    }
+
+    if (!gym.isActive) {
+      return {
+        success: false,
+        error: "That gym is not currently accepting members.",
+      };
+    }
+
+    const existingMemberships = await getActiveMembershipsForUser(userId);
+    const existingMembership = existingMemberships.find(
+      (membership) => membership.gym_id === gym.id
+    );
+
+    if (existingMembership) {
+      return {
+        success: false,
+        error: "User is already an active member of that gym.",
+        membership: mapUserGymMembershipRow(existingMembership),
+        gym,
+      };
+    }
+
+    const joinedAt = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("user_gym_memberships")
+      .insert({
+        user_id: userId,
+        gym_id: gym.id,
+        joined_at: joinedAt,
+        is_active: true,
+      })
+      .select("id, user_id, gym_id, joined_at, is_active, created_at, updated_at")
+      .single<UserGymMembershipRow>();
+
+    if (error) {
+      if (error.code === "23505") {
+        return {
+          success: false,
+          error: "User is already an active member of that gym.",
+        };
+      }
+
+      return {
+        success: false,
+        error: error.message,
+        shouldFallback: true,
+      };
+    }
+
+    return {
+      success: true,
+      gym,
+      membership: mapUserGymMembershipRow(data),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not join gym.", error),
+      shouldFallback: true,
+    };
+  }
 }
 
 export async function getAvailableEquipmentIdsForGym(gymId: string): Promise<string[]> {
