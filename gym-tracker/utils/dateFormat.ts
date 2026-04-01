@@ -1,9 +1,11 @@
 export const getCurrentDate = () => {
  const date = new Date();
- const formattedDate = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`; // Format: YYYY-MM-DD
- return formattedDate;
+ const year = date.getFullYear();
+ const month = `${date.getMonth() + 1}`.padStart(2, "0");
+ const day = `${date.getDate()}`.padStart(2, "0");
+
+ return `${year}-${month}-${day}`;
 };
-console.log(getCurrentDate()); // Example Output: "2023-10-10"
 
 export const formatDate = (dateString: string) => {
  const date = new Date(dateString);

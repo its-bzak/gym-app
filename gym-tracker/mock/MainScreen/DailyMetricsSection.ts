@@ -1,26 +1,11 @@
 import { MacroBarProps } from "@/utils/calculateMacroBar";
 import { getCurrentDate } from "@/utils/dateFormat";
-
-export type DatedMacroMetrics = MacroBarProps & {
-    date: string;
-};
-
-export type DailyExerciseMetrics = {
-    date: string;
-    volume: number;
-    durationMins: number;
-    workoutType: string;
-};
-
-export type WeightEntry = {
-    date: string;
-    weightKg: number;
-};
-
-export type WeightGoal = {
-    startWeightKg: number;
-    targetWeightKg: number;
-};
+import type {
+    DailyExerciseMetrics,
+    DatedMacroMetrics,
+    WeightEntry,
+    WeightGoal,
+} from "@/types/dashboard";
 
 type WeightTrendSectionProps = {
     entries: WeightEntry[];
@@ -147,6 +132,13 @@ export const mockGoal: WeightGoal = {
     targetWeightKg: 67,
 };
 
+export const mockNutritionGoal = {
+    proteinGoal: 200,
+    fatGoal: 55,
+    carbsGoal: 230,
+    calorieGoal: 2500,
+};
+
 
 export const DEFAULT_METRICS_DATE = getCurrentDate();
 
@@ -184,6 +176,78 @@ export function getDailyExerciseMetrics(date: Date | string) {
     return matchedMetrics
         ? stripDateFromExerciseMetrics(matchedMetrics)
         : defaultDailyExerciseMetrics;
+}
+
+export function upsertDailyMacroMetrics(date: Date | string, metrics: MacroBarProps): MacroBarProps {
+    const dateKey = getDateKey(date);
+    const existingEntry = dailyMacroMetricsByDate.find((entry) => entry.date === dateKey);
+
+    if (existingEntry) {
+        existingEntry.protein = metrics.protein;
+        existingEntry.proteinGoal = metrics.proteinGoal;
+        existingEntry.fat = metrics.fat;
+        existingEntry.fatGoal = metrics.fatGoal;
+        existingEntry.carbs = metrics.carbs;
+        existingEntry.carbsGoal = metrics.carbsGoal;
+        existingEntry.calorieGoal = metrics.calorieGoal;
+
+        return stripDateFromMacroMetrics(existingEntry);
+    }
+
+    const newEntry: DatedMacroMetrics = {
+        date: dateKey,
+        ...metrics,
+    };
+
+    dailyMacroMetricsByDate.push(newEntry);
+
+    return stripDateFromMacroMetrics(newEntry);
+}
+
+export function addFoodLogEntry(
+    date: Date | string,
+    entry: Pick<MacroBarProps, "protein" | "fat" | "carbs">
+): MacroBarProps {
+    const dateKey = getDateKey(date);
+    const existingEntry = dailyMacroMetricsByDate.find((item) => item.date === dateKey);
+
+    if (existingEntry) {
+        existingEntry.protein += entry.protein;
+        existingEntry.fat += entry.fat;
+        existingEntry.carbs += entry.carbs;
+
+        return stripDateFromMacroMetrics(existingEntry);
+    }
+
+    const newEntry: DatedMacroMetrics = {
+        date: dateKey,
+        protein: entry.protein,
+        fat: entry.fat,
+        carbs: entry.carbs,
+        ...mockNutritionGoal,
+    };
+
+    dailyMacroMetricsByDate.push(newEntry);
+
+    return stripDateFromMacroMetrics(newEntry);
+}
+
+export function upsertWeightEntry(date: Date | string, weightKg: number): WeightEntry {
+    const dateKey = getDateKey(date);
+    const existingEntry = mockWeightEntries.find((entry) => entry.date === dateKey);
+
+    if (existingEntry) {
+        existingEntry.weightKg = weightKg;
+    } else {
+        mockWeightEntries.push({
+            date: dateKey,
+            weightKg,
+        });
+    }
+
+    mockWeightEntries.sort((left, right) => left.date.localeCompare(right.date));
+
+    return mockWeightEntries.find((entry) => entry.date === dateKey) as WeightEntry;
 }
 
 function stripDateFromMacroMetrics({ date, ...metrics }: DatedMacroMetrics): MacroBarProps {

@@ -1,4 +1,4 @@
-import { WeightEntry, WeightGoal } from "@/mock/MainScreen/DailyMetricsSection";
+import type { WeightEntry, WeightGoal } from "@/types/dashboard";
 
 export function getLatestWeight(entries: WeightEntry[]) {
     if (!entries.length) return null;

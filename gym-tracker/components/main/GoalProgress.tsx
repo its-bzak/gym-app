@@ -1,17 +1,27 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { WeightEntry, WeightGoal } from "@/mock/MainScreen/DailyMetricsSection";
+import type { WeightEntry, WeightGoal } from "@/types/dashboard";
 import { getGoalProgress } from "@/utils/weightProgress";
 
 type GoalProgressSectionProps = {
     entries: WeightEntry[];
-    goal: WeightGoal;
+    goal?: WeightGoal | null;
 };
 
 export default function GoalProgressSection({
     entries,
     goal,
 }: GoalProgressSectionProps) {
+    if (!goal) {
+        return (
+            <View style={styles.container}>
+                <Text style={styles.title}>Goal Progress</Text>
+                <View style={styles.progressTrack} />
+                <Text style={styles.subText}>No active goal yet</Text>
+            </View>
+        );
+    }
+
     const { currentWeight, progressPercent, remainingKg, isComplete } =
         getGoalProgress(entries, goal);
 

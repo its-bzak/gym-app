@@ -1,6 +1,15 @@
 import { StyleSheet, Text, View } from "react-native";
 import { MacroBarProps, calculateMacroBar } from "@/utils/calculateMacroBar";
-import { defaultDailyMacroMetrics } from "@/mock/MainScreen/DailyMetricsSection";
+
+const defaultDailyMacroMetrics: MacroBarProps = {
+    protein: 0,
+    proteinGoal: 0,
+    fat: 0,
+    fatGoal: 0,
+    carbs: 0,
+    carbsGoal: 0,
+    calorieGoal: 0,
+};
 
 export default function DailyMacroMetricsSection(props: MacroBarProps = defaultDailyMacroMetrics) {
     const {

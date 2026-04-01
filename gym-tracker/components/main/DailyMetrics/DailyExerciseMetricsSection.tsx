@@ -1,6 +1,12 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
-import { defaultDailyExerciseMetrics, type DailyExerciseMetrics } from "@/mock/MainScreen/DailyMetricsSection";
+import type { DailyExerciseMetrics } from "@/types/dashboard";
+
+const defaultDailyExerciseMetrics: Omit<DailyExerciseMetrics, "date"> = {
+    volume: 0,
+    durationMins: 0,
+    workoutType: "",
+};
 
 function formatVolume(volumeKg: number) {
     if (volumeKg < 1000) {

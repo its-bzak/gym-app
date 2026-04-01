@@ -27,6 +27,17 @@ export function calculateMacroBar({
         ? totalCaloriesConsumed
         : calorieGoal;
 
+    if (widthBase <= 0) {
+        return {
+            proteinPercent: 0,
+            fatPercent: 0,
+            carbsPercent: 0,
+            remainingPercent: 100,
+            totalCaloriesConsumed,
+            isOverflow: false,
+        };
+    }
+
     const proteinPercent = (proteinCalories / widthBase) * 100;
     const fatPercent = (fatCalories / widthBase) * 100;
     const carbsPercent = (carbCalories / widthBase) * 100;

@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { WeightEntry } from "@/mock/MainScreen/DailyMetricsSection";
+import type { WeightEntry } from "@/types/dashboard";
 import { getWeightTrend } from "@/utils/weightProgress";
 
 type WeightTrendSectionProps = {

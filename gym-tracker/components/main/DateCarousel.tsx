@@ -2,7 +2,7 @@ import { Pressable, Text, View } from "react-native";
 import { useState } from "react";
 import { StyleSheet } from "react-native"; 
 import Ionicons from "@expo/vector-icons/build/Ionicons";
-import { DEFAULT_METRICS_DATE } from "@/mock/MainScreen/DailyMetricsSection";
+import { getCurrentDate } from "@/utils/dateFormat";
 
 type DateCarouselProps = {
     selectedDate?: Date;
@@ -12,7 +12,7 @@ type DateCarouselProps = {
 export default function DateCarousel({ selectedDate, onChangeDate }: DateCarouselProps) {
 
     const [internalSelectedDate, setInternalSelectedDate] = useState(
-        () => new Date(DEFAULT_METRICS_DATE)
+        () => new Date(getCurrentDate())
     );
 
     const activeDate = selectedDate ?? internalSelectedDate;
