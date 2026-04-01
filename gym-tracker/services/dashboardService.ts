@@ -541,6 +541,101 @@ export async function appendFoodLogEntry(
   }
 }
 
+export async function updateFoodLogEntry(
+  userId: string,
+  entryId: string,
+  date: Date | string,
+  entry: FoodLogInput
+): Promise<DashboardWriteResult<FoodLogDaySnapshot>> {
+  const values = [entry.energyKcal ?? 0, entry.protein, entry.fat, entry.carbs, entry.alcoholGrams ?? 0];
+  const hasNegativeValue = values.some((value) => !Number.isFinite(value) || value < 0);
+  const hasAnyPositiveValue = values.some((value) => value > 0);
+
+  if (hasNegativeValue) {
+    return {
+      success: false,
+      error: "Food values cannot be negative.",
+    };
+  }
+
+  if (!hasAnyPositiveValue) {
+    return {
+      success: false,
+      error: "Enter at least one food value greater than zero.",
+    };
+  }
+
+  try {
+    const { error } = await supabase
+      .from("food_log_entries")
+      .update({
+        entry_date: getDateKey(date),
+        logged_at: entry.loggedAt ?? new Date().toISOString(),
+        meal_slot: entry.mealSlot ?? "custom",
+        name: entry.name?.trim() || null,
+        energy_kcal: entry.energyKcal ?? null,
+        protein_grams: entry.protein,
+        fat_grams: entry.fat,
+        carbs_grams: entry.carbs,
+        alcohol_grams: entry.alcoholGrams ?? 0,
+      })
+      .eq("id", entryId)
+      .eq("user_id", userId);
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+        shouldFallback: true,
+      };
+    }
+
+    return {
+      success: true,
+      data: await getFoodLogDay(userId, date),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not update food entry.", error),
+      shouldFallback: true,
+    };
+  }
+}
+
+export async function deleteFoodLogEntry(
+  userId: string,
+  entryId: string,
+  date: Date | string
+): Promise<DashboardWriteResult<FoodLogDaySnapshot>> {
+  try {
+    const { error } = await supabase
+      .from("food_log_entries")
+      .delete()
+      .eq("id", entryId)
+      .eq("user_id", userId);
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+        shouldFallback: true,
+      };
+    }
+
+    return {
+      success: true,
+      data: await getFoodLogDay(userId, date),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not delete food entry.", error),
+      shouldFallback: true,
+    };
+  }
+}
+
 export async function upsertWeightEntry(
   userId: string,
   date: Date | string,

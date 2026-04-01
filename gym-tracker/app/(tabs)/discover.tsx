@@ -18,14 +18,18 @@ import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle } from "react-native-svg";
 import {
     appendFoodLogEntry,
+    deleteFoodLogEntry,
     getDateKey,
     getFoodLogDays,
     type FoodLogInput,
+    updateFoodLogEntry,
 } from "@/services/dashboardService";
 import { getAuthenticatedUserId } from "@/services/profileService";
 import {
     appendFoodLogEntryDetailed as appendMockFoodLogEntryDetailed,
+    deleteFoodLogEntryDetailed as deleteMockFoodLogEntryDetailed,
     getFoodLogDay as getMockFoodLogDay,
+    updateFoodLogEntryDetailed as updateMockFoodLogEntryDetailed,
 } from "@/mock/MainScreen/DailyMetricsSection";
 import type { FoodLogDaySummary, FoodLogEntry, FoodLogMealSlot } from "@/types/dashboard";
 import { getCurrentDate } from "@/utils/dateFormat";
@@ -34,6 +38,14 @@ type TimeSlot = {
     hour: number;
     label: string;
 };
+
+type TimelineEntryLayout = {
+    entry: FoodLogEntry;
+    top: number;
+    timeLabel: string;
+};
+
+type QuickAddModalMode = "create" | "edit" | "time" | null;
 
 type DateStripSummaryMap = Record<string, FoodLogDaySummary>;
 
@@ -65,6 +77,14 @@ const TIME_SLOTS: TimeSlot[] = Array.from({ length: 24 }, (_, hour) => ({
 const MAX_DATE_CIRCLE_SIZE = 58;
 const MIN_DATE_CIRCLE_SIZE = 38;
 const DATE_CIRCLE_STROKE = 4;
+const TIMELINE_HOUR_HEIGHT = 48;
+const TIMELINE_LEFT_GUTTER = 48;
+const TIMELINE_ENTRY_HEIGHT = 28;
+const TIMELINE_ENTRY_GAP = 8;
+
+function formatNowTimeInput() {
+    return formatEntryTimeLabel(new Date().toISOString());
+}
 
 function buildDateStrip(selectedDate: Date) {
     const startOfWeek = new Date(selectedDate);
@@ -103,6 +123,24 @@ function formatEntryMeta(entry: FoodLogEntry) {
     return `${Math.round(entry.energyKcal)} kcal  ${entry.protein}P  ${entry.fat}F  ${entry.carbs}C`;
 }
 
+function formatCompactEntryMeta(entry: Pick<FoodLogEntry, "protein" | "fat" | "carbs" | "energyKcal">) {
+    return `P ${entry.protein}  F ${entry.fat}  C ${entry.carbs}  ${Math.round(entry.energyKcal)}kcal`;
+}
+
+function formatEntryTimeLabel(loggedAt: string) {
+    return new Date(loggedAt)
+        .toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+        })
+        .replace(" ", "")
+        .toLowerCase();
+}
+
+function formatAxisHourLabel(hour: number) {
+    return formatTimeSlotLabel(hour).replace(" ", "").toLowerCase();
+}
+
 function getSlotLabelForEntry(entry: FoodLogEntry) {
     const hour = new Date(entry.loggedAt).getHours();
     const matchingSlot = TIME_SLOTS.find((slot) => slot.hour === hour);
@@ -120,6 +158,51 @@ function getSlotLabelForEntry(entry: FoodLogEntry) {
 function buildLoggedAtForSlot(date: Date, hour: number): string {
     const nextDate = new Date(date);
     nextDate.setHours(hour, 0, 0, 0);
+
+    return nextDate.toISOString();
+}
+
+function buildLoggedAtForInput(date: Date, value: string): string | null {
+    const normalizedValue = value.trim().toLowerCase();
+
+    if (!normalizedValue) {
+        return null;
+    }
+
+    const twelveHourMatch = normalizedValue.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+    const twentyFourHourMatch = normalizedValue.match(/^(\d{1,2}):(\d{2})$/);
+    let hours: number | null = null;
+    let minutes = 0;
+
+    if (twelveHourMatch) {
+        const parsedHours = Number(twelveHourMatch[1]);
+        minutes = Number(twelveHourMatch[2] ?? "0");
+        const period = twelveHourMatch[3];
+
+        if (parsedHours < 1 || parsedHours > 12 || minutes < 0 || minutes > 59) {
+            return null;
+        }
+
+        hours = parsedHours % 12;
+
+        if (period === "pm") {
+            hours += 12;
+        }
+    } else if (twentyFourHourMatch) {
+        hours = Number(twentyFourHourMatch[1]);
+        minutes = Number(twentyFourHourMatch[2]);
+
+        if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+            return null;
+        }
+    }
+
+    if (hours === null) {
+        return null;
+    }
+
+    const nextDate = new Date(date);
+    nextDate.setHours(hours, minutes, 0, 0);
 
     return nextDate.toISOString();
 }
@@ -206,12 +289,14 @@ export default function DiscoverScreen() {
     const [dateSummariesByKey, setDateSummariesByKey] = useState<DateStripSummaryMap>({});
     const [isLoadingFoodLog, setIsLoadingFoodLog] = useState(true);
     const [foodLogError, setFoodLogError] = useState<string | null>(null);
-    const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlot | null>(null);
-    const [isQuickAddVisible, setIsQuickAddVisible] = useState(false);
+    const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+    const [quickAddModalMode, setQuickAddModalMode] = useState<QuickAddModalMode>(null);
     const [isSavingEntry, setIsSavingEntry] = useState(false);
     const [quickAddError, setQuickAddError] = useState<string | null>(null);
     const [quickAddForm, setQuickAddForm] = useState({
         name: "",
+        time: formatNowTimeInput(),
         energyKcal: "",
         protein: "",
         fat: "",
@@ -225,6 +310,7 @@ export default function DiscoverScreen() {
 
         return Math.max(MIN_DATE_CIRCLE_SIZE, Math.min(MAX_DATE_CIRCLE_SIZE, nextSize));
     }, [windowWidth]);
+    const timelineHeight = TIME_SLOTS.length * TIMELINE_HOUR_HEIGHT;
 
     const applyFoodLogSnapshots = (
         date: Date,
@@ -285,30 +371,79 @@ export default function DiscoverScreen() {
         router.setParams({ quickAdd: undefined, date: undefined, hour: undefined });
     }, [quickAddParams.date, quickAddParams.hour, quickAddParams.quickAdd, selectedDate]);
 
-    const groupedEntries = useMemo(() => {
-        const groups = new Map<string, FoodLogEntry[]>();
+    useEffect(() => {
+        if (selectedEntryId && !entries.some((entry) => entry.id === selectedEntryId)) {
+            setSelectedEntryId(null);
+        }
+    }, [entries, selectedEntryId]);
 
-        entries.forEach((entry) => {
-            const label = getSlotLabelForEntry(entry);
-            const existing = groups.get(label) ?? [];
-            existing.push(entry);
-            groups.set(label, existing);
+    const selectedEntry = useMemo(
+        () => entries.find((entry) => entry.id === selectedEntryId) ?? null,
+        [entries, selectedEntryId]
+    );
+    const editingEntry = useMemo(
+        () => entries.find((entry) => entry.id === editingEntryId) ?? null,
+        [editingEntryId, entries]
+    );
+
+    const timelineEntries = useMemo<TimelineEntryLayout[]>(() => {
+        const sortedEntries = [...entries].sort((left, right) => left.loggedAt.localeCompare(right.loggedAt));
+        let lastTop = -TIMELINE_ENTRY_HEIGHT;
+
+        return sortedEntries.map((entry) => {
+            const loggedAt = new Date(entry.loggedAt);
+            const rawTop = ((loggedAt.getHours() * 60 + loggedAt.getMinutes()) / 60) * TIMELINE_HOUR_HEIGHT;
+            const nextTop = Math.max(rawTop, lastTop + TIMELINE_ENTRY_HEIGHT + TIMELINE_ENTRY_GAP);
+            lastTop = nextTop;
+
+            return {
+                entry,
+                top: nextTop,
+                timeLabel: formatEntryTimeLabel(entry.loggedAt),
+            };
         });
-
-        return groups;
     }, [entries]);
 
     const openQuickAdd = (timeSlot: TimeSlot) => {
-        setSelectedTimeSlot(timeSlot);
+        const nextTime = formatNowTimeInput();
         setQuickAddForm({
             name: "",
+            time: nextTime,
             energyKcal: "",
             protein: "",
             fat: "",
             carbs: "",
         });
+        setEditingEntryId(null);
+        setSelectedEntryId(null);
         setQuickAddError(null);
-        setIsQuickAddVisible(true);
+        setQuickAddModalMode("create");
+    };
+
+    const openEditEntry = (entry: FoodLogEntry) => {
+        setQuickAddForm({
+            name: entry.name,
+            time: formatEntryTimeLabel(entry.loggedAt),
+            energyKcal: String(Math.round(entry.energyKcal)),
+            protein: String(entry.protein),
+            fat: String(entry.fat),
+            carbs: String(entry.carbs),
+        });
+        setEditingEntryId(entry.id);
+        setSelectedEntryId(null);
+        setQuickAddModalMode("edit");
+        setQuickAddError(null);
+    };
+
+    const openTimeEntry = (entry: FoodLogEntry) => {
+        setQuickAddForm((current) => ({
+            ...current,
+            time: formatEntryTimeLabel(entry.loggedAt),
+        }));
+        setEditingEntryId(entry.id);
+        setSelectedEntryId(null);
+        setQuickAddModalMode("time");
+        setQuickAddError(null);
     };
 
     const closeQuickAdd = () => {
@@ -316,23 +451,37 @@ export default function DiscoverScreen() {
             return;
         }
 
-        setIsQuickAddVisible(false);
+        setQuickAddModalMode(null);
+        setEditingEntryId(null);
         setQuickAddError(null);
     };
 
     const handleSaveQuickAdd = async () => {
-        if (!selectedTimeSlot) {
+        const loggedAt = buildLoggedAtForInput(selectedDate, quickAddForm.time);
+
+        if (!loggedAt) {
+            setQuickAddError("Enter a valid time like 7:34pm.");
+            return;
+        }
+
+        const loggedAtDate = new Date(loggedAt);
+
+        if ((quickAddModalMode === "edit" || quickAddModalMode === "time") && !editingEntry) {
+            setQuickAddError("Could not find the selected food entry.");
             return;
         }
 
         const entryInput: FoodLogInput = {
-            name: quickAddForm.name,
-            energyKcal: quickAddForm.energyKcal ? Number(quickAddForm.energyKcal) : null,
-            protein: Number(quickAddForm.protein || 0),
-            fat: Number(quickAddForm.fat || 0),
-            carbs: Number(quickAddForm.carbs || 0),
-            loggedAt: buildLoggedAtForSlot(selectedDate, selectedTimeSlot.hour),
-            mealSlot: inferMealSlot(selectedTimeSlot.hour),
+            name: quickAddModalMode === "time" ? editingEntry?.name : quickAddForm.name,
+            energyKcal:
+                quickAddModalMode === "time"
+                    ? editingEntry?.energyKcal ?? null
+                    : quickAddForm.energyKcal ? Number(quickAddForm.energyKcal) : null,
+            protein: quickAddModalMode === "time" ? editingEntry?.protein ?? 0 : Number(quickAddForm.protein || 0),
+            fat: quickAddModalMode === "time" ? editingEntry?.fat ?? 0 : Number(quickAddForm.fat || 0),
+            carbs: quickAddModalMode === "time" ? editingEntry?.carbs ?? 0 : Number(quickAddForm.carbs || 0),
+            loggedAt,
+            mealSlot: inferMealSlot(loggedAtDate.getHours()),
         };
 
         const hasInvalidValue = [
@@ -362,6 +511,115 @@ export default function DiscoverScreen() {
         setQuickAddError(null);
 
         try {
+            if (editingEntryId) {
+                if (authenticatedUserId) {
+                    const result = await updateFoodLogEntry(authenticatedUserId, editingEntryId, selectedDate, entryInput);
+
+                    if (result.success) {
+                        try {
+                            updateMockFoodLogEntryDetailed(editingEntryId, selectedDate, {
+                                name: entryInput.name,
+                                loggedAt: entryInput.loggedAt,
+                                energyKcal: entryInput.energyKcal ?? undefined,
+                                protein: entryInput.protein,
+                                fat: entryInput.fat,
+                                carbs: entryInput.carbs,
+                                mealSlot: entryInput.mealSlot,
+                            });
+                        } catch {
+                            // Best-effort local mirror only.
+                        }
+
+                        await loadFoodLog(selectedDate);
+                        setQuickAddModalMode(null);
+                        return;
+                    }
+
+                    if (!result.shouldFallback) {
+                        setQuickAddError(result.error ?? "Could not update food entry.");
+                        return;
+                    }
+                }
+
+                updateMockFoodLogEntryDetailed(editingEntryId, selectedDate, {
+                    name: entryInput.name,
+                    loggedAt: entryInput.loggedAt,
+                    energyKcal: entryInput.energyKcal ?? undefined,
+                    protein: entryInput.protein,
+                    fat: entryInput.fat,
+                    carbs: entryInput.carbs,
+                    mealSlot: entryInput.mealSlot,
+                });
+            } else {
+                if (authenticatedUserId) {
+                    const result = await appendFoodLogEntry(authenticatedUserId, selectedDate, entryInput);
+
+                    if (result.success) {
+                        try {
+                            appendMockFoodLogEntryDetailed(selectedDate, {
+                                name: entryInput.name,
+                                loggedAt: entryInput.loggedAt,
+                                energyKcal: entryInput.energyKcal ?? undefined,
+                                protein: entryInput.protein,
+                                fat: entryInput.fat,
+                                carbs: entryInput.carbs,
+                                mealSlot: entryInput.mealSlot,
+                            });
+                        } catch {
+                            // Best-effort local mirror only.
+                        }
+
+                        await loadFoodLog(selectedDate);
+                        setQuickAddModalMode(null);
+                        return;
+                    }
+
+                    if (!result.shouldFallback) {
+                        setQuickAddError(result.error ?? "Could not save food entry.");
+                        return;
+                    }
+                }
+
+                appendMockFoodLogEntryDetailed(selectedDate, {
+                    name: entryInput.name,
+                    loggedAt: entryInput.loggedAt,
+                    energyKcal: entryInput.energyKcal ?? undefined,
+                    protein: entryInput.protein,
+                    fat: entryInput.fat,
+                    carbs: entryInput.carbs,
+                    mealSlot: entryInput.mealSlot,
+                });
+            }
+
+            await loadFoodLog(selectedDate);
+            setQuickAddModalMode(null);
+        } finally {
+            setIsSavingEntry(false);
+        }
+    };
+
+    const handleCopyEntry = async () => {
+        if (!selectedEntry) {
+            return;
+        }
+
+        setSelectedEntryId(null);
+
+        const entryInput: FoodLogInput = {
+            name: selectedEntry.name,
+            loggedAt: selectedEntry.loggedAt,
+            mealSlot: selectedEntry.mealSlot,
+            energyKcal: selectedEntry.energyKcal,
+            protein: selectedEntry.protein,
+            fat: selectedEntry.fat,
+            carbs: selectedEntry.carbs,
+            alcoholGrams: selectedEntry.alcoholGrams,
+        };
+
+        setIsSavingEntry(true);
+        setQuickAddError(null);
+
+        try {
             if (authenticatedUserId) {
                 const result = await appendFoodLogEntry(authenticatedUserId, selectedDate, entryInput);
 
@@ -369,6 +627,7 @@ export default function DiscoverScreen() {
                     try {
                         appendMockFoodLogEntryDetailed(selectedDate, {
                             name: entryInput.name,
+                            loggedAt: entryInput.loggedAt,
                             energyKcal: entryInput.energyKcal ?? undefined,
                             protein: entryInput.protein,
                             fat: entryInput.fat,
@@ -380,18 +639,18 @@ export default function DiscoverScreen() {
                     }
 
                     await loadFoodLog(selectedDate);
-                    setIsQuickAddVisible(false);
                     return;
                 }
 
                 if (!result.shouldFallback) {
-                    setQuickAddError(result.error ?? "Could not save food entry.");
+                    setQuickAddError(result.error ?? "Could not copy food entry.");
                     return;
                 }
             }
 
             appendMockFoodLogEntryDetailed(selectedDate, {
                 name: entryInput.name,
+                loggedAt: entryInput.loggedAt,
                 energyKcal: entryInput.energyKcal ?? undefined,
                 protein: entryInput.protein,
                 fat: entryInput.fat,
@@ -399,7 +658,46 @@ export default function DiscoverScreen() {
                 mealSlot: entryInput.mealSlot,
             });
             await loadFoodLog(selectedDate);
-            setIsQuickAddVisible(false);
+        } finally {
+            setIsSavingEntry(false);
+        }
+    };
+
+    const handleDeleteEntry = async () => {
+        if (!selectedEntry) {
+            return;
+        }
+
+        setSelectedEntryId(null);
+
+        setIsSavingEntry(true);
+        setQuickAddError(null);
+
+        try {
+            if (authenticatedUserId) {
+                const result = await deleteFoodLogEntry(authenticatedUserId, selectedEntry.id, selectedDate);
+
+                if (result.success) {
+                    try {
+                        deleteMockFoodLogEntryDetailed(selectedEntry.id);
+                    } catch {
+                        // Best-effort local mirror only.
+                    }
+
+                    setSelectedEntryId(null);
+                    await loadFoodLog(selectedDate);
+                    return;
+                }
+
+                if (!result.shouldFallback) {
+                    setQuickAddError(result.error ?? "Could not delete food entry.");
+                    return;
+                }
+            }
+
+            deleteMockFoodLogEntryDetailed(selectedEntry.id);
+            setSelectedEntryId(null);
+            await loadFoodLog(selectedDate);
         } finally {
             setIsSavingEntry(false);
         }
@@ -532,134 +830,189 @@ export default function DiscoverScreen() {
                     style={styles.timeline}
                     contentContainerStyle={styles.timelineContent}
                     showsVerticalScrollIndicator={false}>
-                    {TIME_SLOTS.map((slot) => {
-                        const slotEntries = groupedEntries.get(slot.label) ?? [];
+                    <View style={[styles.timelineCanvas, { height: timelineHeight }]}> 
+                        {TIME_SLOTS.map((slot) => (
+                            <View
+                                key={slot.label}
+                                style={[styles.timelineHourRow, { top: slot.hour * TIMELINE_HOUR_HEIGHT }]}>
+                                <Text style={styles.timeSlotLabel}>{formatAxisHourLabel(slot.hour)}</Text>
+                                <Pressable style={styles.timelineHourTapArea} onPress={() => openQuickAdd(slot)}>
+                                    <View style={styles.timelineHourRule} />
+                                </Pressable>
+                            </View>
+                        ))}
 
-                        return (
-                            <View key={slot.label} style={styles.timelineRow}>
-                                <View style={styles.timelineLeftColumn}>
-                                    <Text style={styles.timeSlotLabel}>{slot.label}</Text>
-                                    <Pressable style={styles.addSlotButton} onPress={() => openQuickAdd(slot)}>
-                                        <Ionicons name="add" size={18} color="#F4F4F4" />
+                        {timelineEntries.length === 0 ? (
+                            <View style={styles.timelineEmptyState}>
+                                <Text style={styles.emptySlotText}>No foods logged for this day yet.</Text>
+                            </View>
+                        ) : null}
+
+                        {timelineEntries.map(({ entry, top, timeLabel }) => {
+                            const isSelected = entry.id === selectedEntryId;
+
+                            return (
+                                <View key={entry.id} style={[styles.timelineEntryRow, { top }]}> 
+                                    <Text style={styles.entryTimeLabel}>{timeLabel}</Text>
+                                    <Pressable
+                                        style={[styles.timelineEntryCard, isSelected && styles.timelineEntryCardSelected]}
+                                        onPress={() => {
+                                            setSelectedEntryId((current) => (current === entry.id ? null : entry.id));
+                                            setQuickAddModalMode(null);
+                                            setEditingEntryId(null);
+                                            setQuickAddError(null);
+                                        }}>
+                                        <Text style={styles.timelineEntryName} numberOfLines={1}>
+                                            {entry.name}
+                                        </Text>
+                                        <Text style={styles.timelineEntryMeta} numberOfLines={1}>
+                                            {formatCompactEntryMeta(entry)}
+                                        </Text>
                                     </Pressable>
                                 </View>
-
-                                <View style={styles.timelineRightColumn}>
-                                    {slotEntries.length === 0 ? (
-                                        <View style={styles.emptySlotCard}>
-                                            <Text style={styles.emptySlotText}>No foods logged</Text>
-                                        </View>
-                                    ) : (
-                                        slotEntries.map((entry) => (
-                                            <View key={entry.id} style={styles.entryCard}>
-                                                <View style={styles.entryHeaderRow}>
-                                                    <Text style={styles.entryName}>{entry.name}</Text>
-                                                    <Text style={styles.entryCalories}>{Math.round(entry.energyKcal)} kcal</Text>
-                                                </View>
-                                                <Text style={styles.entryMeta}>{formatEntryMeta(entry)}</Text>
-                                            </View>
-                                        ))
-                                    )}
-                                </View>
-                            </View>
-                        );
-                    })}
+                            );
+                        })}
+                    </View>
                 </ScrollView>
 
                 <View style={styles.bottomActionBar}>
-                    <Pressable style={styles.searchPlaceholder}>
-                        <Ionicons name="search" size={20} color="#8C8C8C" />
-                        <Text style={styles.searchPlaceholderText}>Search for a food</Text>
-                    </Pressable>
+                    {selectedEntry && quickAddModalMode === null ? (
+                        <>
+                            <Pressable style={styles.actionButton} onPress={() => openTimeEntry(selectedEntry)}>
+                                <Text style={styles.actionButtonText}>Time</Text>
+                            </Pressable>
+                            <Pressable style={styles.actionButton} onPress={() => openEditEntry(selectedEntry)}>
+                                <Text style={styles.actionButtonText}>Edit</Text>
+                            </Pressable>
+                            <Pressable style={styles.actionButton} onPress={handleCopyEntry}>
+                                <Text style={styles.actionButtonText}>Copy</Text>
+                            </Pressable>
+                            <Pressable style={styles.actionButton} onPress={handleDeleteEntry}>
+                                <Text style={styles.actionButtonText}>Delete</Text>
+                            </Pressable>
+                        </>
+                    ) : (
+                        <>
+                            <Pressable style={styles.searchPlaceholder}>
+                                <Ionicons name="search" size={20} color="#8C8C8C" />
+                                <Text style={styles.searchPlaceholderText}>Search for a food</Text>
+                            </Pressable>
 
-                    <Pressable style={styles.quickAddButton} onPress={() => openQuickAdd(TIME_SLOTS[2])}>
-                        <Text style={styles.quickAddButtonText}>Quick Add</Text>
-                    </Pressable>
+                            <Pressable style={styles.quickAddButton} onPress={() => openQuickAdd(TIME_SLOTS[DEFAULT_QUICK_ADD_SLOT_INDEX])}>
+                                <Text style={styles.quickAddButtonText}>Quick Add</Text>
+                            </Pressable>
+                        </>
+                    )}
                 </View>
             </View>
 
             <Modal
                 animationType="slide"
                 transparent
-                visible={isQuickAddVisible}
+                visible={quickAddModalMode !== null}
                 onRequestClose={closeQuickAdd}>
-                    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
                     <View style={styles.modalOverlay}>
                         <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
-                        <View style={styles.modalSheet}>
-                            <View style={styles.modalHandle} />
-                            <Text style={styles.modalTitle}>Quick Add Food</Text>
-                            <Text style={styles.modalSubtitle}>
-                                {selectedTimeSlot ? `Log to ${selectedTimeSlot.label}` : "Add a new food entry"}
-                            </Text>
+                            <View style={styles.modalSheet}>
+                                <View style={styles.modalHandle} />
+                                <Text style={styles.modalTitle}>
+                                    {quickAddModalMode === "create"
+                                        ? "Quick Add Food"
+                                        : quickAddModalMode === "time"
+                                            ? "Update Time"
+                                            : "Edit Food Entry"}
+                                </Text>
+                                <Text style={styles.modalSubtitle}>
+                                    {quickAddModalMode === "time"
+                                        ? "Adjust only the time for this food entry."
+                                        : "Add or update a food entry for this day."}
+                                </Text>
 
-                            <TextInput
-                                style={styles.modalInput}
-                                value={quickAddForm.name}
-                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, name: value }))}
-                                placeholder="Name"
-                                placeholderTextColor="#6F6F6F"
-                                editable={!isSavingEntry}
-                            />
+                                {quickAddModalMode !== "time" ? (
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        value={quickAddForm.name}
+                                        onChangeText={(value) => setQuickAddForm((current) => ({ ...current, name: value }))}
+                                        placeholder="Name"
+                                        placeholderTextColor="#6F6F6F"
+                                        editable={!isSavingEntry}
+                                    />
+                                ) : null}
 
-                            <View style={styles.modalGrid}>
-                                <TextInput
-                                    style={styles.modalInputHalf}
-                                    value={quickAddForm.energyKcal}
-                                    onChangeText={(value) => setQuickAddForm((current) => ({ ...current, energyKcal: value }))}
-                                    placeholder="Calories"
-                                    placeholderTextColor="#6F6F6F"
-                                    keyboardType="numeric"
-                                    editable={!isSavingEntry}
-                                />
-                                <TextInput
-                                    style={styles.modalInputHalf}
-                                    value={quickAddForm.protein}
-                                    onChangeText={(value) => setQuickAddForm((current) => ({ ...current, protein: value }))}
-                                    placeholder="Protein"
-                                    placeholderTextColor="#6F6F6F"
-                                    keyboardType="numeric"
-                                    editable={!isSavingEntry}
-                                />
-                                <TextInput
-                                    style={styles.modalInputHalf}
-                                    value={quickAddForm.fat}
-                                    onChangeText={(value) => setQuickAddForm((current) => ({ ...current, fat: value }))}
-                                    placeholder="Fat"
-                                    placeholderTextColor="#6F6F6F"
-                                    keyboardType="numeric"
-                                    editable={!isSavingEntry}
-                                />
-                                <TextInput
-                                    style={styles.modalInputHalf}
-                                    value={quickAddForm.carbs}
-                                    onChangeText={(value) => setQuickAddForm((current) => ({ ...current, carbs: value }))}
-                                    placeholder="Carbs"
-                                    placeholderTextColor="#6F6F6F"
-                                    keyboardType="numeric"
-                                    editable={!isSavingEntry}
-                                />
+                                <View style={styles.modalGrid}>
+                                    <TextInput
+                                        style={styles.modalInputHalf}
+                                        value={quickAddForm.time}
+                                        onChangeText={(value) => setQuickAddForm((current) => ({ ...current, time: value }))}
+                                        placeholder="7:34pm"
+                                        placeholderTextColor="#6F6F6F"
+                                        autoCapitalize="none"
+                                        editable={!isSavingEntry}
+                                    />
+
+                                    {quickAddModalMode !== "time" ? (
+                                        <>
+                                            <TextInput
+                                                style={styles.modalInputHalf}
+                                                value={quickAddForm.energyKcal}
+                                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, energyKcal: value }))}
+                                                placeholder="Calories"
+                                                placeholderTextColor="#6F6F6F"
+                                                keyboardType="numeric"
+                                                editable={!isSavingEntry}
+                                            />
+                                            <TextInput
+                                                style={styles.modalInputHalf}
+                                                value={quickAddForm.protein}
+                                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, protein: value }))}
+                                                placeholder="Protein"
+                                                placeholderTextColor="#6F6F6F"
+                                                keyboardType="numeric"
+                                                editable={!isSavingEntry}
+                                            />
+                                            <TextInput
+                                                style={styles.modalInputHalf}
+                                                value={quickAddForm.fat}
+                                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, fat: value }))}
+                                                placeholder="Fat"
+                                                placeholderTextColor="#6F6F6F"
+                                                keyboardType="numeric"
+                                                editable={!isSavingEntry}
+                                            />
+                                            <TextInput
+                                                style={styles.modalInputHalf}
+                                                value={quickAddForm.carbs}
+                                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, carbs: value }))}
+                                                placeholder="Carbs"
+                                                placeholderTextColor="#6F6F6F"
+                                                keyboardType="numeric"
+                                                editable={!isSavingEntry}
+                                            />
+                                        </>
+                                    ) : null}
+                                </View>
+
+                                {quickAddError ? <Text style={styles.quickAddError}>{quickAddError}</Text> : null}
+
+                                <View style={styles.modalButtonRow}>
+                                    <Pressable style={styles.modalSecondaryButton} onPress={closeQuickAdd}>
+                                        <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+                                    </Pressable>
+                                    <Pressable style={styles.modalPrimaryButton} onPress={handleSaveQuickAdd}>
+                                        {isSavingEntry ? (
+                                            <ActivityIndicator size="small" color="#F4F4F4" />
+                                        ) : (
+                                            <Text style={styles.modalPrimaryButtonText}>
+                                                {quickAddModalMode === "create" ? "Confirm" : "Save"}
+                                            </Text>
+                                        )}
+                                    </Pressable>
+                                </View>
                             </View>
-
-                            {quickAddError ? <Text style={styles.quickAddError}>{quickAddError}</Text> : null}
-
-                            <View style={styles.modalButtonRow}>
-                                <Pressable style={styles.modalSecondaryButton} onPress={closeQuickAdd}>
-                                    <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
-                                </Pressable>
-
-                                <Pressable style={styles.modalPrimaryButton} onPress={handleSaveQuickAdd}>
-                                    {isSavingEntry ? (
-                                        <ActivityIndicator size="small" color="#F4F4F4" />
-                                    ) : (
-                                        <Text style={styles.modalPrimaryButtonText}>Log Food</Text>
-                                    )}
-                                </Pressable>
-                            </View>
-                        </View>
                         </TouchableWithoutFeedback>
                     </View>
-                    </TouchableWithoutFeedback>
+                </TouchableWithoutFeedback>
             </Modal>
         </SafeAreaView>
     );
@@ -810,6 +1163,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#E8B5B8",
     },
     fatFill: {
+        
         backgroundColor: "#E6E0AE",
     },
     carbFill: {
@@ -819,108 +1173,99 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     timelineContent: {
-        paddingBottom: 120,
+        paddingBottom: 300,
     },
-    timelineRow: {
-        flexDirection: "row",
-        gap: 12,
-        marginBottom: 14,
-    },
-    timelineLeftColumn: {
-        width: 82,
-        alignItems: "flex-start",
-    },
-    timeSlotLabel: {
-        color: "#D6D6D6",
-        fontSize: 16,
-        fontWeight: "600",
-    },
-    addSlotButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: "#2A2A2A",
-        alignItems: "center",
-        justifyContent: "center",
+    timelineCanvas: {
+        position: "relative",
         marginTop: 10,
     },
-    timelineRightColumn: {
-        flex: 1,
-        gap: 10,
-    },
-    emptySlotCard: {
-        minHeight: 68,
-        borderRadius: 18,
-        backgroundColor: "#181818",
-        borderWidth: 1,
-        borderColor: "#232323",
+    timelineHourRow: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        flexDirection: "row",
         alignItems: "center",
+        height: TIMELINE_HOUR_HEIGHT,
+    },
+    timeSlotLabel: {
+        width: TIMELINE_LEFT_GUTTER,
+        color: "#B0B0B0",
+        fontSize: 12,
+        lineHeight: 14,
+    },
+    timelineHourTapArea: {
+        flex: 1,
+        height: TIMELINE_HOUR_HEIGHT,
         justifyContent: "center",
     },
-    emptySlotText: {
+    timelineHourRule: {
+        height: 1,
+        backgroundColor: "#242424",
+        marginLeft: 12,
+    },
+    timelineEmptyState: {
+        position: "absolute",
+        top: TIMELINE_HOUR_HEIGHT * 8,
+        left: TIMELINE_LEFT_GUTTER + 24,
+        right: 0,
+        alignItems: "flex-start",
+    },
+    timelineEntryRow: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        height: TIMELINE_ENTRY_HEIGHT,
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    entryTimeLabel: {
+        width: TIMELINE_LEFT_GUTTER,
         color: "#666666",
-        fontSize: 13,
+        fontSize: 11,
     },
-    entryCard: {
+    timelineEntryCard: {
+        flex: 1,
+        minHeight: TIMELINE_ENTRY_HEIGHT,
+        borderRadius: 14,
         backgroundColor: "#1F1F1F",
-        borderRadius: 22,
-        padding: 16,
-    },
-    entryHeaderRow: {
+        marginLeft: 12,
+        paddingHorizontal: 12,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
         gap: 10,
     },
-    entryName: {
+    timelineEntryCardSelected: {
+        borderWidth: 1,
+        borderColor: "#7E7E7E",
+    },
+    timelineEntryName: {
         color: "#F4F4F4",
-        fontSize: 18,
+        fontSize: 13,
         fontWeight: "600",
         flex: 1,
     },
-    entryCalories: {
-        color: "#CFCFCF",
-        fontSize: 14,
-        fontWeight: "600",
+    timelineEntryMeta: {
+        color: "#6E6E6E",
+        fontSize: 10,
+        flexShrink: 0,
     },
-    entryMeta: {
-        color: "#A8A8A8",
-        fontSize: 14,
-        marginTop: 8,
+    emptySlotText: {
+        color: "#666666",
+        fontSize: 13,
     },
-    bottomActionBar: {
-        position: "absolute",
-        left: 18,
-        right: 18,
-        bottom: 50,
-        flexDirection: "row",
-        gap: 10,
-    },
-    searchPlaceholder: {
-        flex: 1,
+    actionButton: {
+        width: "22.75%",
         minHeight: 58,
         borderRadius: 28,
         backgroundColor: "#2A2A2A",
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 18,
-        gap: 10,
-    },
-    searchPlaceholderText: {
-        color: "#8C8C8C",
-        fontSize: 18,
-    },
-    quickAddButton: {
-        minWidth: 126,
-        minHeight: 58,
-        borderRadius: 28,
-        backgroundColor: "#F4F4F4",
         alignItems: "center",
         justifyContent: "center",
+        paddingHorizontal: 8,
     },
-    quickAddButtonText: {
-        color: "#151515",
-        fontSize: 18,
+    actionButtonText: {
+        color: "#F4F4F4",
+        fontSize: 14,
         fontWeight: "600",
     },
     modalOverlay: {
@@ -978,6 +1323,41 @@ const styles = StyleSheet.create({
         color: "#F4F4F4",
         paddingHorizontal: 16,
         fontSize: 16,
+    },
+    bottomActionBar: {
+        position: "absolute",
+        left: 18,
+        right: 18,
+        bottom: 50,
+        flexDirection: "row",
+        gap: 10,
+    },
+    searchPlaceholder: {
+        flex: 1,
+        minHeight: 58,
+        borderRadius: 28,
+        backgroundColor: "#2A2A2A",
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 18,
+        gap: 10,
+    },
+    searchPlaceholderText: {
+        color: "#8C8C8C",
+        fontSize: 18,
+    },
+    quickAddButton: {
+        minWidth: 126,
+        minHeight: 58,
+        borderRadius: 28,
+        backgroundColor: "#F4F4F4",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    quickAddButtonText: {
+        color: "#151515",
+        fontSize: 18,
+        fontWeight: "600",
     },
     quickAddError: {
         color: "#F28B82",

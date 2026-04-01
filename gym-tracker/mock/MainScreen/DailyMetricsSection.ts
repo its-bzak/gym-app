@@ -353,6 +353,7 @@ export function appendFoodLogEntryDetailed(
     entry: {
         name?: string;
         mealSlot?: FoodLogMealSlot;
+        loggedAt?: string;
         energyKcal?: number;
         protein: number;
         fat: number;
@@ -364,7 +365,7 @@ export function appendFoodLogEntryDetailed(
     const nextEntry: FoodLogEntry = {
         id: buildFoodLogId(),
         entryDate: dateKey,
-        loggedAt: buildLoggedAt(date, entry.mealSlot),
+        loggedAt: entry.loggedAt ?? buildLoggedAt(date, entry.mealSlot),
         mealSlot: entry.mealSlot ?? "custom",
         name: entry.name?.trim() || "Quick entry",
         energyKcal:
@@ -383,6 +384,57 @@ export function appendFoodLogEntryDetailed(
     });
 
     return nextEntry;
+}
+
+export function updateFoodLogEntryDetailed(
+    entryId: string,
+    date: Date | string,
+    entry: {
+        name?: string;
+        mealSlot?: FoodLogMealSlot;
+        loggedAt?: string;
+        energyKcal?: number;
+        protein: number;
+        fat: number;
+        carbs: number;
+        alcoholGrams?: number;
+    }
+): FoodLogEntry | null {
+    const existingIndex = mockFoodLogEntries.findIndex((item) => item.id === entryId);
+
+    if (existingIndex === -1) {
+        return null;
+    }
+
+    const nextEntryDate = getDateKey(date);
+    const nextEntry: FoodLogEntry = {
+        ...mockFoodLogEntries[existingIndex],
+        entryDate: nextEntryDate,
+        loggedAt: entry.loggedAt ?? buildLoggedAt(date, entry.mealSlot),
+        mealSlot: entry.mealSlot ?? "custom",
+        name: entry.name?.trim() || "Quick entry",
+        energyKcal:
+            entry.energyKcal ?? entry.protein * 4 + entry.fat * 9 + entry.carbs * 4 + (entry.alcoholGrams ?? 0) * 7,
+        protein: entry.protein,
+        fat: entry.fat,
+        carbs: entry.carbs,
+        alcoholGrams: entry.alcoholGrams ?? 0,
+    };
+
+    mockFoodLogEntries[existingIndex] = nextEntry;
+
+    return nextEntry;
+}
+
+export function deleteFoodLogEntryDetailed(entryId: string): boolean {
+    const existingIndex = mockFoodLogEntries.findIndex((item) => item.id === entryId);
+
+    if (existingIndex === -1) {
+        return false;
+    }
+
+    mockFoodLogEntries.splice(existingIndex, 1);
+    return true;
 }
 
 export function upsertWeightEntry(date: Date | string, weightKg: number): WeightEntry {
