@@ -132,15 +132,26 @@ export const mockWeightEntries: WeightEntry[] = [
 ];
 
 export const mockGoal: WeightGoal = {
+    goalType: "lose",
+    status: "active",
     startWeightKg: 74,
     targetWeightKg: 67,
+    targetRateKgPerWeek: 0.4,
+    startedOn: "2026-03-25",
 };
 
-export const mockNutritionGoal = {
+export const mockNutritionGoal: NutritionGoal = {
+    programMode: "guided",
     proteinGoal: 200,
     fatGoal: 55,
     carbsGoal: 230,
     calorieGoal: 2500,
+    maintenanceCalories: 2800,
+    plannedDailyEnergyDelta: -300,
+    proteinPreference: "high",
+    carbPreference: "balanced",
+    fatPreference: "balanced",
+    adaptiveEnabled: true,
 };
 
 export const mockFoodLogEntries: FoodLogEntry[] = [
@@ -456,17 +467,28 @@ export function upsertWeightEntry(date: Date | string, weightKg: number): Weight
 }
 
 export function upsertNutritionGoal(goal: NutritionGoal): NutritionGoal {
+    mockNutritionGoal.programMode = goal.programMode;
     mockNutritionGoal.proteinGoal = goal.proteinGoal;
     mockNutritionGoal.fatGoal = goal.fatGoal;
     mockNutritionGoal.carbsGoal = goal.carbsGoal;
     mockNutritionGoal.calorieGoal = goal.calorieGoal;
+    mockNutritionGoal.maintenanceCalories = goal.maintenanceCalories ?? null;
+    mockNutritionGoal.plannedDailyEnergyDelta = goal.plannedDailyEnergyDelta ?? null;
+    mockNutritionGoal.proteinPreference = goal.proteinPreference;
+    mockNutritionGoal.carbPreference = goal.carbPreference;
+    mockNutritionGoal.fatPreference = goal.fatPreference;
+    mockNutritionGoal.adaptiveEnabled = goal.adaptiveEnabled;
 
     return { ...mockNutritionGoal };
 }
 
 export function upsertWeightGoal(goal: WeightGoal): WeightGoal {
+    mockGoal.goalType = goal.goalType;
+    mockGoal.status = goal.status;
     mockGoal.startWeightKg = goal.startWeightKg;
     mockGoal.targetWeightKg = goal.targetWeightKg;
+    mockGoal.targetRateKgPerWeek = goal.targetRateKgPerWeek;
+    mockGoal.startedOn = goal.startedOn;
 
     return { ...mockGoal };
 }

@@ -1,44 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Keyboard,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableWithoutFeedback,
-  View,
-} from "react-native";
+import { router } from "expo-router";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import Svg, { Circle, Polyline } from "react-native-svg";
 
+import NutritionSplitDonut from "@/components/performance/NutritionSplitDonut";
 import GoalProgressSection from "@/components/main/GoalProgress";
-import WeightTrendSection from "@/components/main/WeightTrend";
 import {
   getDailyExerciseMetrics as getMockDailyExerciseMetrics,
   mockGoal,
   mockNutritionGoal,
   mockWeightEntries,
-  upsertNutritionGoal as upsertMockNutritionGoal,
-  upsertWeightGoal as upsertMockWeightGoal,
 } from "@/mock/MainScreen/DailyMetricsSection";
-import {
-  getActiveNutritionGoal,
-  getActiveWeightGoal,
-  getDailyExerciseMetrics,
-  getWeightEntries,
-  type NutritionGoalInput,
-  type WeightGoalInput,
-  upsertActiveNutritionGoal,
-  upsertActiveWeightGoal,
-} from "@/services/dashboardService";
+import { useGoalPlanWizard } from "@/context/GoalPlanWizardContext";
+import { getActiveGoalPlan, getDailyExerciseMetrics, getWeightEntries } from "@/services/dashboardService";
 import { getAuthenticatedUserId } from "@/services/profileService";
-import type { NutritionGoal, WeightEntry, WeightGoal } from "@/types/dashboard";
+import type { NutritionGoal, NutritionProgramRecommendation, WeightEntry, WeightGoal } from "@/types/dashboard";
 import { getCurrentDate } from "@/utils/dateFormat";
-
-type GoalModal = "nutrition" | "weight" | null;
+import { getWeightTrend } from "@/utils/weightProgress";
 
 const EMPTY_EXERCISE_METRICS = {
   volume: 0,
@@ -46,27 +25,96 @@ const EMPTY_EXERCISE_METRICS = {
   workoutType: "",
 };
 
+function WeightTrendMiniChart({ entries }: { entries: WeightEntry[] }) {
+  const chartEntries = entries.slice(-7);
+  const values = chartEntries.map((entry) => entry.weightKg);
+  const width = 110;
+  const height = 56;
+
+  if (!values.length) {
+    return <View style={{ height }} />;
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const stepX = values.length === 1 ? 0 : width / (values.length - 1);
+  const points = values
+    .map((value, index) => {
+      const x = index * stepX;
+      const y = height - ((value - min) / range) * (height - 12) - 6;
+
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <Svg width={width} height={height}>
+      <Polyline points={points} fill="none" stroke="#D9D9D9" strokeWidth={1.5} />
+      {values.map((value, index) => {
+        const x = index * stepX;
+        const y = height - ((value - min) / range) * (height - 12) - 6;
+
+        return <Circle key={`${value}-${index}`} cx={x} cy={y} r={4.5} fill="#F5F5F5" />;
+      })}
+    </Svg>
+  );
+}
+
+function getGoalTypeLabel(goalType: WeightGoal["goalType"]): string {
+  if (goalType === "lose") {
+    return "Fat Loss";
+  }
+
+  if (goalType === "gain") {
+    return "Mass Gain";
+  }
+
+  return "Maintenance";
+}
+
+function getProgramModeLabel(mode: NutritionGoal["programMode"]): string {
+  return mode === "guided" ? "Generated Program" : "Manual Program";
+}
+
+function getEstimatedGoalDate(goal: WeightGoal | null, latestWeightKg: number | null): string {
+  if (!goal || goal.goalType === "maintain") {
+    return "No target date";
+  }
+
+  const currentWeight = latestWeightKg ?? goal.startWeightKg;
+  const remainingKg = Math.abs(goal.targetWeightKg - currentWeight);
+  const weeklyRate = Math.abs(goal.targetRateKgPerWeek);
+
+  if (!weeklyRate) {
+    return "No target date";
+  }
+
+  const daysRemaining = Math.ceil((remainingKg / weeklyRate) * 7);
+  const estimatedDate = new Date();
+  estimatedDate.setDate(estimatedDate.getDate() + Math.max(daysRemaining, 0));
+
+  return estimatedDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getRecommendationStatusLabel(status: NutritionProgramRecommendation["status"]): string {
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 export default function PerformanceScreen() {
-  const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
   const [nutritionGoal, setNutritionGoal] = useState<NutritionGoal>(mockNutritionGoal);
   const [weightGoal, setWeightGoal] = useState<WeightGoal | null>(mockGoal);
+  const [latestRecommendation, setLatestRecommendation] =
+    useState<NutritionProgramRecommendation | null>(null);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>(mockWeightEntries);
   const [exerciseMetrics, setExerciseMetrics] = useState(EMPTY_EXERCISE_METRICS);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeModal, setActiveModal] = useState<GoalModal>(null);
-  const [isSavingGoal, setIsSavingGoal] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [nutritionForm, setNutritionForm] = useState({
-    calorieGoal: "",
-    proteinGoal: "",
-    fatGoal: "",
-    carbsGoal: "",
-  });
-  const [weightForm, setWeightForm] = useState({
-    startWeightKg: "",
-    targetWeightKg: "",
-  });
+  const { startGoalFlow, startProgramFlow } = useGoalPlanWizard();
 
   const latestWeight = useMemo(() => {
     if (!weightEntries.length) {
@@ -76,12 +124,11 @@ export default function PerformanceScreen() {
     return weightEntries[weightEntries.length - 1].weightKg;
   }, [weightEntries]);
 
-  const applyFallbackState = () => {
-    setNutritionGoal({ ...mockNutritionGoal });
-    setWeightGoal({ ...mockGoal });
-    setWeightEntries([...mockWeightEntries]);
-    setExerciseMetrics(getMockDailyExerciseMetrics(getCurrentDate()));
-  };
+  const weightTrend = useMemo(() => getWeightTrend(weightEntries), [weightEntries]);
+  const estimatedGoalDate = useMemo(
+    () => getEstimatedGoalDate(weightGoal, latestWeight),
+    [latestWeight, weightGoal]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -97,17 +144,17 @@ export default function PerformanceScreen() {
         }
 
         if (!nextAuthenticatedUserId) {
-          setAuthenticatedUserId(null);
-          applyFallbackState();
+          setNutritionGoal({ ...mockNutritionGoal });
+          setWeightGoal({ ...mockGoal });
+          setLatestRecommendation(null);
+          setWeightEntries([...mockWeightEntries]);
+          setExerciseMetrics(getMockDailyExerciseMetrics(getCurrentDate()));
           setLoadError("Using local goals data right now.");
           return;
         }
 
-        setAuthenticatedUserId(nextAuthenticatedUserId);
-
-        const [nextNutritionGoal, nextWeightGoal, nextWeightEntries, nextExerciseMetrics] = await Promise.all([
-          getActiveNutritionGoal(nextAuthenticatedUserId),
-          getActiveWeightGoal(nextAuthenticatedUserId),
+        const [goalPlan, nextWeightEntries, nextExerciseMetrics] = await Promise.all([
+          getActiveGoalPlan(nextAuthenticatedUserId),
           getWeightEntries(nextAuthenticatedUserId),
           getDailyExerciseMetrics(nextAuthenticatedUserId, getCurrentDate()),
         ]);
@@ -116,18 +163,31 @@ export default function PerformanceScreen() {
           return;
         }
 
-        setNutritionGoal(nextNutritionGoal ?? { ...mockNutritionGoal });
-        setWeightGoal(nextWeightGoal);
         setWeightEntries(nextWeightEntries);
         setExerciseMetrics(nextExerciseMetrics ?? EMPTY_EXERCISE_METRICS);
-        setLoadError(null);
+
+        if (goalPlan) {
+          setNutritionGoal(goalPlan.nutritionGoal);
+          setWeightGoal(goalPlan.bodyGoal);
+          setLatestRecommendation(goalPlan.latestRecommendation);
+          setLoadError(null);
+          return;
+        }
+
+        setNutritionGoal({ ...mockNutritionGoal });
+        setWeightGoal(null);
+        setLatestRecommendation(null);
+        setLoadError("No synced goal plan yet.");
       } catch {
         if (!isMounted) {
           return;
         }
 
-        setAuthenticatedUserId(null);
-        applyFallbackState();
+        setNutritionGoal({ ...mockNutritionGoal });
+        setWeightGoal({ ...mockGoal });
+        setLatestRecommendation(null);
+        setWeightEntries([...mockWeightEntries]);
+        setExerciseMetrics(getMockDailyExerciseMetrics(getCurrentDate()));
         setLoadError("Using local goals data right now.");
       } finally {
         if (isMounted) {
@@ -143,340 +203,133 @@ export default function PerformanceScreen() {
     };
   }, []);
 
-  const openNutritionModal = () => {
-    setNutritionForm({
-      calorieGoal: String(nutritionGoal.calorieGoal ?? 0),
-      proteinGoal: String(nutritionGoal.proteinGoal ?? 0),
-      fatGoal: String(nutritionGoal.fatGoal ?? 0),
-      carbsGoal: String(nutritionGoal.carbsGoal ?? 0),
-    });
-    setSaveError(null);
-    setActiveModal("nutrition");
+  const openGoalWizard = () => {
+    startGoalFlow(weightGoal, nutritionGoal, latestWeight);
+    router.push("/performance/goal-type");
   };
 
-  const openWeightModal = () => {
-    setWeightForm({
-      startWeightKg: String(weightGoal?.startWeightKg ?? latestWeight ?? 0),
-      targetWeightKg: String(weightGoal?.targetWeightKg ?? latestWeight ?? 0),
-    });
-    setSaveError(null);
-    setActiveModal("weight");
-  };
-
-  const closeModal = () => {
-    if (isSavingGoal) {
-      return;
-    }
-
-    setActiveModal(null);
-    setSaveError(null);
-  };
-
-  const handleSaveNutritionGoal = async () => {
-    const nextGoal: NutritionGoalInput = {
-      calorieGoal: Number(nutritionForm.calorieGoal),
-      proteinGoal: Number(nutritionForm.proteinGoal),
-      fatGoal: Number(nutritionForm.fatGoal),
-      carbsGoal: Number(nutritionForm.carbsGoal),
-    };
-
-    if (Object.values(nextGoal).some((value) => !Number.isFinite(value) || value < 0)) {
-      setSaveError("Enter valid non-negative goal values.");
-      return;
-    }
-
-    setIsSavingGoal(true);
-    setSaveError(null);
-
-    try {
-      if (authenticatedUserId) {
-        const result = await upsertActiveNutritionGoal(authenticatedUserId, nextGoal);
-
-        if (result.success && result.data) {
-          try {
-            upsertMockNutritionGoal(result.data);
-          } catch {
-            // Best-effort local mirror only.
-          }
-
-          setNutritionGoal(result.data);
-          setLoadError(null);
-          setActiveModal(null);
-          return;
-        }
-
-        if (!result.shouldFallback) {
-          setSaveError(result.error ?? "Could not save nutrition goals.");
-          return;
-        }
-      }
-
-      const fallbackGoal = upsertMockNutritionGoal(nextGoal);
-      setNutritionGoal(fallbackGoal);
-      setLoadError("Using local goals data right now.");
-      setActiveModal(null);
-    } finally {
-      setIsSavingGoal(false);
-    }
-  };
-
-  const handleSaveWeightGoal = async () => {
-    const nextGoal: WeightGoalInput = {
-      startWeightKg: Number(weightForm.startWeightKg),
-      targetWeightKg: Number(weightForm.targetWeightKg),
-    };
-
-    if (Object.values(nextGoal).some((value) => !Number.isFinite(value) || value <= 0)) {
-      setSaveError("Enter valid weights greater than zero.");
-      return;
-    }
-
-    setIsSavingGoal(true);
-    setSaveError(null);
-
-    try {
-      if (authenticatedUserId) {
-        const result = await upsertActiveWeightGoal(authenticatedUserId, nextGoal);
-
-        if (result.success && result.data) {
-          try {
-            upsertMockWeightGoal(result.data);
-          } catch {
-            // Best-effort local mirror only.
-          }
-
-          setWeightGoal(result.data);
-          setLoadError(null);
-          setActiveModal(null);
-          return;
-        }
-
-        if (!result.shouldFallback) {
-          setSaveError(result.error ?? "Could not save weight goal.");
-          return;
-        }
-      }
-
-      const fallbackGoal = upsertMockWeightGoal(nextGoal);
-      setWeightGoal(fallbackGoal);
-      setLoadError("Using local goals data right now.");
-      setActiveModal(null);
-    } finally {
-      setIsSavingGoal(false);
-    }
+  const openProgramWizard = () => {
+    startProgramFlow(weightGoal, nutritionGoal, latestWeight);
+    router.push("/performance/program-mode");
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.headerEyebrow}>Goals</Text>
-            <Text style={styles.headerTitle}>Performance</Text>
-          </View>
-        </View>
+        <Text style={styles.title}>Performance & Goals</Text>
 
         {isLoading ? (
           <View style={styles.statusRow}>
             <ActivityIndicator size="small" color="#BDBDBD" />
-            <Text style={styles.statusText}>Syncing goals</Text>
+            <Text style={styles.statusText}>Syncing goal plan</Text>
           </View>
         ) : null}
         {loadError ? <Text style={styles.statusText}>{loadError}</Text> : null}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.goalCard}>
-            <View style={styles.cardHeaderRow}>
-              <View>
-                <Text style={styles.cardTitle}>Nutrition Goals</Text>
-                <Text style={styles.cardSubtitle}>Daily calorie and macro targets</Text>
-              </View>
-              <Pressable style={styles.cardActionButton} onPress={openNutritionModal}>
-                <Text style={styles.cardActionText}>Edit</Text>
-              </Pressable>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Weight Trend</Text>
+              <Text style={styles.summarySubtitle}>Last seven days</Text>
+              <WeightTrendMiniChart entries={weightEntries} />
+              <Text style={styles.summaryFooterText}>{`${weightTrend.changeKg >= 0 ? "+" : ""}${weightTrend.changeKg.toFixed(1)} kg`}</Text>
             </View>
 
-            <View style={styles.goalMetricGrid}>
-              <View style={styles.goalMetricChip}>
-                <Text style={styles.goalMetricLabel}>Calories</Text>
-                <Text style={styles.goalMetricValue}>{nutritionGoal.calorieGoal}</Text>
-              </View>
-              <View style={styles.goalMetricChip}>
-                <Text style={styles.goalMetricLabel}>Protein</Text>
-                <Text style={styles.goalMetricValue}>{nutritionGoal.proteinGoal}g</Text>
-              </View>
-              <View style={styles.goalMetricChip}>
-                <Text style={styles.goalMetricLabel}>Fat</Text>
-                <Text style={styles.goalMetricValue}>{nutritionGoal.fatGoal}g</Text>
-              </View>
-              <View style={styles.goalMetricChip}>
-                <Text style={styles.goalMetricLabel}>Carbs</Text>
-                <Text style={styles.goalMetricValue}>{nutritionGoal.carbsGoal}g</Text>
-              </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Estimated Goal Date</Text>
+              <Text style={styles.summaryDate}>{estimatedGoalDate}</Text>
             </View>
           </View>
 
-          <View style={styles.goalCard}>
-            <View style={styles.cardHeaderRow}>
+          <Text style={styles.sectionHeading}>Weight Goal</Text>
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
               <View>
-                <Text style={styles.cardTitle}>Weight Goal</Text>
-                <Text style={styles.cardSubtitle}>Target bodyweight tracking</Text>
+                <Text style={styles.sectionTitle}>{weightGoal ? getGoalTypeLabel(weightGoal.goalType) : "No Active Goal"}</Text>
+                <Text style={styles.sectionSubtitle}>Full-screen setup with step-by-step questions</Text>
               </View>
-              <Pressable style={styles.cardActionButton} onPress={openWeightModal}>
-                <Text style={styles.cardActionText}>Edit</Text>
+              <Pressable style={styles.sectionAction} onPress={openGoalWizard}>
+                <Text style={styles.sectionActionText}>{weightGoal ? "Edit" : "New Goal"}</Text>
               </Pressable>
             </View>
 
             {weightGoal ? (
-              <View style={styles.weightGoalRow}>
-                <View style={styles.weightGoalMetric}>
-                  <Text style={styles.goalMetricLabel}>Start</Text>
-                  <Text style={styles.goalMetricValue}>{weightGoal.startWeightKg.toFixed(1)} kg</Text>
+              <>
+                <View style={styles.metricRow}>
+                  <View style={styles.metricBlock}>
+                    <Text style={styles.metricLabel}>Start</Text>
+                    <Text style={styles.metricValue}>{weightGoal.startWeightKg.toFixed(1)} kg</Text>
+                  </View>
+                  <View style={styles.metricBlock}>
+                    <Text style={styles.metricLabel}>Target</Text>
+                    <Text style={styles.metricValue}>{weightGoal.targetWeightKg.toFixed(1)} kg</Text>
+                  </View>
+                  <View style={styles.metricBlock}>
+                    <Text style={styles.metricLabel}>Rate</Text>
+                    <Text style={styles.metricValue}>
+                      {weightGoal.goalType === "maintain"
+                        ? "Hold"
+                        : `${weightGoal.targetRateKgPerWeek.toFixed(2)} kg/wk`}
+                    </Text>
+                  </View>
                 </View>
-                <Ionicons name="arrow-forward" size={18} color="#666666" />
-                <View style={styles.weightGoalMetric}>
-                  <Text style={styles.goalMetricLabel}>Target</Text>
-                  <Text style={styles.goalMetricValue}>{weightGoal.targetWeightKg.toFixed(1)} kg</Text>
+                <View style={styles.progressWrap}>
+                  <GoalProgressSection entries={weightEntries} goal={weightGoal} />
                 </View>
-              </View>
+              </>
             ) : (
-              <Text style={styles.emptyCardText}>No active weight goal yet.</Text>
+              <Text style={styles.emptyText}>Start a new goal to define the phase and target.</Text>
             )}
           </View>
 
-          <View style={styles.summaryCardRow}>
-            <View style={styles.summaryCardColumn}>
-              <WeightTrendSection entries={weightEntries} />
+          <Text style={styles.sectionHeading}>Nutrition Program</Text>
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <Text style={styles.sectionTitle}>{getProgramModeLabel(nutritionGoal.programMode)}</Text>
+                <Text style={styles.sectionSubtitle}>Manual path or generated path across full-screen steps</Text>
+              </View>
+              <Pressable style={styles.sectionAction} onPress={openProgramWizard}>
+                <Text style={styles.sectionActionText}>Create Program</Text>
+              </Pressable>
             </View>
-            <View style={styles.summaryCardColumn}>
-              <GoalProgressSection entries={weightEntries} goal={weightGoal} />
-            </View>
+
+            <NutritionSplitDonut
+              calories={nutritionGoal.calorieGoal}
+              protein={nutritionGoal.proteinGoal}
+              carbs={nutritionGoal.carbsGoal}
+              fat={nutritionGoal.fatGoal}
+            />
           </View>
 
-          <View style={styles.goalCard}>
-            <Text style={styles.cardTitle}>Today&apos;s Training</Text>
-            <Text style={styles.cardSubtitle}>Current performance snapshot</Text>
+          {latestRecommendation ? (
+            <View style={styles.recommendationCard}>
+              <View style={styles.sectionHeaderRow}>
+                <View>
+                  <Text style={styles.sectionTitle}>Adaptive Recommendation</Text>
+                  <Text style={styles.sectionSubtitle}>{getRecommendationStatusLabel(latestRecommendation.status)}</Text>
+                </View>
+              </View>
+              <Text style={styles.recommendationText}>{latestRecommendation.reasonSummary}</Text>
+            </View>
+          ) : null}
 
-            <View style={styles.goalMetricGrid}>
-              <View style={styles.goalMetricChip}>
-                <Text style={styles.goalMetricLabel}>Volume</Text>
-                <Text style={styles.goalMetricValue}>{exerciseMetrics.volume.toLocaleString()} kg</Text>
+          <View style={styles.trainingCard}>
+            <Text style={styles.sectionTitle}>Today&apos;s Training</Text>
+            <Text style={styles.sectionSubtitle}>{exerciseMetrics.workoutType || "No session logged"}</Text>
+            <View style={styles.metricRow}>
+              <View style={styles.metricBlock}>
+                <Text style={styles.metricLabel}>Volume</Text>
+                <Text style={styles.metricValue}>{exerciseMetrics.volume.toLocaleString()} kg</Text>
               </View>
-              <View style={styles.goalMetricChip}>
-                <Text style={styles.goalMetricLabel}>Duration</Text>
-                <Text style={styles.goalMetricValue}>{exerciseMetrics.durationMins} min</Text>
-              </View>
-              <View style={styles.goalMetricChipWide}>
-                <Text style={styles.goalMetricLabel}>Workout</Text>
-                <Text style={styles.goalMetricValue}>{exerciseMetrics.workoutType || "No session logged"}</Text>
+              <View style={styles.metricBlock}>
+                <Text style={styles.metricLabel}>Duration</Text>
+                <Text style={styles.metricValue}>{exerciseMetrics.durationMins} min</Text>
               </View>
             </View>
           </View>
         </ScrollView>
       </View>
-
-      <Modal animationType="slide" transparent visible={activeModal !== null} onRequestClose={closeModal}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
-              <View style={styles.modalSheet}>
-                <View style={styles.modalHandle} />
-
-                {activeModal === "nutrition" ? (
-                  <>
-                    <Text style={styles.modalTitle}>Edit nutrition goals</Text>
-                    <Text style={styles.modalSubtitle}>Set the targets used across Food Log and Workout.</Text>
-
-                    <View style={styles.modalGrid}>
-                      <TextInput
-                        style={styles.modalInputHalf}
-                        value={nutritionForm.calorieGoal}
-                        onChangeText={(value) => setNutritionForm((current) => ({ ...current, calorieGoal: value }))}
-                        placeholder="Calories"
-                        placeholderTextColor="#6F6F6F"
-                        keyboardType="numeric"
-                        editable={!isSavingGoal}
-                      />
-                      <TextInput
-                        style={styles.modalInputHalf}
-                        value={nutritionForm.proteinGoal}
-                        onChangeText={(value) => setNutritionForm((current) => ({ ...current, proteinGoal: value }))}
-                        placeholder="Protein"
-                        placeholderTextColor="#6F6F6F"
-                        keyboardType="numeric"
-                        editable={!isSavingGoal}
-                      />
-                      <TextInput
-                        style={styles.modalInputHalf}
-                        value={nutritionForm.fatGoal}
-                        onChangeText={(value) => setNutritionForm((current) => ({ ...current, fatGoal: value }))}
-                        placeholder="Fat"
-                        placeholderTextColor="#6F6F6F"
-                        keyboardType="numeric"
-                        editable={!isSavingGoal}
-                      />
-                      <TextInput
-                        style={styles.modalInputHalf}
-                        value={nutritionForm.carbsGoal}
-                        onChangeText={(value) => setNutritionForm((current) => ({ ...current, carbsGoal: value }))}
-                        placeholder="Carbs"
-                        placeholderTextColor="#6F6F6F"
-                        keyboardType="numeric"
-                        editable={!isSavingGoal}
-                      />
-                    </View>
-                  </>
-                ) : null}
-
-                {activeModal === "weight" ? (
-                  <>
-                    <Text style={styles.modalTitle}>Edit weight goal</Text>
-                    <Text style={styles.modalSubtitle}>Set the starting point and target you want to track.</Text>
-
-                    <View style={styles.modalGrid}>
-                      <TextInput
-                        style={styles.modalInputHalf}
-                        value={weightForm.startWeightKg}
-                        onChangeText={(value) => setWeightForm((current) => ({ ...current, startWeightKg: value }))}
-                        placeholder="Start weight"
-                        placeholderTextColor="#6F6F6F"
-                        keyboardType="numeric"
-                        editable={!isSavingGoal}
-                      />
-                      <TextInput
-                        style={styles.modalInputHalf}
-                        value={weightForm.targetWeightKg}
-                        onChangeText={(value) => setWeightForm((current) => ({ ...current, targetWeightKg: value }))}
-                        placeholder="Target weight"
-                        placeholderTextColor="#6F6F6F"
-                        keyboardType="numeric"
-                        editable={!isSavingGoal}
-                      />
-                    </View>
-                  </>
-                ) : null}
-
-                {saveError ? <Text style={styles.saveError}>{saveError}</Text> : null}
-
-                <View style={styles.modalButtonRow}>
-                  <Pressable style={styles.modalSecondaryButton} onPress={closeModal}>
-                    <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.modalPrimaryButton}
-                    onPress={activeModal === "nutrition" ? handleSaveNutritionGoal : handleSaveWeightGoal}>
-                    {isSavingGoal ? (
-                      <ActivityIndicator size="small" color="#F4F4F4" />
-                    ) : (
-                      <Text style={styles.modalPrimaryButtonText}>Save</Text>
-                    )}
-                  </Pressable>
-                </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -489,23 +342,15 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#151515",
-    paddingHorizontal: 18,
-    paddingTop: 12,
+    paddingHorizontal: 8,
   },
-  headerRow: {
-    marginBottom: 16,
-  },
-  headerEyebrow: {
-    color: "#7D7D7D",
-    fontSize: 13,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  headerTitle: {
+  title: {
     color: "#F4F4F4",
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "600",
-    marginTop: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    marginBottom: 16,
   },
   statusRow: {
     flexDirection: "row",
@@ -521,179 +366,134 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingHorizontal: 14,
+    paddingBottom: 120,
+  },
+  summaryRow: {
+    flexDirection: "row",
     gap: 12,
   },
-  goalCard: {
-    backgroundColor: "#1A1A1A",
-    borderRadius: 24,
+  summaryCard: {
+    flex: 1,
+    backgroundColor: "#202020",
+    borderRadius: 22,
+    padding: 16,
+    minHeight: 164,
+  },
+  summaryTitle: {
+    color: "#F4F4F4",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  summarySubtitle: {
+    color: "#4E4E4E",
+    fontSize: 13,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  summaryFooterText: {
+    color: "#BDBDBD",
+    fontSize: 13,
+    marginTop: 10,
+  },
+  summaryDate: {
+    color: "#F4F4F4",
+    fontSize: 22,
+    fontWeight: "500",
+    lineHeight: 30,
+    marginTop: 30,
+  },
+  sectionHeading: {
+    color: "#F4F4F4",
+    fontSize: 20,
+    fontWeight: "500",
+    marginTop: 26,
+    marginBottom: 10,
+  },
+  sectionCard: {
+    backgroundColor: "#202020",
+    borderRadius: 22,
     padding: 18,
   },
-  cardHeaderRow: {
+  sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
   },
-  cardTitle: {
+  sectionTitle: {
     color: "#F4F4F4",
     fontSize: 18,
     fontWeight: "600",
   },
-  cardSubtitle: {
-    color: "#7D7D7D",
+  sectionSubtitle: {
+    color: "#6C6C6C",
     fontSize: 13,
     marginTop: 4,
+    maxWidth: 230,
+    lineHeight: 18,
   },
-  cardActionButton: {
-    minWidth: 64,
-    minHeight: 36,
-    borderRadius: 18,
+  sectionAction: {
+    minHeight: 34,
+    borderRadius: 16,
     backgroundColor: "#2A2A2A",
+    paddingHorizontal: 14,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
   },
-  cardActionText: {
+  sectionActionText: {
     color: "#F4F4F4",
     fontSize: 13,
     fontWeight: "600",
   },
-  goalMetricGrid: {
+  metricRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 10,
     marginTop: 16,
   },
-  goalMetricChip: {
-    width: "48%",
+  metricBlock: {
+    flex: 1,
     borderRadius: 18,
-    backgroundColor: "#202020",
+    backgroundColor: "#1A1A1A",
     padding: 14,
   },
-  goalMetricChipWide: {
-    width: "100%",
-    borderRadius: 18,
-    backgroundColor: "#202020",
-    padding: 14,
-  },
-  goalMetricLabel: {
+  metricLabel: {
     color: "#8E8E8E",
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
-  goalMetricValue: {
+  metricValue: {
     color: "#F4F4F4",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
     marginTop: 8,
   },
-  weightGoalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  progressWrap: {
     marginTop: 18,
   },
-  weightGoalMetric: {
-    flex: 1,
-    borderRadius: 18,
-    backgroundColor: "#202020",
-    padding: 14,
-  },
-  emptyCardText: {
-    color: "#7D7D7D",
-    fontSize: 14,
-    marginTop: 16,
-  },
-  summaryCardRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  summaryCardColumn: {
-    flex: 1,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    backgroundColor: "#161616",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 28,
-  },
-  modalHandle: {
-    alignSelf: "center",
-    width: 46,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: "#3A3A3A",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    color: "#F4F4F4",
-    fontSize: 24,
-    fontWeight: "600",
-  },
-  modalSubtitle: {
+  emptyText: {
     color: "#8E8E8E",
     fontSize: 14,
     lineHeight: 20,
-    marginTop: 6,
-    marginBottom: 16,
+    marginTop: 16,
   },
-  modalGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  modalInputHalf: {
-    width: "48%",
-    minHeight: 50,
-    borderRadius: 16,
+  recommendationCard: {
     backgroundColor: "#202020",
-    color: "#F4F4F4",
-    paddingHorizontal: 16,
-    fontSize: 16,
-  },
-  saveError: {
-    color: "#F28B82",
-    fontSize: 13,
-    marginTop: 12,
-  },
-  modalButtonRow: {
-    flexDirection: "row",
-    gap: 10,
+    borderRadius: 22,
+    padding: 18,
     marginTop: 18,
   },
-  modalSecondaryButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 16,
+  recommendationText: {
+    color: "#D0D0D0",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 16,
+  },
+  trainingCard: {
     backgroundColor: "#202020",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalPrimaryButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 16,
-    backgroundColor: "#F4F4F4",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalSecondaryButtonText: {
-    color: "#B0B0B0",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  modalPrimaryButtonText: {
-    color: "#111111",
-    fontSize: 15,
-    fontWeight: "700",
+    borderRadius: 22,
+    padding: 18,
+    marginTop: 18,
   },
 });

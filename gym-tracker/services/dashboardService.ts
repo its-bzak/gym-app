@@ -4,7 +4,11 @@ import type {
   FoodLogDaySummary,
   FoodLogEntry,
   FoodLogMealSlot,
+  GoalPlan,
+  GoalType,
   NutritionGoal,
+  NutritionProgramRecommendation,
+  ProgramMode,
   WeightEntry,
   WeightGoal,
 } from "@/types/dashboard";
@@ -28,20 +32,6 @@ type DailyNutritionMetricsRow = {
   carbs_grams: number;
   carbs_goal_grams: number;
   calorie_goal: number;
-  created_at: string;
-  updated_at: string;
-};
-
-type NutritionGoalRow = {
-  id: string;
-  user_id: string;
-  protein_goal_grams: number;
-  fat_goal_grams: number;
-  carbs_goal_grams: number;
-  calorie_goal: number;
-  starts_on: string;
-  ended_on: string | null;
-  is_active: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -82,16 +72,85 @@ type BodyWeightEntryRow = {
   updated_at: string;
 };
 
-type WeightGoalRow = {
+type BodyGoalRow = {
   id: string;
   user_id: string;
+  goal_type: GoalType;
+  status: WeightGoal["status"];
   start_weight_kg: number;
   target_weight_kg: number;
-  started_at: string;
-  completed_at: string | null;
-  is_active: boolean;
+  target_rate_kg_per_week: number;
+  started_on: string;
+  completed_on: string | null;
+  paused_on: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type NutritionProgramRow = {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  program_mode: ProgramMode;
+  is_active: boolean;
+  calorie_target: number;
+  protein_target_grams: number;
+  fat_target_grams: number;
+  carb_target_grams: number;
+  maintenance_calorie_estimate: number | null;
+  planned_daily_energy_delta: number | null;
+  generated_summary: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type NutritionProgramPreferencesRow = {
+  id: string;
+  program_id: string;
+  protein_preference: NutritionGoal["proteinPreference"];
+  carb_preference: NutritionGoal["carbPreference"];
+  fat_preference: NutritionGoal["fatPreference"];
+  meals_per_day: number | null;
+  training_days_per_week: number | null;
+  diet_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type AdaptiveProgramSettingsRow = {
+  id: string;
+  program_id: string;
+  is_enabled: boolean;
+  check_in_window_days: number;
+  minimum_weight_entries: number;
+  target_tolerance_percent: number;
+  max_daily_calorie_adjustment: number;
+  min_days_between_recommendations: number;
+  last_evaluated_at: string | null;
+  next_evaluation_on: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type NutritionProgramRecommendationRow = {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  program_id: string;
+  status: NutritionProgramRecommendation["status"];
+  reason_code: NutritionProgramRecommendation["reasonCode"];
+  reason_summary: string;
+  previous_calorie_target: number;
+  recommended_calorie_target: number;
+  previous_protein_target_grams: number;
+  recommended_protein_target_grams: number;
+  previous_fat_target_grams: number;
+  recommended_fat_target_grams: number;
+  previous_carb_target_grams: number;
+  recommended_carb_target_grams: number;
+  reviewed_at: string | null;
+  created_at: string;
 };
 
 export type WorkoutDashboardSnapshot = {
@@ -102,15 +161,29 @@ export type WorkoutDashboardSnapshot = {
 };
 
 export type NutritionGoalInput = {
+  programMode: ProgramMode;
   proteinGoal: number;
   fatGoal: number;
   carbsGoal: number;
   calorieGoal: number;
+  maintenanceCalories?: number | null;
+  plannedDailyEnergyDelta?: number | null;
+  proteinPreference: NutritionGoal["proteinPreference"];
+  carbPreference: NutritionGoal["carbPreference"];
+  fatPreference: NutritionGoal["fatPreference"];
+  adaptiveEnabled: boolean;
 };
 
 export type WeightGoalInput = {
+  goalType: GoalType;
   startWeightKg: number;
   targetWeightKg: number;
+  targetRateKgPerWeek: number;
+};
+
+export type GoalPlanInput = {
+  weightGoal: WeightGoalInput;
+  nutritionGoal: NutritionGoalInput;
 };
 
 export type FoodLogInput = {
@@ -150,27 +223,6 @@ function mapDailyNutritionMetricsRow(row: DailyNutritionMetricsRow): MacroBarPro
     fat: row.fat_grams,
     fatGoal: row.fat_goal_grams,
     carbs: row.carbs_grams,
-    carbsGoal: row.carbs_goal_grams,
-    calorieGoal: row.calorie_goal,
-  };
-}
-
-function mapNutritionGoalRow(row: NutritionGoalRow): Pick<
-  MacroBarProps,
-  "proteinGoal" | "fatGoal" | "carbsGoal" | "calorieGoal"
-> {
-  return {
-    proteinGoal: row.protein_goal_grams,
-    fatGoal: row.fat_goal_grams,
-    carbsGoal: row.carbs_goal_grams,
-    calorieGoal: row.calorie_goal,
-  };
-}
-
-function mapNutritionGoalToGoal(row: NutritionGoalRow): NutritionGoal {
-  return {
-    proteinGoal: row.protein_goal_grams,
-    fatGoal: row.fat_goal_grams,
     carbsGoal: row.carbs_goal_grams,
     calorieGoal: row.calorie_goal,
   };
@@ -235,11 +287,79 @@ function mapFoodLogEntryRow(row: FoodLogEntryRow): FoodLogEntry {
   };
 }
 
-function mapWeightGoalRow(row: WeightGoalRow): WeightGoal {
+function mapWeightGoalRow(row: BodyGoalRow): WeightGoal {
   return {
+    id: row.id,
+    goalType: row.goal_type,
+    status: row.status,
     startWeightKg: Number(row.start_weight_kg),
     targetWeightKg: Number(row.target_weight_kg),
+    targetRateKgPerWeek: Math.abs(Number(row.target_rate_kg_per_week ?? 0)),
+    startedOn: row.started_on,
   };
+}
+
+function mapNutritionProgramToGoal(
+  programRow: NutritionProgramRow,
+  preferencesRow: NutritionProgramPreferencesRow | null,
+  adaptiveSettingsRow: AdaptiveProgramSettingsRow | null
+): NutritionGoal {
+  return {
+    programMode: programRow.program_mode,
+    proteinGoal: programRow.protein_target_grams,
+    fatGoal: programRow.fat_target_grams,
+    carbsGoal: programRow.carb_target_grams,
+    calorieGoal: programRow.calorie_target,
+    maintenanceCalories: programRow.maintenance_calorie_estimate,
+    plannedDailyEnergyDelta: programRow.planned_daily_energy_delta,
+    proteinPreference: preferencesRow?.protein_preference ?? "standard",
+    carbPreference: preferencesRow?.carb_preference ?? "balanced",
+    fatPreference: preferencesRow?.fat_preference ?? "balanced",
+    adaptiveEnabled: adaptiveSettingsRow?.is_enabled ?? false,
+  };
+}
+
+function mapNutritionGoalToMacroTargets(goal: NutritionGoal | null): Pick<
+  MacroBarProps,
+  "proteinGoal" | "fatGoal" | "carbsGoal" | "calorieGoal"
+> {
+  return {
+    proteinGoal: goal?.proteinGoal ?? 0,
+    fatGoal: goal?.fatGoal ?? 0,
+    carbsGoal: goal?.carbsGoal ?? 0,
+    calorieGoal: goal?.calorieGoal ?? 0,
+  };
+}
+
+function mapRecommendationRow(
+  row: NutritionProgramRecommendationRow
+): NutritionProgramRecommendation {
+  return {
+    id: row.id,
+    status: row.status,
+    reasonCode: row.reason_code,
+    reasonSummary: row.reason_summary,
+    previousCalorieGoal: row.previous_calorie_target,
+    recommendedCalorieGoal: row.recommended_calorie_target,
+    previousProteinGoal: row.previous_protein_target_grams,
+    recommendedProteinGoal: row.recommended_protein_target_grams,
+    previousFatGoal: row.previous_fat_target_grams,
+    recommendedFatGoal: row.recommended_fat_target_grams,
+    previousCarbsGoal: row.previous_carb_target_grams,
+    recommendedCarbsGoal: row.recommended_carb_target_grams,
+    createdAt: row.created_at,
+    reviewedAt: row.reviewed_at,
+  };
+}
+
+function normalizeSignedRateKgPerWeek(goalType: GoalType, targetRateKgPerWeek: number): number {
+  if (goalType === "maintain") {
+    return 0;
+  }
+
+  const normalizedRate = Math.abs(targetRateKgPerWeek);
+
+  return goalType === "lose" ? -normalizedRate : normalizedRate;
 }
 
 function buildFoodLogDaySummary(
@@ -292,21 +412,129 @@ export async function getDailyNutritionMetrics(
   return daySnapshot.summary;
 }
 
-export async function getActiveNutritionGoal(userId: string): Promise<NutritionGoal | null> {
+async function getActiveBodyGoalRow(userId: string): Promise<BodyGoalRow | null> {
   const { data, error } = await supabase
-    .from("nutrition_goals")
+    .from("body_goals")
     .select(
-      "id, user_id, protein_goal_grams, fat_goal_grams, carbs_goal_grams, calorie_goal, starts_on, ended_on, is_active, created_at, updated_at"
+      "id, user_id, goal_type, status, start_weight_kg, target_weight_kg, target_rate_kg_per_week, started_on, completed_on, paused_on, notes, created_at, updated_at"
     )
     .eq("user_id", userId)
-    .eq("is_active", true)
-    .maybeSingle<NutritionGoalRow>();
+    .eq("status", "active")
+    .maybeSingle<BodyGoalRow>();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data ? mapNutritionGoalToGoal(data) : null;
+  return data;
+}
+
+async function getActiveNutritionProgramRow(userId: string): Promise<NutritionProgramRow | null> {
+  const { data, error } = await supabase
+    .from("nutrition_programs")
+    .select(
+      "id, user_id, goal_id, program_mode, is_active, calorie_target, protein_target_grams, fat_target_grams, carb_target_grams, maintenance_calorie_estimate, planned_daily_energy_delta, generated_summary, created_at, updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .maybeSingle<NutritionProgramRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+async function getNutritionProgramPreferences(
+  programId: string
+): Promise<NutritionProgramPreferencesRow | null> {
+  const { data, error } = await supabase
+    .from("nutrition_program_preferences")
+    .select(
+      "id, program_id, protein_preference, carb_preference, fat_preference, meals_per_day, training_days_per_week, diet_notes, created_at, updated_at"
+    )
+    .eq("program_id", programId)
+    .maybeSingle<NutritionProgramPreferencesRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+async function getAdaptiveProgramSettings(
+  programId: string
+): Promise<AdaptiveProgramSettingsRow | null> {
+  const { data, error } = await supabase
+    .from("adaptive_program_settings")
+    .select(
+      "id, program_id, is_enabled, check_in_window_days, minimum_weight_entries, target_tolerance_percent, max_daily_calorie_adjustment, min_days_between_recommendations, last_evaluated_at, next_evaluation_on, created_at, updated_at"
+    )
+    .eq("program_id", programId)
+    .maybeSingle<AdaptiveProgramSettingsRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+async function getLatestNutritionProgramRecommendation(
+  userId: string,
+  programId: string
+): Promise<NutritionProgramRecommendation | null> {
+  const { data, error } = await supabase
+    .from("nutrition_program_recommendations")
+    .select(
+      "id, user_id, goal_id, program_id, status, reason_code, reason_summary, previous_calorie_target, recommended_calorie_target, previous_protein_target_grams, recommended_protein_target_grams, previous_fat_target_grams, recommended_fat_target_grams, previous_carb_target_grams, recommended_carb_target_grams, reviewed_at, created_at"
+    )
+    .eq("user_id", userId)
+    .eq("program_id", programId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<NutritionProgramRecommendationRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ? mapRecommendationRow(data) : null;
+}
+
+export async function getActiveGoalPlan(userId: string): Promise<GoalPlan | null> {
+  const [bodyGoalRow, nutritionProgramRow] = await Promise.all([
+    getActiveBodyGoalRow(userId),
+    getActiveNutritionProgramRow(userId),
+  ]);
+
+  if (!bodyGoalRow || !nutritionProgramRow) {
+    return null;
+  }
+
+  const [preferencesRow, adaptiveSettingsRow, latestRecommendation] = await Promise.all([
+    getNutritionProgramPreferences(nutritionProgramRow.id),
+    getAdaptiveProgramSettings(nutritionProgramRow.id),
+    getLatestNutritionProgramRecommendation(userId, nutritionProgramRow.id),
+  ]);
+
+  return {
+    bodyGoal: mapWeightGoalRow(bodyGoalRow),
+    nutritionGoal: mapNutritionProgramToGoal(
+      nutritionProgramRow,
+      preferencesRow,
+      adaptiveSettingsRow
+    ),
+    latestRecommendation,
+  };
+}
+
+export async function getActiveNutritionGoal(userId: string): Promise<NutritionGoal | null> {
+  const goalPlan = await getActiveGoalPlan(userId);
+
+  return goalPlan?.nutritionGoal ?? null;
 }
 
 export async function getFoodLogEntriesForDate(
@@ -434,20 +662,9 @@ export async function getWeightEntries(userId: string): Promise<WeightEntry[]> {
 }
 
 export async function getActiveWeightGoal(userId: string): Promise<WeightGoal | null> {
-  const { data, error } = await supabase
-    .from("weight_goals")
-    .select(
-      "id, user_id, start_weight_kg, target_weight_kg, started_at, completed_at, is_active, created_at, updated_at"
-    )
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .maybeSingle<WeightGoalRow>();
+  const goalPlan = await getActiveGoalPlan(userId);
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data ? mapWeightGoalRow(data) : null;
+  return goalPlan?.bodyGoal ?? null;
 }
 
 export async function getWorkoutDashboardSnapshot(
@@ -689,64 +906,32 @@ export async function upsertActiveNutritionGoal(
   userId: string,
   goal: NutritionGoalInput
 ): Promise<DashboardWriteResult<NutritionGoal>> {
-  const values = [goal.proteinGoal, goal.fatGoal, goal.carbsGoal, goal.calorieGoal];
-
-  if (values.some((value) => !Number.isFinite(value) || value < 0)) {
-    return {
-      success: false,
-      error: "Nutrition goals must be non-negative numbers.",
-    };
-  }
-
   try {
-    const { data: existingGoal, error: existingGoalError } = await supabase
-      .from("nutrition_goals")
-      .select("id, starts_on")
-      .eq("user_id", userId)
-      .eq("is_active", true)
-      .maybeSingle<{ id: string; starts_on: string }>();
+    const existingPlan = await getActiveGoalPlan(userId);
 
-    if (existingGoalError) {
+    if (!existingPlan) {
       return {
         success: false,
-        error: existingGoalError.message,
+        error: "Create a bodyweight goal before saving a nutrition program.",
         shouldFallback: true,
       };
     }
 
-    const payload = {
-      user_id: userId,
-      protein_goal_grams: goal.proteinGoal,
-      fat_goal_grams: goal.fatGoal,
-      carbs_goal_grams: goal.carbsGoal,
-      calorie_goal: goal.calorieGoal,
-      starts_on: existingGoal?.starts_on ?? getDateKey(new Date()),
-      ended_on: null,
-      is_active: true,
-    };
-
-    const query = existingGoal
-      ? supabase
-          .from("nutrition_goals")
-          .update(payload)
-          .eq("id", existingGoal.id)
-      : supabase.from("nutrition_goals").insert(payload);
-
-    const { error } = await query;
-
-    if (error) {
-      return {
-        success: false,
-        error: error.message,
-        shouldFallback: true,
-      };
-    }
-
-    const updatedGoal = await getActiveNutritionGoal(userId);
+    const result = await upsertActiveGoalPlan(userId, {
+      weightGoal: {
+        goalType: existingPlan.bodyGoal.goalType,
+        startWeightKg: existingPlan.bodyGoal.startWeightKg,
+        targetWeightKg: existingPlan.bodyGoal.targetWeightKg,
+        targetRateKgPerWeek: existingPlan.bodyGoal.targetRateKgPerWeek,
+      },
+      nutritionGoal: goal,
+    });
 
     return {
-      success: true,
-      data: updatedGoal ?? goal,
+      success: result.success,
+      error: result.error,
+      shouldFallback: result.shouldFallback,
+      data: result.data?.nutritionGoal,
     };
   } catch (error) {
     return {
@@ -761,67 +946,251 @@ export async function upsertActiveWeightGoal(
   userId: string,
   goal: WeightGoalInput
 ): Promise<DashboardWriteResult<WeightGoal>> {
-  const values = [goal.startWeightKg, goal.targetWeightKg];
-
-  if (values.some((value) => !Number.isFinite(value) || value <= 0)) {
-    return {
-      success: false,
-      error: "Weight goal values must be greater than zero.",
-    };
-  }
-
   try {
-    const { data: existingGoal, error: existingGoalError } = await supabase
-      .from("weight_goals")
-      .select("id, started_at")
-      .eq("user_id", userId)
-      .eq("is_active", true)
-      .maybeSingle<{ id: string; started_at: string }>();
+    const existingPlan = await getActiveGoalPlan(userId);
 
-    if (existingGoalError) {
+    if (!existingPlan) {
       return {
         success: false,
-        error: existingGoalError.message,
+        error: "Create a nutrition program before saving a bodyweight goal.",
         shouldFallback: true,
       };
     }
 
-    const payload = {
-      user_id: userId,
-      start_weight_kg: goal.startWeightKg,
-      target_weight_kg: goal.targetWeightKg,
-      started_at: existingGoal?.started_at ?? new Date().toISOString(),
-      completed_at: null,
-      is_active: true,
-    };
-
-    const query = existingGoal
-      ? supabase
-          .from("weight_goals")
-          .update(payload)
-          .eq("id", existingGoal.id)
-      : supabase.from("weight_goals").insert(payload);
-
-    const { error } = await query;
-
-    if (error) {
-      return {
-        success: false,
-        error: error.message,
-        shouldFallback: true,
-      };
-    }
-
-    const updatedGoal = await getActiveWeightGoal(userId);
+    const result = await upsertActiveGoalPlan(userId, {
+      weightGoal: goal,
+      nutritionGoal: {
+        programMode: existingPlan.nutritionGoal.programMode,
+        proteinGoal: existingPlan.nutritionGoal.proteinGoal,
+        fatGoal: existingPlan.nutritionGoal.fatGoal,
+        carbsGoal: existingPlan.nutritionGoal.carbsGoal,
+        calorieGoal: existingPlan.nutritionGoal.calorieGoal,
+        maintenanceCalories: existingPlan.nutritionGoal.maintenanceCalories,
+        plannedDailyEnergyDelta: existingPlan.nutritionGoal.plannedDailyEnergyDelta,
+        proteinPreference: existingPlan.nutritionGoal.proteinPreference,
+        carbPreference: existingPlan.nutritionGoal.carbPreference,
+        fatPreference: existingPlan.nutritionGoal.fatPreference,
+        adaptiveEnabled: existingPlan.nutritionGoal.adaptiveEnabled,
+      },
+    });
 
     return {
-      success: true,
-      data: updatedGoal ?? goal,
+      success: result.success,
+      error: result.error,
+      shouldFallback: result.shouldFallback,
+      data: result.data?.bodyGoal,
     };
   } catch (error) {
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not save weight goal.", error),
+      shouldFallback: true,
+    };
+  }
+}
+
+export async function upsertActiveGoalPlan(
+  userId: string,
+  goalPlan: GoalPlanInput
+): Promise<DashboardWriteResult<GoalPlan>> {
+  const goalValues = [
+    goalPlan.weightGoal.startWeightKg,
+    goalPlan.weightGoal.targetWeightKg,
+    goalPlan.weightGoal.targetRateKgPerWeek,
+  ];
+  const nutritionValues = [
+    goalPlan.nutritionGoal.calorieGoal,
+    goalPlan.nutritionGoal.proteinGoal,
+    goalPlan.nutritionGoal.fatGoal,
+    goalPlan.nutritionGoal.carbsGoal,
+  ];
+
+  if (goalValues.some((value) => !Number.isFinite(value) || value < 0)) {
+    return {
+      success: false,
+      error: "Bodyweight goal values must be valid non-negative numbers.",
+    };
+  }
+
+  if (
+    goalPlan.weightGoal.startWeightKg <= 0 ||
+    goalPlan.weightGoal.targetWeightKg <= 0 ||
+    nutritionValues.some((value) => !Number.isFinite(value) || value < 0) ||
+    goalPlan.nutritionGoal.calorieGoal <= 0
+  ) {
+    return {
+      success: false,
+      error: "Enter valid target values before saving the goal plan.",
+    };
+  }
+
+  try {
+    const existingBodyGoal = await getActiveBodyGoalRow(userId);
+    const existingNutritionProgram = await getActiveNutritionProgramRow(userId);
+
+    let bodyGoalId = existingBodyGoal?.id;
+
+    const goalPayload = {
+      user_id: userId,
+      goal_type: goalPlan.weightGoal.goalType,
+      status: "active" as const,
+      start_weight_kg: goalPlan.weightGoal.startWeightKg,
+      target_weight_kg: goalPlan.weightGoal.targetWeightKg,
+      target_rate_unit: "kg_per_week",
+      target_rate_value:
+        goalPlan.weightGoal.goalType === "maintain"
+          ? 0
+          : Math.abs(goalPlan.weightGoal.targetRateKgPerWeek),
+      target_rate_kg_per_week: normalizeSignedRateKgPerWeek(
+        goalPlan.weightGoal.goalType,
+        goalPlan.weightGoal.targetRateKgPerWeek
+      ),
+      started_on: existingBodyGoal?.started_on ?? getDateKey(new Date()),
+      completed_on: null,
+      paused_on: null,
+      notes: null,
+    };
+
+    if (existingBodyGoal) {
+      const { data, error } = await supabase
+        .from("body_goals")
+        .update(goalPayload)
+        .eq("id", existingBodyGoal.id)
+        .select(
+          "id, user_id, goal_type, status, start_weight_kg, target_weight_kg, target_rate_kg_per_week, started_on, completed_on, paused_on, notes, created_at, updated_at"
+        )
+        .single<BodyGoalRow>();
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          shouldFallback: true,
+        };
+      }
+
+      bodyGoalId = data.id;
+    } else {
+      const { data, error } = await supabase
+        .from("body_goals")
+        .insert(goalPayload)
+        .select(
+          "id, user_id, goal_type, status, start_weight_kg, target_weight_kg, target_rate_kg_per_week, started_on, completed_on, paused_on, notes, created_at, updated_at"
+        )
+        .single<BodyGoalRow>();
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          shouldFallback: true,
+        };
+      }
+
+      bodyGoalId = data.id;
+    }
+
+    const nutritionPayload = {
+      user_id: userId,
+      goal_id: bodyGoalId,
+      program_mode: goalPlan.nutritionGoal.programMode,
+      is_active: true,
+      calorie_target: goalPlan.nutritionGoal.calorieGoal,
+      protein_target_grams: goalPlan.nutritionGoal.proteinGoal,
+      fat_target_grams: goalPlan.nutritionGoal.fatGoal,
+      carb_target_grams: goalPlan.nutritionGoal.carbsGoal,
+      maintenance_calorie_estimate: goalPlan.nutritionGoal.maintenanceCalories ?? null,
+      planned_daily_energy_delta: goalPlan.nutritionGoal.plannedDailyEnergyDelta ?? null,
+      generated_summary: null,
+    };
+
+    let nutritionProgramId = existingNutritionProgram?.id;
+
+    if (existingNutritionProgram) {
+      const { data, error } = await supabase
+        .from("nutrition_programs")
+        .update(nutritionPayload)
+        .eq("id", existingNutritionProgram.id)
+        .select(
+          "id, user_id, goal_id, program_mode, is_active, calorie_target, protein_target_grams, fat_target_grams, carb_target_grams, maintenance_calorie_estimate, planned_daily_energy_delta, generated_summary, created_at, updated_at"
+        )
+        .single<NutritionProgramRow>();
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          shouldFallback: true,
+        };
+      }
+
+      nutritionProgramId = data.id;
+    } else {
+      const { data, error } = await supabase
+        .from("nutrition_programs")
+        .insert(nutritionPayload)
+        .select(
+          "id, user_id, goal_id, program_mode, is_active, calorie_target, protein_target_grams, fat_target_grams, carb_target_grams, maintenance_calorie_estimate, planned_daily_energy_delta, generated_summary, created_at, updated_at"
+        )
+        .single<NutritionProgramRow>();
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+          shouldFallback: true,
+        };
+      }
+
+      nutritionProgramId = data.id;
+    }
+
+    const preferencesPayload = {
+      program_id: nutritionProgramId,
+      protein_preference: goalPlan.nutritionGoal.proteinPreference,
+      carb_preference: goalPlan.nutritionGoal.carbPreference,
+      fat_preference: goalPlan.nutritionGoal.fatPreference,
+    };
+
+    const { error: preferencesError } = await supabase
+      .from("nutrition_program_preferences")
+      .upsert(preferencesPayload, { onConflict: "program_id" });
+
+    if (preferencesError) {
+      return {
+        success: false,
+        error: preferencesError.message,
+        shouldFallback: true,
+      };
+    }
+
+    const adaptiveSettingsPayload = {
+      program_id: nutritionProgramId,
+      is_enabled: goalPlan.nutritionGoal.adaptiveEnabled,
+    };
+
+    const { error: adaptiveSettingsError } = await supabase
+      .from("adaptive_program_settings")
+      .upsert(adaptiveSettingsPayload, { onConflict: "program_id" });
+
+    if (adaptiveSettingsError) {
+      return {
+        success: false,
+        error: adaptiveSettingsError.message,
+        shouldFallback: true,
+      };
+    }
+
+    const updatedPlan = await getActiveGoalPlan(userId);
+
+    return {
+      success: true,
+      data: updatedPlan ?? null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not save goal plan.", error),
       shouldFallback: true,
     };
   }

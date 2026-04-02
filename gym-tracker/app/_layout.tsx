@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import { ActiveWorkoutProvider } from "@/context/ActiveWorkoutContext";
+import { GoalPlanWizardProvider } from "@/context/GoalPlanWizardContext";
 import { LibraryProvider } from "@/context/LibraryContext";
 import { supabase } from "@/lib/supabase";
 
@@ -92,25 +93,28 @@ export default function RootLayout() {
   return (
     <LibraryProvider>
       <ActiveWorkoutProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <AuthGate />
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="register" options={{ headerShown: false }} />
-            <Stack.Screen name="workout/active" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-            <Stack.Screen name="workout/summary" options={{ headerShown: false }} />
-            <Stack.Screen name="workout/exercises" options={{ headerShown: false }} />
-            <Stack.Screen name="workout/new-exercise" options={{ headerShown: false }} />
-            <Stack.Screen name="workout/routines" options={{ headerShown: false }} />
-            <Stack.Screen name="workout/new-routine" options={{ headerShown: false }} />
-            <Stack.Screen name="gyms" options={{ headerShown: false }} />
-            <Stack.Screen name="settings" options={{ headerShown: false }} />
-            <Stack.Screen name="badges" options={{ headerShown: false }} />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
+        <GoalPlanWizardProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <AuthGate />
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="login" options={{ headerShown: false }} />
+              <Stack.Screen name="register" options={{ headerShown: false }} />
+              <Stack.Screen name="workout/active" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+              <Stack.Screen name="workout/summary" options={{ headerShown: false }} />
+              <Stack.Screen name="workout/exercises" options={{ headerShown: false }} />
+              <Stack.Screen name="workout/new-exercise" options={{ headerShown: false }} />
+              <Stack.Screen name="workout/routines" options={{ headerShown: false }} />
+              <Stack.Screen name="workout/new-routine" options={{ headerShown: false }} />
+              <Stack.Screen name="performance" options={{ headerShown: false }} />
+              <Stack.Screen name="gyms" options={{ headerShown: false }} />
+              <Stack.Screen name="settings" options={{ headerShown: false }} />
+              <Stack.Screen name="badges" options={{ headerShown: false }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </GoalPlanWizardProvider>
       </ActiveWorkoutProvider>
     </LibraryProvider>
   );
