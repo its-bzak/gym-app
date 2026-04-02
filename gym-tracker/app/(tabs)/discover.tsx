@@ -970,33 +970,35 @@ export default function DiscoverScreen() {
                                                 keyboardType="numeric"
                                                 editable={!isSavingEntry}
                                             />
-                                            <TextInput
-                                                style={styles.modalInputHalf}
-                                                value={quickAddForm.protein}
-                                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, protein: value }))}
-                                                placeholder="Protein"
-                                                placeholderTextColor="#6F6F6F"
-                                                keyboardType="numeric"
-                                                editable={!isSavingEntry}
-                                            />
-                                            <TextInput
-                                                style={styles.modalInputHalf}
-                                                value={quickAddForm.fat}
-                                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, fat: value }))}
-                                                placeholder="Fat"
-                                                placeholderTextColor="#6F6F6F"
-                                                keyboardType="numeric"
-                                                editable={!isSavingEntry}
-                                            />
-                                            <TextInput
-                                                style={styles.modalInputHalf}
-                                                value={quickAddForm.carbs}
-                                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, carbs: value }))}
-                                                placeholder="Carbs"
-                                                placeholderTextColor="#6F6F6F"
-                                                keyboardType="numeric"
-                                                editable={!isSavingEntry}
-                                            />
+                                            <View style={styles.modalBottomRow}>
+                                                <TextInput
+                                                    style={styles.modalInputThirds}
+                                                    value={quickAddForm.protein}
+                                                    onChangeText={(value) => setQuickAddForm((current) => ({ ...current, protein: value }))}
+                                                    placeholder="Protein"
+                                                    placeholderTextColor="#6F6F6F"
+                                                    keyboardType="numeric"
+                                                    editable={!isSavingEntry}
+                                                />
+                                                <TextInput
+                                                    style={styles.modalInputThirds}
+                                                    value={quickAddForm.fat}
+                                                    onChangeText={(value) => setQuickAddForm((current) => ({ ...current, fat: value }))}
+                                                    placeholder="Fat"
+                                                    placeholderTextColor="#6F6F6F"
+                                                    keyboardType="numeric"
+                                                    editable={!isSavingEntry}
+                                                />
+                                                <TextInput
+                                                    style={styles.modalInputThirds}
+                                                    value={quickAddForm.carbs}
+                                                    onChangeText={(value) => setQuickAddForm((current) => ({ ...current, carbs: value }))}
+                                                    placeholder="Carbs"
+                                                    placeholderTextColor="#6F6F6F"
+                                                    keyboardType="numeric"
+                                                    editable={!isSavingEntry}
+                                                />
+                                            </View>
                                         </>
                                     ) : null}
                                 </View>
@@ -1306,6 +1308,11 @@ const styles = StyleSheet.create({
         backgroundColor: "#3A3A3A",
         marginBottom: 16,
     },
+    modalBottomRow: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 12,
+    },
     modalTitle: {
         color: "#F4F4F4",
         fontSize: 24,
@@ -1333,7 +1340,16 @@ const styles = StyleSheet.create({
         gap: 10,
     },
     modalInputHalf: {
-        width: "48%",
+        width: "48.25%",
+        minHeight: 50,
+        borderRadius: 16,
+        backgroundColor: "#202020",
+        color: "#F4F4F4",
+        paddingHorizontal: 16,
+        fontSize: 16,
+    },
+    modalInputThirds: {
+        width: "31.25%",
         minHeight: 50,
         borderRadius: 16,
         backgroundColor: "#202020",
