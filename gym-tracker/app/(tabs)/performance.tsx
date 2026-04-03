@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Polyline } from "react-native-svg";
 
@@ -12,10 +11,9 @@ import {
   mockNutritionGoal,
   mockWeightEntries,
 } from "@/mock/MainScreen/DailyMetricsSection";
-import { useGoalPlanWizard } from "@/context/GoalPlanWizardContext";
 import { getActiveGoalPlan, getDailyExerciseMetrics, getWeightEntries } from "@/services/dashboardService";
 import { getAuthenticatedUserId } from "@/services/profileService";
-import type { NutritionGoal, NutritionProgramRecommendation, WeightEntry, WeightGoal } from "@/types/dashboard";
+import type { NutritionGoal, WeightEntry, WeightGoal } from "@/types/dashboard";
 import { getCurrentDate } from "@/utils/dateFormat";
 import { getWeightTrend } from "@/utils/weightProgress";
 
@@ -101,20 +99,13 @@ function getEstimatedGoalDate(goal: WeightGoal | null, latestWeightKg: number | 
   });
 }
 
-function getRecommendationStatusLabel(status: NutritionProgramRecommendation["status"]): string {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
 export default function PerformanceScreen() {
   const [nutritionGoal, setNutritionGoal] = useState<NutritionGoal>(mockNutritionGoal);
   const [weightGoal, setWeightGoal] = useState<WeightGoal | null>(mockGoal);
-  const [latestRecommendation, setLatestRecommendation] =
-    useState<NutritionProgramRecommendation | null>(null);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>(mockWeightEntries);
   const [exerciseMetrics, setExerciseMetrics] = useState(EMPTY_EXERCISE_METRICS);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const { startGoalFlow, startProgramFlow } = useGoalPlanWizard();
 
   const latestWeight = useMemo(() => {
     if (!weightEntries.length) {
@@ -146,10 +137,9 @@ export default function PerformanceScreen() {
         if (!nextAuthenticatedUserId) {
           setNutritionGoal({ ...mockNutritionGoal });
           setWeightGoal({ ...mockGoal });
-          setLatestRecommendation(null);
           setWeightEntries([...mockWeightEntries]);
           setExerciseMetrics(getMockDailyExerciseMetrics(getCurrentDate()));
-          setLoadError("Using local goals data right now.");
+          setLoadError("Using local progress data right now.");
           return;
         }
 
@@ -169,15 +159,13 @@ export default function PerformanceScreen() {
         if (goalPlan) {
           setNutritionGoal(goalPlan.nutritionGoal);
           setWeightGoal(goalPlan.bodyGoal);
-          setLatestRecommendation(goalPlan.latestRecommendation);
           setLoadError(null);
           return;
         }
 
         setNutritionGoal({ ...mockNutritionGoal });
         setWeightGoal(null);
-        setLatestRecommendation(null);
-        setLoadError("No synced goal plan yet.");
+        setLoadError("No synced progress targets yet.");
       } catch {
         if (!isMounted) {
           return;
@@ -185,10 +173,9 @@ export default function PerformanceScreen() {
 
         setNutritionGoal({ ...mockNutritionGoal });
         setWeightGoal({ ...mockGoal });
-        setLatestRecommendation(null);
         setWeightEntries([...mockWeightEntries]);
         setExerciseMetrics(getMockDailyExerciseMetrics(getCurrentDate()));
-        setLoadError("Using local goals data right now.");
+        setLoadError("Using local progress data right now.");
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -202,16 +189,6 @@ export default function PerformanceScreen() {
       isMounted = false;
     };
   }, []);
-
-  const openGoalWizard = () => {
-    startGoalFlow(weightGoal, nutritionGoal, latestWeight);
-    router.push("/performance/goal-type");
-  };
-
-  const openProgramWizard = () => {
-    startProgramFlow(weightGoal, nutritionGoal, latestWeight);
-    router.push("/performance/program-mode");
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -227,6 +204,14 @@ export default function PerformanceScreen() {
         {loadError ? <Text style={styles.statusText}>{loadError}</Text> : null}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.roadmapCard}>
+            <Text style={styles.roadmapTitle}>Goal planning is deferred for now</Text>
+            <Text style={styles.roadmapText}>
+              This screen stays focused on current progress and daily performance. The guided goal and
+              program builder can land in a later release.
+            </Text>
+          </View>
+
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Weight Trend</Text>
@@ -246,11 +231,8 @@ export default function PerformanceScreen() {
             <View style={styles.sectionHeaderRow}>
               <View>
                 <Text style={styles.sectionTitle}>{weightGoal ? getGoalTypeLabel(weightGoal.goalType) : "No Active Goal"}</Text>
-                <Text style={styles.sectionSubtitle}>Full-screen setup with step-by-step questions</Text>
+                <Text style={styles.sectionSubtitle}>Current target tracking only</Text>
               </View>
-              <Pressable style={styles.sectionAction} onPress={openGoalWizard}>
-                <Text style={styles.sectionActionText}>{weightGoal ? "Edit" : "New Goal"}</Text>
-              </Pressable>
             </View>
 
             {weightGoal ? (
@@ -278,7 +260,7 @@ export default function PerformanceScreen() {
                 </View>
               </>
             ) : (
-              <Text style={styles.emptyText}>Start a new goal to define the phase and target.</Text>
+              <Text style={styles.emptyText}>Goal setup will be added later. For now this section shows synced targets when available.</Text>
             )}
           </View>
 
@@ -287,11 +269,8 @@ export default function PerformanceScreen() {
             <View style={styles.sectionHeaderRow}>
               <View>
                 <Text style={styles.sectionTitle}>{getProgramModeLabel(nutritionGoal.programMode)}</Text>
-                <Text style={styles.sectionSubtitle}>Manual path or generated path across full-screen steps</Text>
+                <Text style={styles.sectionSubtitle}>Current calorie and macro targets</Text>
               </View>
-              <Pressable style={styles.sectionAction} onPress={openProgramWizard}>
-                <Text style={styles.sectionActionText}>Create Program</Text>
-              </Pressable>
             </View>
 
             <NutritionSplitDonut
@@ -300,19 +279,8 @@ export default function PerformanceScreen() {
               carbs={nutritionGoal.carbsGoal}
               fat={nutritionGoal.fatGoal}
             />
+            <Text style={styles.emptyText}>Program creation and adaptive coaching are planned for a later update.</Text>
           </View>
-
-          {latestRecommendation ? (
-            <View style={styles.recommendationCard}>
-              <View style={styles.sectionHeaderRow}>
-                <View>
-                  <Text style={styles.sectionTitle}>Adaptive Recommendation</Text>
-                  <Text style={styles.sectionSubtitle}>{getRecommendationStatusLabel(latestRecommendation.status)}</Text>
-                </View>
-              </View>
-              <Text style={styles.recommendationText}>{latestRecommendation.reasonSummary}</Text>
-            </View>
-          ) : null}
 
           <View style={styles.trainingCard}>
             <Text style={styles.sectionTitle}>Today&apos;s Training</Text>
@@ -368,6 +336,23 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 14,
     paddingBottom: 120,
+  },
+  roadmapCard: {
+    backgroundColor: "#202020",
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 18,
+  },
+  roadmapTitle: {
+    color: "#F4F4F4",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  roadmapText: {
+    color: "#B8B8B8",
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 10,
   },
   summaryRow: {
     flexDirection: "row",
@@ -433,19 +418,6 @@ const styles = StyleSheet.create({
     maxWidth: 230,
     lineHeight: 18,
   },
-  sectionAction: {
-    minHeight: 34,
-    borderRadius: 16,
-    backgroundColor: "#2A2A2A",
-    paddingHorizontal: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sectionActionText: {
-    color: "#F4F4F4",
-    fontSize: 13,
-    fontWeight: "600",
-  },
   metricRow: {
     flexDirection: "row",
     gap: 10,
@@ -474,18 +446,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#8E8E8E",
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 16,
-  },
-  recommendationCard: {
-    backgroundColor: "#202020",
-    borderRadius: 22,
-    padding: 18,
-    marginTop: 18,
-  },
-  recommendationText: {
-    color: "#D0D0D0",
     fontSize: 14,
     lineHeight: 20,
     marginTop: 16,
