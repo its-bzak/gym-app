@@ -6,6 +6,7 @@ import type {
   FoodLogMealSlot,
   GoalPlan,
   GoalType,
+  LifetimeTrainingMetrics,
   NutritionGoal,
   NutritionProgramRecommendation,
   ProgramMode,
@@ -646,6 +647,32 @@ export async function getDailyExerciseMetrics(
   return data ? mapDailyExerciseMetricsRow(data) : null;
 }
 
+export async function getLifetimeTrainingMetrics(userId: string): Promise<LifetimeTrainingMetrics> {
+  const { data, error } = await supabase
+    .from("daily_exercise_metrics")
+    .select("volume_kg, duration_mins")
+    .eq("user_id", userId)
+    .returns<Array<Pick<DailyExerciseMetricsRow, "volume_kg" | "duration_mins">>>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.reduce<LifetimeTrainingMetrics>(
+    (totals, row) => {
+      totals.totalVolume += Number(row.volume_kg ?? 0);
+      totals.totalDurationMins += Number(row.duration_mins ?? 0);
+
+      return totals;
+    },
+    {
+      totalVolume: 0,
+      totalDurationMins: 0,
+      totalReps: null,
+    }
+  );
+}
+
 export async function getWeightEntries(userId: string): Promise<WeightEntry[]> {
   const { data, error } = await supabase
     .from("body_weight_entries")
@@ -908,22 +935,24 @@ export async function upsertActiveNutritionGoal(
 ): Promise<DashboardWriteResult<NutritionGoal>> {
   try {
     const existingPlan = await getActiveGoalPlan(userId);
+    const latestWeightEntry = existingPlan ? null : (await getWeightEntries(userId)).at(-1) ?? null;
 
-    if (!existingPlan) {
-      return {
-        success: false,
-        error: "Create a bodyweight goal before saving a nutrition program.",
-        shouldFallback: true,
-      };
-    }
+    const weightGoal = existingPlan
+      ? {
+          goalType: existingPlan.bodyGoal.goalType,
+          startWeightKg: existingPlan.bodyGoal.startWeightKg,
+          targetWeightKg: existingPlan.bodyGoal.targetWeightKg,
+          targetRateKgPerWeek: existingPlan.bodyGoal.targetRateKgPerWeek,
+        }
+      : {
+          goalType: "maintain" as const,
+          startWeightKg: latestWeightEntry?.weightKg ?? 74,
+          targetWeightKg: latestWeightEntry?.weightKg ?? 74,
+          targetRateKgPerWeek: 0,
+        };
 
     const result = await upsertActiveGoalPlan(userId, {
-      weightGoal: {
-        goalType: existingPlan.bodyGoal.goalType,
-        startWeightKg: existingPlan.bodyGoal.startWeightKg,
-        targetWeightKg: existingPlan.bodyGoal.targetWeightKg,
-        targetRateKgPerWeek: existingPlan.bodyGoal.targetRateKgPerWeek,
-      },
+      weightGoal,
       nutritionGoal: goal,
     });
 

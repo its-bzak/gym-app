@@ -6,6 +6,7 @@ import type {
     FoodLogDaySummary,
     FoodLogEntry,
     FoodLogMealSlot,
+    LifetimeTrainingMetrics,
     NutritionGoal,
     WeightEntry,
     WeightGoal,
@@ -105,6 +106,14 @@ export const dailyExerciseMetricsByDate: DailyExerciseMetrics[] = [
         workoutType: "Strength Training",
     },
 ];
+
+const mockTrainingRepsByDate: Record<string, number> = {
+    "2026-03-25": 182,
+    "2026-03-26": 214,
+    "2026-03-27": 296,
+    "2026-03-28": 156,
+    "2026-03-29": 0,
+};
 
 export const mockWeightEntries: WeightEntry[] = [
     { date: "2026-03-25", weightKg: 74 },
@@ -230,6 +239,23 @@ export function getDailyExerciseMetrics(date: Date | string) {
     return matchedMetrics
         ? stripDateFromExerciseMetrics(matchedMetrics)
         : defaultDailyExerciseMetrics;
+}
+
+export function getLifetimeTrainingMetrics(): LifetimeTrainingMetrics {
+    return dailyExerciseMetricsByDate.reduce<LifetimeTrainingMetrics>(
+        (totals, entry) => {
+            totals.totalVolume += entry.volume;
+            totals.totalDurationMins += entry.durationMins;
+            totals.totalReps = (totals.totalReps ?? 0) + (mockTrainingRepsByDate[entry.date] ?? 0);
+
+            return totals;
+        },
+        {
+            totalVolume: 0,
+            totalDurationMins: 0,
+            totalReps: 0,
+        }
+    );
 }
 
 export function upsertDailyMacroMetrics(date: Date | string, metrics: MacroBarProps): MacroBarProps {

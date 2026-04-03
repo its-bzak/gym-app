@@ -18,6 +18,12 @@ export type DailyExerciseMetrics = {
   workoutType: string;
 };
 
+export type LifetimeTrainingMetrics = {
+  totalVolume: number;
+  totalDurationMins: number;
+  totalReps: number | null;
+};
+
 export type WeightEntry = {
   date: string;
   weightKg: number;

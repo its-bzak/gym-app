@@ -1,26 +1,42 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Keyboard,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Polyline } from "react-native-svg";
 
 import NutritionSplitDonut from "@/components/performance/NutritionSplitDonut";
-import GoalProgressSection from "@/components/main/GoalProgress";
 import {
-  getDailyExerciseMetrics as getMockDailyExerciseMetrics,
+  getLifetimeTrainingMetrics as getMockLifetimeTrainingMetrics,
   mockGoal,
   mockNutritionGoal,
   mockWeightEntries,
+  upsertNutritionGoal as upsertMockNutritionGoal,
 } from "@/mock/MainScreen/DailyMetricsSection";
-import { getActiveGoalPlan, getDailyExerciseMetrics, getWeightEntries } from "@/services/dashboardService";
+import {
+  getActiveGoalPlan,
+  getLifetimeTrainingMetrics,
+  getWeightEntries,
+  type NutritionGoalInput,
+  upsertActiveNutritionGoal,
+} from "@/services/dashboardService";
 import { getAuthenticatedUserId } from "@/services/profileService";
-import type { NutritionGoal, WeightEntry, WeightGoal } from "@/types/dashboard";
-import { getCurrentDate } from "@/utils/dateFormat";
-import { getWeightTrend } from "@/utils/weightProgress";
+import type { LifetimeTrainingMetrics, NutritionGoal, WeightEntry, WeightGoal } from "@/types/dashboard";
+import { getLatestWeight, getWeightTrend } from "@/utils/weightProgress";
 
-const EMPTY_EXERCISE_METRICS = {
-  volume: 0,
-  durationMins: 0,
-  workoutType: "",
+const EMPTY_LIFETIME_TRAINING_METRICS: LifetimeTrainingMetrics = {
+  totalVolume: 0,
+  totalDurationMins: 0,
+  totalReps: null,
 };
 
 function WeightTrendMiniChart({ entries }: { entries: WeightEntry[] }) {
@@ -59,36 +75,58 @@ function WeightTrendMiniChart({ entries }: { entries: WeightEntry[] }) {
   );
 }
 
-function getGoalTypeLabel(goalType: WeightGoal["goalType"]): string {
-  if (goalType === "lose") {
-    return "Fat Loss";
-  }
-
-  if (goalType === "gain") {
-    return "Mass Gain";
-  }
-
-  return "Maintenance";
-}
-
 function getProgramModeLabel(mode: NutritionGoal["programMode"]): string {
   return mode === "guided" ? "Generated Program" : "Manual Program";
 }
 
-function getEstimatedGoalDate(goal: WeightGoal | null, latestWeightKg: number | null): string {
+function getTrendRateKgPerWeek(entries: WeightEntry[], windowSize: number = 14): number | null {
+  if (entries.length < 2) {
+    return null;
+  }
+
+  const recentEntries = entries.slice(-windowSize);
+  const firstEntry = recentEntries[0];
+  const lastEntry = recentEntries[recentEntries.length - 1];
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const elapsedDays = Math.max(
+    1,
+    Math.round((new Date(lastEntry.date).getTime() - new Date(firstEntry.date).getTime()) / msPerDay)
+  );
+
+  return ((lastEntry.weightKg - firstEntry.weightKg) / elapsedDays) * 7;
+}
+
+function getEstimatedGoalDate(goal: WeightGoal | null, entries: WeightEntry[]): string {
   if (!goal || goal.goalType === "maintain") {
     return "No target date";
   }
 
-  const currentWeight = latestWeightKg ?? goal.startWeightKg;
-  const remainingKg = Math.abs(goal.targetWeightKg - currentWeight);
-  const weeklyRate = Math.abs(goal.targetRateKgPerWeek);
+  const currentWeight = getLatestWeight(entries) ?? goal.startWeightKg;
 
-  if (!weeklyRate) {
-    return "No target date";
+  if (goal.goalType === "lose" && currentWeight <= goal.targetWeightKg) {
+    return "Goal reached";
   }
 
-  const daysRemaining = Math.ceil((remainingKg / weeklyRate) * 7);
+  if (goal.goalType === "gain" && currentWeight >= goal.targetWeightKg) {
+    return "Goal reached";
+  }
+
+  const actualRateKgPerWeek = getTrendRateKgPerWeek(entries);
+
+  if (!actualRateKgPerWeek || Math.abs(actualRateKgPerWeek) < 0.01) {
+    return "No trend yet";
+  }
+
+  if (goal.goalType === "lose" && actualRateKgPerWeek >= 0) {
+    return "Trend off target";
+  }
+
+  if (goal.goalType === "gain" && actualRateKgPerWeek <= 0) {
+    return "Trend off target";
+  }
+
+  const remainingKg = Math.abs(goal.targetWeightKg - currentWeight);
+  const daysRemaining = Math.ceil((remainingKg / Math.abs(actualRateKgPerWeek)) * 7);
   const estimatedDate = new Date();
   estimatedDate.setDate(estimatedDate.getDate() + Math.max(daysRemaining, 0));
 
@@ -99,27 +137,56 @@ function getEstimatedGoalDate(goal: WeightGoal | null, latestWeightKg: number | 
   });
 }
 
+function formatDurationTotal(durationMins: number): string {
+  const hours = Math.floor(durationMins / 60);
+  const minutes = durationMins % 60;
+
+  if (!hours) {
+    return `${minutes} min`;
+  }
+
+  if (!minutes) {
+    return `${hours} hr`;
+  }
+
+  return `${hours} hr ${minutes} min`;
+}
+
 export default function PerformanceScreen() {
   const [nutritionGoal, setNutritionGoal] = useState<NutritionGoal>(mockNutritionGoal);
   const [weightGoal, setWeightGoal] = useState<WeightGoal | null>(mockGoal);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>(mockWeightEntries);
-  const [exerciseMetrics, setExerciseMetrics] = useState(EMPTY_EXERCISE_METRICS);
+  const [lifetimeTrainingMetrics, setLifetimeTrainingMetrics] = useState<LifetimeTrainingMetrics>(
+    EMPTY_LIFETIME_TRAINING_METRICS
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  const latestWeight = useMemo(() => {
-    if (!weightEntries.length) {
-      return null;
-    }
-
-    return weightEntries[weightEntries.length - 1].weightKg;
-  }, [weightEntries]);
+  const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
+  const [isTargetsModalVisible, setIsTargetsModalVisible] = useState(false);
+  const [targetsError, setTargetsError] = useState<string | null>(null);
+  const [isSavingTargets, setIsSavingTargets] = useState(false);
+  const [targetsForm, setTargetsForm] = useState({
+    calorieGoal: String(mockNutritionGoal.calorieGoal),
+    proteinGoal: String(mockNutritionGoal.proteinGoal),
+    carbsGoal: String(mockNutritionGoal.carbsGoal),
+    fatGoal: String(mockNutritionGoal.fatGoal),
+  });
 
   const weightTrend = useMemo(() => getWeightTrend(weightEntries), [weightEntries]);
   const estimatedGoalDate = useMemo(
-    () => getEstimatedGoalDate(weightGoal, latestWeight),
-    [latestWeight, weightGoal]
+    () => getEstimatedGoalDate(weightGoal, weightEntries),
+    [weightEntries, weightGoal]
   );
+  const trendRateKgPerWeek = useMemo(() => getTrendRateKgPerWeek(weightEntries), [weightEntries]);
+
+  const resetTargetsForm = (goal: NutritionGoal) => {
+    setTargetsForm({
+      calorieGoal: String(goal.calorieGoal),
+      proteinGoal: String(goal.proteinGoal),
+      carbsGoal: String(goal.carbsGoal),
+      fatGoal: String(goal.fatGoal),
+    });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -134,19 +201,22 @@ export default function PerformanceScreen() {
           return;
         }
 
+        setAuthenticatedUserId(nextAuthenticatedUserId);
+
         if (!nextAuthenticatedUserId) {
           setNutritionGoal({ ...mockNutritionGoal });
           setWeightGoal({ ...mockGoal });
           setWeightEntries([...mockWeightEntries]);
-          setExerciseMetrics(getMockDailyExerciseMetrics(getCurrentDate()));
+          setLifetimeTrainingMetrics(getMockLifetimeTrainingMetrics());
+          resetTargetsForm(mockNutritionGoal);
           setLoadError("Using local progress data right now.");
           return;
         }
 
-        const [goalPlan, nextWeightEntries, nextExerciseMetrics] = await Promise.all([
+        const [goalPlan, nextWeightEntries, nextLifetimeTrainingMetrics] = await Promise.all([
           getActiveGoalPlan(nextAuthenticatedUserId),
           getWeightEntries(nextAuthenticatedUserId),
-          getDailyExerciseMetrics(nextAuthenticatedUserId, getCurrentDate()),
+          getLifetimeTrainingMetrics(nextAuthenticatedUserId),
         ]);
 
         if (!isMounted) {
@@ -154,27 +224,31 @@ export default function PerformanceScreen() {
         }
 
         setWeightEntries(nextWeightEntries);
-        setExerciseMetrics(nextExerciseMetrics ?? EMPTY_EXERCISE_METRICS);
+        setLifetimeTrainingMetrics(nextLifetimeTrainingMetrics);
 
         if (goalPlan) {
           setNutritionGoal(goalPlan.nutritionGoal);
           setWeightGoal(goalPlan.bodyGoal);
+          resetTargetsForm(goalPlan.nutritionGoal);
           setLoadError(null);
           return;
         }
 
         setNutritionGoal({ ...mockNutritionGoal });
         setWeightGoal(null);
+        resetTargetsForm(mockNutritionGoal);
         setLoadError("No synced progress targets yet.");
       } catch {
         if (!isMounted) {
           return;
         }
 
+        setAuthenticatedUserId(null);
         setNutritionGoal({ ...mockNutritionGoal });
         setWeightGoal({ ...mockGoal });
         setWeightEntries([...mockWeightEntries]);
-        setExerciseMetrics(getMockDailyExerciseMetrics(getCurrentDate()));
+        setLifetimeTrainingMetrics(getMockLifetimeTrainingMetrics());
+        resetTargetsForm(mockNutritionGoal);
         setLoadError("Using local progress data right now.");
       } finally {
         if (isMounted) {
@@ -190,6 +264,86 @@ export default function PerformanceScreen() {
     };
   }, []);
 
+  const openTargetsModal = () => {
+    resetTargetsForm(nutritionGoal);
+    setTargetsError(null);
+    setIsTargetsModalVisible(true);
+  };
+
+  const closeTargetsModal = () => {
+    if (isSavingTargets) {
+      return;
+    }
+
+    setTargetsError(null);
+    setIsTargetsModalVisible(false);
+  };
+
+  const handleSaveTargets = async () => {
+    const calorieGoal = Number(targetsForm.calorieGoal);
+    const proteinGoal = Number(targetsForm.proteinGoal);
+    const carbsGoal = Number(targetsForm.carbsGoal);
+    const fatGoal = Number(targetsForm.fatGoal);
+    const values = [calorieGoal, proteinGoal, carbsGoal, fatGoal];
+
+    if (values.some((value) => !Number.isFinite(value) || value < 0) || calorieGoal <= 0) {
+      setTargetsError("Enter valid calorie and macro targets.");
+      return;
+    }
+
+    const nextGoal: NutritionGoal = {
+      ...nutritionGoal,
+      programMode: "manual",
+      calorieGoal,
+      proteinGoal,
+      carbsGoal,
+      fatGoal,
+      adaptiveEnabled: false,
+    };
+
+    const input: NutritionGoalInput = {
+      programMode: nextGoal.programMode,
+      calorieGoal: nextGoal.calorieGoal,
+      proteinGoal: nextGoal.proteinGoal,
+      carbsGoal: nextGoal.carbsGoal,
+      fatGoal: nextGoal.fatGoal,
+      maintenanceCalories: nextGoal.maintenanceCalories ?? nextGoal.calorieGoal,
+      plannedDailyEnergyDelta: nextGoal.plannedDailyEnergyDelta ?? 0,
+      proteinPreference: nextGoal.proteinPreference,
+      carbPreference: nextGoal.carbPreference,
+      fatPreference: nextGoal.fatPreference,
+      adaptiveEnabled: false,
+    };
+
+    setIsSavingTargets(true);
+    setTargetsError(null);
+
+    try {
+      if (authenticatedUserId) {
+        const result = await upsertActiveNutritionGoal(authenticatedUserId, input);
+
+        if (result.success && result.data) {
+          setNutritionGoal(result.data);
+          setLoadError(null);
+          setIsTargetsModalVisible(false);
+          return;
+        }
+
+        if (!result.shouldFallback) {
+          setTargetsError(result.error ?? "Could not save nutrition targets.");
+          return;
+        }
+      }
+
+      const fallbackGoal = upsertMockNutritionGoal(nextGoal);
+      setNutritionGoal(fallbackGoal);
+      setLoadError("Using local progress data right now.");
+      setIsTargetsModalVisible(false);
+    } finally {
+      setIsSavingTargets(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
@@ -198,20 +352,12 @@ export default function PerformanceScreen() {
         {isLoading ? (
           <View style={styles.statusRow}>
             <ActivityIndicator size="small" color="#BDBDBD" />
-            <Text style={styles.statusText}>Syncing goal plan</Text>
+            <Text style={styles.statusText}>Syncing performance</Text>
           </View>
         ) : null}
         {loadError ? <Text style={styles.statusText}>{loadError}</Text> : null}
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.roadmapCard}>
-            <Text style={styles.roadmapTitle}>Goal planning is deferred for now</Text>
-            <Text style={styles.roadmapText}>
-              This screen stays focused on current progress and daily performance. The guided goal and
-              program builder can land in a later release.
-            </Text>
-          </View>
-
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Weight Trend</Text>
@@ -222,55 +368,25 @@ export default function PerformanceScreen() {
 
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Estimated Goal Date</Text>
+              <Text style={styles.summarySubtitle}>
+                {trendRateKgPerWeek === null
+                  ? "Based on real trend rate"
+                  : `${trendRateKgPerWeek >= 0 ? "+" : ""}${trendRateKgPerWeek.toFixed(2)} kg/wk actual`}
+              </Text>
               <Text style={styles.summaryDate}>{estimatedGoalDate}</Text>
             </View>
           </View>
 
-          <Text style={styles.sectionHeading}>Weight Goal</Text>
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeaderRow}>
-              <View>
-                <Text style={styles.sectionTitle}>{weightGoal ? getGoalTypeLabel(weightGoal.goalType) : "No Active Goal"}</Text>
-                <Text style={styles.sectionSubtitle}>Current target tracking only</Text>
-              </View>
-            </View>
-
-            {weightGoal ? (
-              <>
-                <View style={styles.metricRow}>
-                  <View style={styles.metricBlock}>
-                    <Text style={styles.metricLabel}>Start</Text>
-                    <Text style={styles.metricValue}>{weightGoal.startWeightKg.toFixed(1)} kg</Text>
-                  </View>
-                  <View style={styles.metricBlock}>
-                    <Text style={styles.metricLabel}>Target</Text>
-                    <Text style={styles.metricValue}>{weightGoal.targetWeightKg.toFixed(1)} kg</Text>
-                  </View>
-                  <View style={styles.metricBlock}>
-                    <Text style={styles.metricLabel}>Rate</Text>
-                    <Text style={styles.metricValue}>
-                      {weightGoal.goalType === "maintain"
-                        ? "Hold"
-                        : `${weightGoal.targetRateKgPerWeek.toFixed(2)} kg/wk`}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.progressWrap}>
-                  <GoalProgressSection entries={weightEntries} goal={weightGoal} />
-                </View>
-              </>
-            ) : (
-              <Text style={styles.emptyText}>Goal setup will be added later. For now this section shows synced targets when available.</Text>
-            )}
-          </View>
-
-          <Text style={styles.sectionHeading}>Nutrition Program</Text>
+          <Text style={styles.sectionHeading}>Calorie & Macro Goals</Text>
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeaderRow}>
               <View>
                 <Text style={styles.sectionTitle}>{getProgramModeLabel(nutritionGoal.programMode)}</Text>
-                <Text style={styles.sectionSubtitle}>Current calorie and macro targets</Text>
+                <Text style={styles.sectionSubtitle}>Manual targets you can update anytime</Text>
               </View>
+              <Pressable style={styles.sectionButton} onPress={openTargetsModal}>
+                <Text style={styles.sectionButtonText}>Edit Targets</Text>
+              </Pressable>
             </View>
 
             <NutritionSplitDonut
@@ -279,24 +395,121 @@ export default function PerformanceScreen() {
               carbs={nutritionGoal.carbsGoal}
               fat={nutritionGoal.fatGoal}
             />
-            <Text style={styles.emptyText}>Program creation and adaptive coaching are planned for a later update.</Text>
-          </View>
 
-          <View style={styles.trainingCard}>
-            <Text style={styles.sectionTitle}>Today&apos;s Training</Text>
-            <Text style={styles.sectionSubtitle}>{exerciseMetrics.workoutType || "No session logged"}</Text>
             <View style={styles.metricRow}>
               <View style={styles.metricBlock}>
-                <Text style={styles.metricLabel}>Volume</Text>
-                <Text style={styles.metricValue}>{exerciseMetrics.volume.toLocaleString()} kg</Text>
+                <Text style={styles.metricLabel}>Calories</Text>
+                <Text style={styles.metricValue}>{nutritionGoal.calorieGoal}</Text>
               </View>
               <View style={styles.metricBlock}>
-                <Text style={styles.metricLabel}>Duration</Text>
-                <Text style={styles.metricValue}>{exerciseMetrics.durationMins} min</Text>
+                <Text style={styles.metricLabel}>Protein</Text>
+                <Text style={styles.metricValue}>{`${nutritionGoal.proteinGoal} g`}</Text>
+              </View>
+            </View>
+
+            <View style={styles.metricRow}>
+              <View style={styles.metricBlock}>
+                <Text style={styles.metricLabel}>Carbs</Text>
+                <Text style={styles.metricValue}>{`${nutritionGoal.carbsGoal} g`}</Text>
+              </View>
+              <View style={styles.metricBlock}>
+                <Text style={styles.metricLabel}>Fat</Text>
+                <Text style={styles.metricValue}>{`${nutritionGoal.fatGoal} g`}</Text>
+              </View>
+            </View>
+          </View>
+
+          <Text style={styles.sectionHeading}>Lifetime Training Metrics</Text>
+          <View style={styles.trainingCard}>
+            <Text style={styles.sectionTitle}>All-time totals</Text>
+            <Text style={styles.sectionSubtitle}>Built from recorded training history</Text>
+
+            <View style={styles.metricRow}>
+              <View style={styles.metricBlock}>
+                <Text style={styles.metricLabel}>Lifetime Volume</Text>
+                <Text style={styles.metricValue}>{`${Math.round(lifetimeTrainingMetrics.totalVolume).toLocaleString()} kg`}</Text>
+              </View>
+              <View style={styles.metricBlock}>
+                <Text style={styles.metricLabel}>Lifetime Duration</Text>
+                <Text style={styles.metricValue}>{formatDurationTotal(lifetimeTrainingMetrics.totalDurationMins)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.metricRow}>
+              <View style={styles.metricBlockWide}>
+                <Text style={styles.metricLabel}>Lifetime Reps</Text>
+                <Text style={styles.metricValue}>
+                  {lifetimeTrainingMetrics.totalReps === null
+                    ? "Not tracked yet"
+                    : lifetimeTrainingMetrics.totalReps.toLocaleString()}
+                </Text>
               </View>
             </View>
           </View>
         </ScrollView>
+
+        <Modal
+          animationType="slide"
+          transparent
+          visible={isTargetsModalVisible}
+          onRequestClose={closeTargetsModal}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.modalCard}>
+                  <Text style={styles.modalTitle}>Set calorie and macro goals</Text>
+                  <Text style={styles.modalSubtitle}>Choose the daily targets you want the app to display.</Text>
+
+                  <TextInput
+                    style={styles.input}
+                    value={targetsForm.calorieGoal}
+                    onChangeText={(value) => setTargetsForm((current) => ({ ...current, calorieGoal: value }))}
+                    placeholder="Calories"
+                    placeholderTextColor="#6F6F6F"
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={targetsForm.proteinGoal}
+                    onChangeText={(value) => setTargetsForm((current) => ({ ...current, proteinGoal: value }))}
+                    placeholder="Protein (g)"
+                    placeholderTextColor="#6F6F6F"
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={targetsForm.carbsGoal}
+                    onChangeText={(value) => setTargetsForm((current) => ({ ...current, carbsGoal: value }))}
+                    placeholder="Carbs (g)"
+                    placeholderTextColor="#6F6F6F"
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={targetsForm.fatGoal}
+                    onChangeText={(value) => setTargetsForm((current) => ({ ...current, fatGoal: value }))}
+                    placeholder="Fat (g)"
+                    placeholderTextColor="#6F6F6F"
+                    keyboardType="numeric"
+                  />
+
+                  {targetsError ? <Text style={styles.modalError}>{targetsError}</Text> : null}
+
+                  <View style={styles.modalActions}>
+                    <Pressable style={styles.modalSecondaryButton} onPress={closeTargetsModal}>
+                      <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable style={styles.modalPrimaryButton} onPress={handleSaveTargets}>
+                      <Text style={styles.modalPrimaryButtonText}>
+                        {isSavingTargets ? "Saving..." : "Save Targets"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -337,23 +550,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 120,
   },
-  roadmapCard: {
-    backgroundColor: "#202020",
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 18,
-  },
-  roadmapTitle: {
-    color: "#F4F4F4",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  roadmapText: {
-    color: "#B8B8B8",
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 10,
-  },
   summaryRow: {
     flexDirection: "row",
     gap: 12,
@@ -371,7 +567,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   summarySubtitle: {
-    color: "#4E4E4E",
+    color: "#6C6C6C",
     fontSize: 13,
     marginTop: 4,
     marginBottom: 16,
@@ -386,7 +582,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "500",
     lineHeight: 30,
-    marginTop: 30,
+    marginTop: 8,
   },
   sectionHeading: {
     color: "#F4F4F4",
@@ -418,12 +614,29 @@ const styles = StyleSheet.create({
     maxWidth: 230,
     lineHeight: 18,
   },
+  sectionButton: {
+    borderRadius: 16,
+    backgroundColor: "#F4F4F4",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  sectionButtonText: {
+    color: "#121212",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   metricRow: {
     flexDirection: "row",
     gap: 10,
     marginTop: 16,
   },
   metricBlock: {
+    flex: 1,
+    borderRadius: 18,
+    backgroundColor: "#1A1A1A",
+    padding: 14,
+  },
+  metricBlockWide: {
     flex: 1,
     borderRadius: 18,
     backgroundColor: "#1A1A1A",
@@ -441,19 +654,79 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 8,
   },
-  progressWrap: {
-    marginTop: 18,
-  },
-  emptyText: {
-    color: "#8E8E8E",
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 16,
-  },
   trainingCard: {
     backgroundColor: "#202020",
     borderRadius: 22,
     padding: 18,
     marginTop: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: "#151515",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 32,
+    gap: 12,
+  },
+  modalTitle: {
+    color: "#F4F4F4",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  modalSubtitle: {
+    color: "#8E8E8E",
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 6,
+  },
+  input: {
+    width: "100%",
+    minHeight: 50,
+    borderRadius: 16,
+    backgroundColor: "#202020",
+    color: "#F4F4F4",
+    paddingHorizontal: 16,
+    fontSize: 16,
+  },
+  modalError: {
+    color: "#F28B82",
+    fontSize: 13,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "#202020",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSecondaryButtonText: {
+    color: "#F4F4F4",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "#F4F4F4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalPrimaryButtonText: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });
