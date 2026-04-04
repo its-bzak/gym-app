@@ -1,8 +1,34 @@
 import type { WeightEntry, WeightGoal } from "@/types/dashboard";
 
+function sortEntriesByDate(entries: WeightEntry[]) {
+    return [...entries].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function getDateOffset(dateString: string, offsetDays: number) {
+    const date = new Date(`${dateString}T00:00:00`);
+    date.setDate(date.getDate() + offsetDays);
+
+    return date.toISOString().slice(0, 10);
+}
+
+function getAverageFromEntries(entries: WeightEntry[]) {
+    if (!entries.length) {
+        return null;
+    }
+
+    const total = entries.reduce((sum, entry) => sum + entry.weightKg, 0);
+
+    return total / entries.length;
+}
+
+function getEntriesBetween(entries: WeightEntry[], startDate: string, endDate: string) {
+    return entries.filter((entry) => entry.date >= startDate && entry.date <= endDate);
+}
+
 export function getLatestWeight(entries: WeightEntry[]) {
     if (!entries.length) return null;
-    return entries[entries.length - 1].weightKg;
+    const sortedEntries = sortEntriesByDate(entries);
+    return sortedEntries[sortedEntries.length - 1].weightKg;
 }
 
 export function getAverageWeight(
@@ -11,39 +37,39 @@ export function getAverageWeight(
 ) {
     if (!entries.length) return null;
 
-    const recentEntries = entries.slice(-days);
+    const sortedEntries = sortEntriesByDate(entries);
+    const latestEntry = sortedEntries[sortedEntries.length - 1];
+    const startDate = getDateOffset(latestEntry.date, -(days - 1));
+    const recentEntries = getEntriesBetween(sortedEntries, startDate, latestEntry.date);
 
-    const total = recentEntries.reduce(
-        (sum, entry) => sum + entry.weightKg,
-        0
-    );
-
-    return total / recentEntries.length;
+    return getAverageFromEntries(recentEntries);
 }
 
 export function getWeightTrend(
     entries: WeightEntry[],
     windowSize: number = 7
 ) {
-    if (entries.length < windowSize * 2) {
+    if (!entries.length) {
         return {
             currentWeight: 0,
             previousWeight: 0,
             changeKg: 0,
-            chartData: entries.map((e) => e.weightKg),
+            chartData: [],
         };
     }
 
-    const chartData = entries.map((entry) => entry.weightKg);
+    const sortedEntries = sortEntriesByDate(entries);
+    const chartData = sortedEntries.map((entry) => entry.weightKg);
+    const latestEntry = sortedEntries[sortedEntries.length - 1];
+    const currentStartDate = getDateOffset(latestEntry.date, -(windowSize - 1));
+    const previousEndDate = getDateOffset(currentStartDate, -1);
+    const previousStartDate = getDateOffset(previousEndDate, -(windowSize - 1));
 
-    const currentWeek = entries.slice(-windowSize);
-    const previousWeek = entries.slice(-windowSize * 2, -windowSize);
+    const currentWeek = getEntriesBetween(sortedEntries, currentStartDate, latestEntry.date);
+    const previousWeek = getEntriesBetween(sortedEntries, previousStartDate, previousEndDate);
 
-    const average = (arr: WeightEntry[]) =>
-        arr.reduce((sum, entry) => sum + entry.weightKg, 0) / arr.length;
-
-    const currentWeight = average(currentWeek);
-    const previousWeight = average(previousWeek);
+    const currentWeight = getAverageFromEntries(currentWeek) ?? sortedEntries[sortedEntries.length - 1].weightKg;
+    const previousWeight = getAverageFromEntries(previousWeek) ?? currentWeight;
     const changeKg = currentWeight - previousWeight;
 
     return {

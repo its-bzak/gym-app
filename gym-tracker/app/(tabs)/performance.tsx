@@ -19,13 +19,17 @@ import {
   mockNutritionGoal,
   mockWeightEntries,
   upsertNutritionGoal as upsertMockNutritionGoal,
+  upsertWeightGoal as upsertMockWeightGoal,
 } from "@/mock/MainScreen/DailyMetricsSection";
 import {
   getActiveGoalPlan,
   getLifetimeTrainingMetrics,
   getWeightEntries,
   type NutritionGoalInput,
+  type WeightGoalInput,
+  upsertActiveGoalPlan,
   upsertActiveNutritionGoal,
+  upsertActiveWeightGoal,
 } from "@/services/dashboardService";
 import { useDisplayUnitPreference } from "@/hooks/use-display-unit-preference";
 import { getAuthenticatedUserId } from "@/services/profileService";
@@ -33,7 +37,9 @@ import type { LifetimeTrainingMetrics, NutritionGoal, WeightEntry, WeightGoal } 
 import {
   convertWeightKgToUnit,
   formatWeight,
+  formatWeightValue,
   getWeightUnitLabel,
+  convertWeightUnitToKg,
   type UnitPreference,
 } from "@/utils/unitSystem";
 import { getLatestWeight, getWeightTrend } from "@/utils/weightProgress";
@@ -50,21 +56,18 @@ function getProgramModeLabel(mode: NutritionGoal["programMode"]): string {
   return mode === "guided" ? "Generated Program" : "Manual Program";
 }
 
-function getTrendRateKgPerWeek(entries: WeightEntry[], windowSize: number = 14): number | null {
-  if (entries.length < 2) {
+function getTrendRateKgPerWeek(entries: WeightEntry[]): number | null {
+  if (!entries.length) {
     return null;
   }
 
-  const recentEntries = entries.slice(-windowSize);
-  const firstEntry = recentEntries[0];
-  const lastEntry = recentEntries[recentEntries.length - 1];
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const elapsedDays = Math.max(
-    1,
-    Math.round((new Date(lastEntry.date).getTime() - new Date(firstEntry.date).getTime()) / msPerDay)
-  );
+  const weeklyTrend = getWeightTrend(entries, 7);
 
-  return ((lastEntry.weightKg - firstEntry.weightKg) / elapsedDays) * 7;
+  if (weeklyTrend.currentWeight === weeklyTrend.previousWeight) {
+    return null;
+  }
+
+  return weeklyTrend.changeKg;
 }
 
 function getEstimatedGoalDate(goal: WeightGoal | null, entries: WeightEntry[]): string {
@@ -128,13 +131,17 @@ function getGoalStartDelta(goal: WeightGoal | null, entries: WeightEntry[]): num
     return null;
   }
 
+  const goalStartWeight = [...entries]
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .find((entry) => entry.date >= goal.startedOn)?.weightKg ?? goal.startWeightKg;
+
   const latestWeight = getLatestWeight(entries);
 
   if (latestWeight === null) {
     return null;
   }
 
-  return latestWeight - goal.startWeightKg;
+  return latestWeight - goalStartWeight;
 }
 
 function getTrendArrow(value: number): string {
@@ -182,7 +189,27 @@ function formatMetricCount(value: number | null, suffix: string): string {
     return "No Info";
   }
 
-  return `${formatCompactNumber(value)} ${suffix}`;
+  return suffix ? `${formatCompactNumber(value)} ${suffix}` : formatCompactNumber(value);
+}
+
+function getGoalType(startWeightKg: number, targetWeightKg: number): WeightGoal["goalType"] {
+  if (targetWeightKg < startWeightKg) {
+    return "lose";
+  }
+
+  if (targetWeightKg > startWeightKg) {
+    return "gain";
+  }
+
+  return "maintain";
+}
+
+function formatGoalRate(rateKgPerWeek: number, unitPreference: UnitPreference): string {
+  if (rateKgPerWeek <= 0) {
+    return `0 ${getWeightUnitLabel(unitPreference)} / week`;
+  }
+
+  return `${formatWeightValue(rateKgPerWeek, unitPreference, 1)} ${getWeightUnitLabel(unitPreference)} / week`;
 }
 
 export default function PerformanceScreen() {
@@ -198,12 +225,20 @@ export default function PerformanceScreen() {
   const [isTargetsModalVisible, setIsTargetsModalVisible] = useState(false);
   const [targetsError, setTargetsError] = useState<string | null>(null);
   const [isSavingTargets, setIsSavingTargets] = useState(false);
+  const [isGoalModalVisible, setIsGoalModalVisible] = useState(false);
+  const [goalError, setGoalError] = useState<string | null>(null);
+  const [isSavingGoal, setIsSavingGoal] = useState(false);
   const { unitPreference } = useDisplayUnitPreference();
   const [targetsForm, setTargetsForm] = useState({
     calorieGoal: String(mockNutritionGoal.calorieGoal),
     proteinGoal: String(mockNutritionGoal.proteinGoal),
     carbsGoal: String(mockNutritionGoal.carbsGoal),
     fatGoal: String(mockNutritionGoal.fatGoal),
+  });
+  const [goalForm, setGoalForm] = useState({
+    startWeight: String(mockGoal.startWeightKg),
+    targetWeight: String(mockGoal.targetWeightKg),
+    targetRate: String(mockGoal.targetRateKgPerWeek),
   });
 
   const weightTrend = useMemo(() => getWeightTrend(weightEntries), [weightEntries]);
@@ -217,12 +252,37 @@ export default function PerformanceScreen() {
     [weightEntries, weightGoal]
   );
 
+  const resolvedWeightGoal = useMemo<WeightGoal>(() => {
+    if (weightGoal) {
+      return weightGoal;
+    }
+
+    const latestWeightKg = getLatestWeight(weightEntries) ?? mockGoal.startWeightKg;
+
+    return {
+      ...mockGoal,
+      goalType: "maintain",
+      startWeightKg: latestWeightKg,
+      targetWeightKg: latestWeightKg,
+      targetRateKgPerWeek: 0,
+      startedOn: new Date().toISOString().slice(0, 10),
+    };
+  }, [weightEntries, weightGoal]);
+
   const resetTargetsForm = (goal: NutritionGoal) => {
     setTargetsForm({
       calorieGoal: String(goal.calorieGoal),
       proteinGoal: String(goal.proteinGoal),
       carbsGoal: String(goal.carbsGoal),
       fatGoal: String(goal.fatGoal),
+    });
+  };
+
+  const resetGoalForm = (goal: WeightGoal) => {
+    setGoalForm({
+      startWeight: formatWeightValue(goal.startWeightKg, unitPreference, 1),
+      targetWeight: formatWeightValue(goal.targetWeightKg, unitPreference, 1),
+      targetRate: formatWeightValue(goal.targetRateKgPerWeek, unitPreference, 1),
     });
   };
 
@@ -308,6 +368,12 @@ export default function PerformanceScreen() {
     setIsTargetsModalVisible(true);
   };
 
+  const openGoalModal = () => {
+    resetGoalForm(resolvedWeightGoal);
+    setGoalError(null);
+    setIsGoalModalVisible(true);
+  };
+
   const closeTargetsModal = () => {
     if (isSavingTargets) {
       return;
@@ -315,6 +381,15 @@ export default function PerformanceScreen() {
 
     setTargetsError(null);
     setIsTargetsModalVisible(false);
+  };
+
+  const closeGoalModal = () => {
+    if (isSavingGoal) {
+      return;
+    }
+
+    setGoalError(null);
+    setIsGoalModalVisible(false);
   };
 
   const handleSaveTargets = async () => {
@@ -382,6 +457,91 @@ export default function PerformanceScreen() {
     }
   };
 
+  const handleSaveGoal = async () => {
+    const startWeightValue = Number(goalForm.startWeight);
+    const targetWeightValue = Number(goalForm.targetWeight);
+    const targetRateValue = Number(goalForm.targetRate);
+
+    if (
+      [startWeightValue, targetWeightValue, targetRateValue].some(
+        (value) => !Number.isFinite(value) || value < 0
+      ) ||
+      startWeightValue <= 0 ||
+      targetWeightValue <= 0
+    ) {
+      setGoalError("Enter valid starting, target, and weekly rate values.");
+      return;
+    }
+
+    const startWeightKg = convertWeightUnitToKg(startWeightValue, unitPreference);
+    const targetWeightKg = convertWeightUnitToKg(targetWeightValue, unitPreference);
+    const goalType = getGoalType(startWeightKg, targetWeightKg);
+    const targetRateKgPerWeek =
+      goalType === "maintain" ? 0 : convertWeightUnitToKg(targetRateValue, unitPreference);
+
+    const nextGoal: WeightGoal = {
+      ...resolvedWeightGoal,
+      goalType,
+      status: "active",
+      startWeightKg,
+      targetWeightKg,
+      targetRateKgPerWeek,
+      startedOn: weightGoal?.startedOn ?? new Date().toISOString().slice(0, 10),
+    };
+
+    const input: WeightGoalInput = {
+      goalType: nextGoal.goalType,
+      startWeightKg: nextGoal.startWeightKg,
+      targetWeightKg: nextGoal.targetWeightKg,
+      targetRateKgPerWeek: nextGoal.targetRateKgPerWeek,
+    };
+
+    setIsSavingGoal(true);
+    setGoalError(null);
+
+    try {
+      if (authenticatedUserId) {
+        const result = weightGoal
+          ? await upsertActiveWeightGoal(authenticatedUserId, input)
+          : await upsertActiveGoalPlan(authenticatedUserId, {
+              weightGoal: input,
+              nutritionGoal: {
+                programMode: nutritionGoal.programMode,
+                calorieGoal: nutritionGoal.calorieGoal,
+                proteinGoal: nutritionGoal.proteinGoal,
+                carbsGoal: nutritionGoal.carbsGoal,
+                fatGoal: nutritionGoal.fatGoal,
+                maintenanceCalories: nutritionGoal.maintenanceCalories ?? nutritionGoal.calorieGoal,
+                plannedDailyEnergyDelta: nutritionGoal.plannedDailyEnergyDelta ?? 0,
+                proteinPreference: nutritionGoal.proteinPreference,
+                carbPreference: nutritionGoal.carbPreference,
+                fatPreference: nutritionGoal.fatPreference,
+                adaptiveEnabled: nutritionGoal.adaptiveEnabled,
+              },
+            });
+
+        if (result.success && result.data) {
+          setWeightGoal("bodyGoal" in result.data ? result.data.bodyGoal : result.data);
+          setLoadError(null);
+          setIsGoalModalVisible(false);
+          return;
+        }
+
+        if (!result.shouldFallback) {
+          setGoalError(result.error ?? "Could not save bodyweight goal.");
+          return;
+        }
+      }
+
+      const fallbackGoal = upsertMockWeightGoal(nextGoal);
+      setWeightGoal(fallbackGoal);
+      setLoadError("Using local progress data right now.");
+      setIsGoalModalVisible(false);
+    } finally {
+      setIsSavingGoal(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
@@ -399,9 +559,11 @@ export default function PerformanceScreen() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Weight Trend</Text>
-              <Text style={styles.weightTrendValue}>{formatTrendValue(weightTrend.changeKg, unitPreference)}</Text>
-              <Text style={styles.summaryFooterText}>{`in the last week`}</Text>
-              <Text style={styles.weightSummaryFooterText}>
+              <View style={styles.summaryCardContent}>
+                <Text style={styles.weightTrendValue}>{formatTrendValue(weightTrend.changeKg, unitPreference)}</Text>
+                <Text style={styles.summaryFooterText}>in the last week</Text>
+              </View>
+              <Text style={styles.summaryBottomText}>
                 {goalStartDeltaKg === null
                   ? "No active goal baseline"
                   : `${formatTrendValue(goalStartDeltaKg, unitPreference)} total`}
@@ -410,16 +572,42 @@ export default function PerformanceScreen() {
 
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Projected Goal Date</Text>
-              <Text style={styles.summaryGoalDate}>{estimatedGoalDate}</Text>
+              <View style={styles.summaryCardContent}>
+                <Text style={styles.summaryGoalDate}>{estimatedGoalDate}</Text>
+              </View>
+              <Text style={styles.summaryBottomText}>based on current rate</Text>
+            </View>
+          </View>
+
+          <Text style={styles.sectionHeading}>Bodyweight Goal</Text>
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Current Goal</Text>
+              <Pressable style={styles.sectionButton} onPress={openGoalModal}>
+                <Text style={styles.sectionButtonText}>Edit Goal</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.metricRowTop}>
+              <View style={styles.metricBlockTop}>
+                <Text style={styles.metricLabel}>Start Weight</Text>
+                <Text style={styles.metricValue}>{formatWeight(resolvedWeightGoal.startWeightKg, unitPreference)}</Text>
+              </View>
+              <View style={styles.metricBlockTop}>
+                <Text style={styles.metricLabel}>Goal Weight</Text>
+                <Text style={styles.metricValue}>{formatWeight(resolvedWeightGoal.targetWeightKg, unitPreference)}</Text>
+              </View>
+              <View style={styles.metricBlockTop}>
+                <Text style={styles.metricLabel}>Rate / Week</Text>
+                <Text style={styles.metricValue}>{formatGoalRate(resolvedWeightGoal.targetRateKgPerWeek, unitPreference)}</Text>
+              </View>
             </View>
           </View>
 
           <Text style={styles.sectionHeading}>Calorie & Macro Goals</Text>
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeaderRow}>
-              <View>
-                <Text style={styles.sectionTitle}>{getProgramModeLabel(nutritionGoal.programMode)}</Text>
-              </View>
+              <Text style={styles.sectionTitle}>Current Targets</Text>
               <Pressable style={styles.sectionButton} onPress={openTargetsModal}>
                 <Text style={styles.sectionButtonText}>Edit Targets</Text>
               </Pressable>
@@ -449,28 +637,26 @@ export default function PerformanceScreen() {
           </View>
 
           <Text style={styles.sectionHeading}>Lifetime Training Metrics</Text>
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>All-time totals</Text>
-            <Text style={styles.sectionSubtitle}>Built from recorded training history</Text>
+          <View style={styles.trainingCard}>
 
             <View style={styles.metricRowTop}>
               <View style={styles.trainingMetricBlockTop}>
-                <Text style={styles.metricLabel}>Total Sets</Text>
-                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalSets, "sets")}</Text>
+                <Text style={styles.metricLabel}>Set Count</Text>
+                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalSets, "")}</Text>
               </View>
               <View style={styles.trainingMetricBlockTop}>
-                <Text style={styles.metricLabel}>Total Reps</Text>
-                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalReps, "reps")}</Text>
+                <Text style={styles.metricLabel}>Rep Count</Text>
+                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalReps, "")}</Text>
               </View>
               <View style={styles.trainingMetricBlockTop}>
-                <Text style={styles.metricLabel}>Total Workouts</Text>
+                <Text style={styles.metricLabel}>Workouts</Text>
                 <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalWorkouts, "")}</Text>
               </View>
             </View>
 
             <View style={styles.metricRow}>
               <View style={styles.trainingMetricBlock}>
-                <Text style={styles.metricLabel}>Total Duration</Text>
+                <Text style={styles.metricLabel}>Activity Duration</Text>
                 <Text style={styles.metricValue}>{formatDurationTotal(lifetimeTrainingMetrics.totalDurationMins)}</Text>
               </View>
               <View style={styles.trainingMetricBlock}>
@@ -484,6 +670,61 @@ export default function PerformanceScreen() {
             </View>
           </View>
         </ScrollView>
+
+        <Modal
+          animationType="slide"
+          transparent
+          visible={isGoalModalVisible}
+          onRequestClose={closeGoalModal}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.modalCard}>
+                  <Text style={styles.modalTitle}>Edit Goal</Text>
+                  <Text style={styles.modalSubtitle}>Set your starting weight, goal weight, and ideal weekly pace.</Text>
+
+                  <TextInput
+                    style={styles.input}
+                    value={goalForm.startWeight}
+                    onChangeText={(value) => setGoalForm((current) => ({ ...current, startWeight: value }))}
+                    placeholder={`Starting Weight (${getWeightUnitLabel(unitPreference)})`}
+                    placeholderTextColor="#6F6F6F"
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={goalForm.targetWeight}
+                    onChangeText={(value) => setGoalForm((current) => ({ ...current, targetWeight: value }))}
+                    placeholder={`Goal Weight (${getWeightUnitLabel(unitPreference)})`}
+                    placeholderTextColor="#6F6F6F"
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={goalForm.targetRate}
+                    onChangeText={(value) => setGoalForm((current) => ({ ...current, targetRate: value }))}
+                    placeholder={`Rate Per Week (${getWeightUnitLabel(unitPreference)})`}
+                    placeholderTextColor="#6F6F6F"
+                    keyboardType="numeric"
+                  />
+
+                  {goalError ? <Text style={styles.modalError}>{goalError}</Text> : null}
+
+                  <View style={styles.modalActions}>
+                    <Pressable style={styles.modalSecondaryButton} onPress={closeGoalModal}>
+                      <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable style={styles.modalPrimaryButton} onPress={handleSaveGoal}>
+                      <Text style={styles.modalPrimaryButtonText}>
+                        {isSavingGoal ? "Saving..." : "Save Goal"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
 
         <Modal
           animationType="slide"
@@ -595,6 +836,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 16,
     minHeight: 164,
+    justifyContent: "space-between",
   },
   summaryTitle: {
     color: "#F4F4F4",
@@ -608,27 +850,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 16,
   },
+  summaryCardContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingBottom: 12,
+  },
   summaryFooterText: {
     color: "#BDBDBD",
     fontSize: 13,
     marginTop: 4,
-    marginBottom: 8,
+    textAlign: "center",
   },
-  weightSummaryFooterText: {
+  summaryBottomText: {
     color: "#6C6C6C",
     fontSize: 12,
+    alignSelf: "flex-start",
   },
   weightTrendValue: {
     color: "#F4F4F4",
     fontSize: 22,
     fontWeight: "500",
     lineHeight: 30,
+    textAlign: "center",
   },
   summaryGoalDate: {
     color: "#F4F4F4",
     fontSize: 22,
     fontWeight: "500",
     lineHeight: 30,
+    textAlign: "center",
   },
   metricRowTop: {
     flexDirection: "row",
@@ -649,7 +900,7 @@ const styles = StyleSheet.create({
   },
   sectionHeaderRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
   },
@@ -724,8 +975,9 @@ const styles = StyleSheet.create({
   trainingCard: {
     backgroundColor: "#202020",
     borderRadius: 22,
-    padding: 18,
-    marginTop: 18,
+    paddingBottom: 18,
+    paddingHorizontal: 18,
+    marginTop: 2,
   },
   modalOverlay: {
     flex: 1,
