@@ -2,24 +2,26 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import type { WeightEntry } from "@/types/dashboard";
 import { getWeightTrend } from "@/utils/weightProgress";
+import { formatWeight, type UnitPreference } from "@/utils/unitSystem";
 
 type WeightTrendSectionProps = {
     entries: WeightEntry[];
+    unitPreference: UnitPreference;
 };
 
 export default function WeightTrendSection({
     entries,
+    unitPreference,
 }: WeightTrendSectionProps) {
-    const { currentWeight, changeKg } = getWeightTrend(entries);
+    const { changeKg } = getWeightTrend(entries);
 
-    const isDown = changeKg < 0;
-    const formattedChange = Math.abs(changeKg).toFixed(1);
+    const arrow = changeKg > 0.05 ? "↑" : changeKg < -0.05 ? "↓" : "→";
 
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Weight Trend</Text>
             <Text style={styles.weightText}>
-                {isDown ? "↓" : "↑"} {formattedChange} kg
+                {arrow} {formatWeight(Math.abs(changeKg), unitPreference)}
             </Text>
             <Text style={styles.changeText}>
                 in the past week

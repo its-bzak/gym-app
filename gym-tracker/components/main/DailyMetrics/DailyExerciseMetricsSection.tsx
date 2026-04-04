@@ -1,6 +1,11 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 import type { DailyExerciseMetrics } from "@/types/dashboard";
+import {
+    convertWeightKgToUnit,
+    getWeightUnitLabel,
+    type UnitPreference,
+} from "@/utils/unitSystem";
 
 const defaultDailyExerciseMetrics: Omit<DailyExerciseMetrics, "date"> = {
     volume: 0,
@@ -8,17 +13,20 @@ const defaultDailyExerciseMetrics: Omit<DailyExerciseMetrics, "date"> = {
     workoutType: "",
 };
 
-function formatVolume(volumeKg: number) {
-    if (volumeKg < 1000) {
-        return `${volumeKg} kg`;
+function formatVolume(volumeKg: number, unitPreference: UnitPreference) {
+    const volume = convertWeightKgToUnit(volumeKg, unitPreference);
+    const unitLabel = getWeightUnitLabel(unitPreference);
+
+    if (volume < 1000) {
+        return `${Math.round(volume)} ${unitLabel}`;
     }
 
-    const volumeInThousands = volumeKg / 1000;
+    const volumeInThousands = volume / 1000;
     const formattedValue = Number.isInteger(volumeInThousands)
         ? volumeInThousands.toString()
         : volumeInThousands.toFixed(1);
 
-    return `${formattedValue}k kg`;
+    return `${formattedValue}k ${unitLabel}`;
 }
 
 function formatDuration(durationMins: number) {
@@ -39,10 +47,12 @@ function formatDuration(durationMins: number) {
 
 type DailyExerciseMetricsSectionProps = {
     metrics?: Omit<DailyExerciseMetrics, "date">;
+    unitPreference: UnitPreference;
 };
 
 export default function DailyExerciseMetricsSection({
     metrics = defaultDailyExerciseMetrics,
+    unitPreference,
 }: DailyExerciseMetricsSectionProps) {
     return (
         <View style={styles.container}>
@@ -51,7 +61,7 @@ export default function DailyExerciseMetricsSection({
                     <Ionicons name="barbell" size={20} color="#FFFFFF" />
                 </View>
                 <View style={styles.volumeText}>
-                    <Text style={styles.metricText}>{formatVolume(metrics.volume)}</Text>
+                    <Text style={styles.metricText}>{formatVolume(metrics.volume, unitPreference)}</Text>
                 </View>
             </View>
             <View style={styles.durationContainer}>

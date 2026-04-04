@@ -2,15 +2,18 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import type { WeightEntry, WeightGoal } from "@/types/dashboard";
 import { getGoalProgress } from "@/utils/weightProgress";
+import { formatWeight, type UnitPreference } from "@/utils/unitSystem";
 
 type GoalProgressSectionProps = {
     entries: WeightEntry[];
     goal?: WeightGoal | null;
+    unitPreference: UnitPreference;
 };
 
 export default function GoalProgressSection({
     entries,
     goal,
+    unitPreference,
 }: GoalProgressSectionProps) {
     if (!goal) {
         return (
@@ -41,7 +44,7 @@ export default function GoalProgressSection({
             <Text style={styles.subText}>
                 {isComplete
                     ? "Goal reached"
-                    : `${remainingKg.toFixed(1)} kg to go`}
+                    : `${formatWeight(remainingKg, unitPreference)} to go`}
             </Text>
         </View>
     );

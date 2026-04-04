@@ -27,8 +27,15 @@ import {
   type NutritionGoalInput,
   upsertActiveNutritionGoal,
 } from "@/services/dashboardService";
+import { useDisplayUnitPreference } from "@/hooks/use-display-unit-preference";
 import { getAuthenticatedUserId } from "@/services/profileService";
 import type { LifetimeTrainingMetrics, NutritionGoal, WeightEntry, WeightGoal } from "@/types/dashboard";
+import {
+  convertWeightKgToUnit,
+  formatWeight,
+  getWeightUnitLabel,
+  type UnitPreference,
+} from "@/utils/unitSystem";
 import { getLatestWeight, getWeightTrend } from "@/utils/weightProgress";
 
 const EMPTY_LIFETIME_TRAINING_METRICS: LifetimeTrainingMetrics = {
@@ -142,16 +149,40 @@ function getTrendArrow(value: number): string {
   return "→";
 }
 
-function formatTrendValue(value: number): string {
-  return `${getTrendArrow(value)} ${Math.abs(value).toFixed(1)} kg`;
+function formatTrendValue(value: number, unitPreference: UnitPreference): string {
+  return `${getTrendArrow(value)} ${formatWeight(Math.abs(value), unitPreference)}`;
+}
+
+function formatCompactNumber(value: number): string {
+  const absoluteValue = Math.abs(value);
+
+  if (absoluteValue < 1000) {
+    return Math.floor(value).toString();
+  }
+
+  if (absoluteValue < 1000000) {
+    const compactValue = Math.floor(absoluteValue / 100) / 10;
+    const normalizedValue = Number.isInteger(compactValue)
+      ? compactValue.toFixed(0)
+      : compactValue.toFixed(1);
+
+    return `${value < 0 ? "-" : ""}${normalizedValue}k`;
+  }
+
+  const compactValue = Math.floor(absoluteValue / 100000) / 10;
+  const normalizedValue = Number.isInteger(compactValue)
+    ? compactValue.toFixed(0)
+    : compactValue.toFixed(1);
+
+  return `${value < 0 ? "-" : ""}${normalizedValue}m`;
 }
 
 function formatMetricCount(value: number | null, suffix: string): string {
   if (value === null) {
-    return "Not tracked yet";
+    return "No Info";
   }
 
-  return `${value.toLocaleString()} ${suffix}`;
+  return `${formatCompactNumber(value)} ${suffix}`;
 }
 
 export default function PerformanceScreen() {
@@ -167,6 +198,7 @@ export default function PerformanceScreen() {
   const [isTargetsModalVisible, setIsTargetsModalVisible] = useState(false);
   const [targetsError, setTargetsError] = useState<string | null>(null);
   const [isSavingTargets, setIsSavingTargets] = useState(false);
+  const { unitPreference } = useDisplayUnitPreference();
   const [targetsForm, setTargetsForm] = useState({
     calorieGoal: String(mockNutritionGoal.calorieGoal),
     proteinGoal: String(mockNutritionGoal.proteinGoal),
@@ -367,12 +399,12 @@ export default function PerformanceScreen() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Weight Trend</Text>
-              <Text style={styles.weightTrendValue}>{formatTrendValue(weightTrend.changeKg)}</Text>
+              <Text style={styles.weightTrendValue}>{formatTrendValue(weightTrend.changeKg, unitPreference)}</Text>
               <Text style={styles.summaryFooterText}>{`in the last week`}</Text>
               <Text style={styles.weightSummaryFooterText}>
                 {goalStartDeltaKg === null
                   ? "No active goal baseline"
-                  : `${formatTrendValue(goalStartDeltaKg)} total`}
+                  : `${formatTrendValue(goalStartDeltaKg, unitPreference)} total`}
               </Text>
             </View>
 
@@ -400,50 +432,54 @@ export default function PerformanceScreen() {
               </View>
               <View style={styles.metricBlock}>
                 <Text style={styles.metricLabel}>Protein</Text>
-                <Text style={styles.metricValue}>{`${nutritionGoal.proteinGoal} g`}</Text>
+                <Text style={styles.metricValue}>{`${formatCompactNumber(nutritionGoal.proteinGoal)} g`}</Text>
               </View>
             </View>
 
             <View style={styles.metricRow}>
               <View style={styles.metricBlock}>
                 <Text style={styles.metricLabel}>Carbs</Text>
-                <Text style={styles.metricValue}>{`${nutritionGoal.carbsGoal} g`}</Text>
+                <Text style={styles.metricValue}>{`${formatCompactNumber(nutritionGoal.carbsGoal)} g`}</Text>
               </View>
               <View style={styles.metricBlock}>
                 <Text style={styles.metricLabel}>Fat</Text>
-                <Text style={styles.metricValue}>{`${nutritionGoal.fatGoal} g`}</Text>
+                <Text style={styles.metricValue}>{`${formatCompactNumber(nutritionGoal.fatGoal)} g`}</Text>
               </View>
             </View>
           </View>
 
           <Text style={styles.sectionHeading}>Lifetime Training Metrics</Text>
-          <View style={styles.trainingCard}>
+          <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>All-time totals</Text>
             <Text style={styles.sectionSubtitle}>Built from recorded training history</Text>
 
             <View style={styles.metricRowTop}>
-              <View style={styles.metricBlockTop}>
+              <View style={styles.trainingMetricBlockTop}>
                 <Text style={styles.metricLabel}>Total Sets</Text>
                 <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalSets, "sets")}</Text>
               </View>
-              <View style={styles.metricBlockTop}>
+              <View style={styles.trainingMetricBlockTop}>
                 <Text style={styles.metricLabel}>Total Reps</Text>
                 <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalReps, "reps")}</Text>
               </View>
-              <View style={styles.metricBlockTop}>
+              <View style={styles.trainingMetricBlockTop}>
                 <Text style={styles.metricLabel}>Total Workouts</Text>
-                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalWorkouts, "workouts")}</Text>
+                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalWorkouts, "")}</Text>
               </View>
             </View>
 
             <View style={styles.metricRow}>
-              <View style={styles.metricBlock}>
+              <View style={styles.trainingMetricBlock}>
                 <Text style={styles.metricLabel}>Total Duration</Text>
                 <Text style={styles.metricValue}>{formatDurationTotal(lifetimeTrainingMetrics.totalDurationMins)}</Text>
               </View>
-              <View style={styles.metricBlock}>
+              <View style={styles.trainingMetricBlock}>
                 <Text style={styles.metricLabel}>Total Volume</Text>
-                <Text style={styles.metricValue}>{`${Math.round(lifetimeTrainingMetrics.totalVolume).toLocaleString()} kg`}</Text>
+                <Text style={styles.metricValue}>
+                  {`${formatCompactNumber(
+                    Math.round(convertWeightKgToUnit(lifetimeTrainingMetrics.totalVolume, unitPreference))
+                  )} ${getWeightUnitLabel(unitPreference)}`}
+                </Text>
               </View>
             </View>
           </View>
@@ -458,8 +494,6 @@ export default function PerformanceScreen() {
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback>
                 <View style={styles.modalCard}>
-                  <Text style={styles.modalTitle}>Set calorie and macro goals</Text>
-                  <Text style={styles.modalSubtitle}>Choose the daily targets you want the app to display.</Text>
 
                   <TextInput
                     style={styles.input}
@@ -658,6 +692,22 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: "#1A1A1A",
     padding: 12,
+  },
+  trainingMetricBlockTop: {
+    flex: 1,
+    borderRadius: 18,
+    backgroundColor: "#1A1A1A",
+    padding: 12,
+    minHeight: 112,
+    justifyContent: "space-between",
+  },
+  trainingMetricBlock: {
+    flex: 1,
+    borderRadius: 18,
+    backgroundColor: "#1A1A1A",
+    padding: 14,
+    minHeight: 112,
+    justifyContent: "space-between",
   },
   metricLabel: {
     color: "#8E8E8E",

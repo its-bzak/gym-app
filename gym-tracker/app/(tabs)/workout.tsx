@@ -26,9 +26,11 @@ import {
 import WeightTrendSection from "@/components/main/WeightTrend";
 import GoalProgressSection from "@/components/main/GoalProgress";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
+import { useDisplayUnitPreference } from "@/hooks/use-display-unit-preference";
 import { Ionicons } from "@expo/vector-icons";
 import type { WeightEntry, WeightGoal } from "@/types/dashboard";
 import type { MacroBarProps } from "@/utils/calculateMacroBar";
+import { convertWeightUnitToKg, getWeightUnitLabel } from "@/utils/unitSystem";
 import {
   getDateKey,
   getWorkoutDashboardSnapshot,
@@ -73,6 +75,7 @@ export default function WorkoutScreen() {
   const [quickActionError, setQuickActionError] = useState<string | null>(null);
   const [weightInput, setWeightInput] = useState("");
   const { startWorkout } = useActiveWorkout();
+  const { unitPreference } = useDisplayUnitPreference();
 
   const resetQuickActionForms = () => {
     setWeightInput("");
@@ -164,12 +167,14 @@ export default function WorkoutScreen() {
   }, [selectedDate]);
 
   const handleSaveWeight = async () => {
-    const nextWeightKg = Number(weightInput);
+    const nextWeightValue = Number(weightInput);
 
-    if (!Number.isFinite(nextWeightKg) || nextWeightKg <= 0) {
+    if (!Number.isFinite(nextWeightValue) || nextWeightValue <= 0) {
       setQuickActionError("Enter a valid weight greater than zero.");
       return;
     }
+
+    const nextWeightKg = convertWeightUnitToKg(nextWeightValue, unitPreference);
 
     setIsSavingQuickAction(true);
     setQuickActionError(null);
@@ -237,14 +242,21 @@ export default function WorkoutScreen() {
           carbsGoal={dailyMacroMetrics.carbsGoal}
           calorieGoal={dailyMacroMetrics.calorieGoal}
         />
-        <DailyExerciseMetricsSection metrics={dailyExerciseMetrics} />
+        <DailyExerciseMetricsSection
+          metrics={dailyExerciseMetrics}
+          unitPreference={unitPreference}
+        />
 
         <View style={styles.dataContainers}>
           <View style={styles.weightTrendContainer}>
-            <WeightTrendSection entries={weightEntries} />
+            <WeightTrendSection entries={weightEntries} unitPreference={unitPreference} />
           </View>
           <View style={styles.goalProgressContainer}>
-            <GoalProgressSection entries={weightEntries} goal={weightGoal} />
+            <GoalProgressSection
+              entries={weightEntries}
+              goal={weightGoal}
+              unitPreference={unitPreference}
+            />
           </View>
         </View>
 
@@ -312,7 +324,7 @@ export default function WorkoutScreen() {
                     </Text>
 
                     <View style={styles.fullWidthField}>
-                      <Text style={styles.metricLabel}>Weight (kg)</Text>
+                      <Text style={styles.metricLabel}>{`Weight (${getWeightUnitLabel(unitPreference)})`}</Text>
                       <TextInput
                         style={styles.metricInput}
                         value={weightInput}
