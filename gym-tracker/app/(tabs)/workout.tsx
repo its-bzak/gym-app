@@ -25,6 +25,7 @@ import {
 } from "@/mock/MainScreen/DailyMetricsSection";
 import WeightTrendSection from "@/components/main/WeightTrend";
 import GoalProgressSection from "@/components/main/GoalProgress";
+import CustomKeypad from "@/components/ui/CustomKeypad";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 import { useDisplayUnitPreference } from "@/hooks/use-display-unit-preference";
 import { Ionicons } from "@expo/vector-icons";
@@ -331,8 +332,16 @@ export default function WorkoutScreen() {
                         onChangeText={setWeightInput}
                         keyboardType="numeric"
                         editable={!isSavingQuickAction}
+                        showSoftInputOnFocus={false}
+                        onFocus={Keyboard.dismiss}
                       />
                     </View>
+
+                    <CustomKeypad
+                      mode="decimal"
+                      value={weightInput}
+                      onChange={setWeightInput}
+                    />
                   </>
                 ) : null}
 

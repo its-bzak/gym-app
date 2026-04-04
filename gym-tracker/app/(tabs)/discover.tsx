@@ -3,7 +3,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import {
     ActivityIndicator,
     Keyboard,
+    KeyboardAvoidingView,
     Modal,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -15,7 +17,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import Svg, { Circle } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import CustomKeypad, { type CustomKeypadMode } from "@/components/ui/CustomKeypad";
 import {
     appendFoodLogEntry,
     deleteFoodLogEntry,
@@ -46,6 +49,7 @@ type TimelineHourGroup = {
 };
 
 type QuickAddModalMode = "create" | "edit" | "time" | null;
+type QuickAddField = "time" | "energyKcal" | "protein" | "fat" | "carbs" | null;
 
 type DateStripSummaryMap = Record<string, FoodLogDaySummary>;
 
@@ -81,9 +85,39 @@ const TIMELINE_HOUR_HEIGHT = 44;
 const TIMELINE_LEFT_GUTTER = 48;
 const TIMELINE_ENTRY_HEIGHT = 28;
 const TIMELINE_ENTRY_GAP = 6;
+const TIME_PERIOD_OPTIONS = ["AM", "PM"] as const;
+const TIME_HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => `${index + 1}`);
+const TIME_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => index.toString().padStart(2, "0"));
 
 function formatNowTimeInput() {
     return formatEntryTimeLabel(new Date().toISOString());
+}
+
+function parseTimeInput(value: string) {
+    const normalizedValue = value.trim().toLowerCase();
+    const match = normalizedValue.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i);
+
+    if (!match) {
+        return {
+            hour: "12",
+            minute: "00",
+            period: "PM" as typeof TIME_PERIOD_OPTIONS[number],
+        };
+    }
+
+    const hour = Math.min(Math.max(Number(match[1]) || 12, 1), 12).toString();
+    const minute = `${Math.min(Math.max(Number(match[2] ?? "0"), 0), 59)}`.padStart(2, "0");
+    const period = (match[3]?.toUpperCase() === "AM" ? "AM" : "PM") as typeof TIME_PERIOD_OPTIONS[number];
+
+    return { hour, minute, period };
+}
+
+function buildTimeInputValue(
+    hour: string,
+    minute: string,
+    period: typeof TIME_PERIOD_OPTIONS[number]
+) {
+    return `${hour}:${minute}${period.toLowerCase()}`;
 }
 
 function buildDateStrip(selectedDate: Date) {
@@ -261,6 +295,27 @@ function DayCircleProgressFill({ progress, isComplete, size }: { progress: numbe
     );
 }
 
+function TimePickerFadeMask() {
+    return (
+        <View pointerEvents="none" style={styles.timePickerFadeOverlay}>
+            <Svg width="100%" height="100%">
+                <Defs>
+                    <LinearGradient id="time-picker-fade-top" x1="0" y1="0" x2="0" y2="1">
+                        <Stop offset="0" stopColor="#161616" />
+                        <Stop offset="1" stopColor="#161616" stopOpacity="0" />
+                    </LinearGradient>
+                    <LinearGradient id="time-picker-fade-bottom" x1="0" y1="0" x2="0" y2="1">
+                        <Stop offset="0" stopColor="#161616" stopOpacity="0" />
+                        <Stop offset="1" stopColor="#161616" />
+                    </LinearGradient>
+                </Defs>
+                <Rect x="0" y="0" width="100%" height="20%" fill="url(#time-picker-fade-top)" />
+                <Rect x="0" y="80%" width="100%" height="20%" fill="url(#time-picker-fade-bottom)" />
+            </Svg>
+        </View>
+    );
+}
+
 export default function DiscoverScreen() {
     const { width: windowWidth } = useWindowDimensions();
     const quickAddParams = useLocalSearchParams<{
@@ -280,6 +335,8 @@ export default function DiscoverScreen() {
     const [quickAddModalMode, setQuickAddModalMode] = useState<QuickAddModalMode>(null);
     const [isSavingEntry, setIsSavingEntry] = useState(false);
     const [quickAddError, setQuickAddError] = useState<string | null>(null);
+    const [activeQuickAddField, setActiveQuickAddField] = useState<QuickAddField>(null);
+    const [isNameFocused, setIsNameFocused] = useState(false);
     const [quickAddForm, setQuickAddForm] = useState({
         name: "",
         time: formatNowTimeInput(),
@@ -370,6 +427,7 @@ export default function DiscoverScreen() {
         () => entries.find((entry) => entry.id === editingEntryId) ?? null,
         [editingEntryId, entries]
     );
+    const selectedQuickAddTime = useMemo(() => parseTimeInput(quickAddForm.time), [quickAddForm.time]);
 
     const timelineGroups = useMemo<TimelineHourGroup[]>(() => {
         return TIME_SLOTS.map((slot) => {
@@ -402,7 +460,7 @@ export default function DiscoverScreen() {
     }, [entries]);
 
     const openQuickAdd = (timeSlot: TimeSlot) => {
-        const nextTime = formatNowTimeInput();
+        const nextTime = formatEntryTimeLabel(buildLoggedAtForSlot(selectedDate, timeSlot.hour));
         setQuickAddForm({
             name: "",
             time: nextTime,
@@ -414,6 +472,8 @@ export default function DiscoverScreen() {
         setEditingEntryId(null);
         setSelectedEntryId(null);
         setQuickAddError(null);
+        setActiveQuickAddField("energyKcal");
+        setIsNameFocused(false);
         setQuickAddModalMode("create");
     };
 
@@ -428,6 +488,8 @@ export default function DiscoverScreen() {
         });
         setEditingEntryId(entry.id);
         setSelectedEntryId(null);
+        setActiveQuickAddField("energyKcal");
+        setIsNameFocused(false);
         setQuickAddModalMode("edit");
         setQuickAddError(null);
     };
@@ -439,6 +501,8 @@ export default function DiscoverScreen() {
         }));
         setEditingEntryId(entry.id);
         setSelectedEntryId(null);
+        setActiveQuickAddField("time");
+        setIsNameFocused(false);
         setQuickAddModalMode("time");
         setQuickAddError(null);
     };
@@ -451,7 +515,18 @@ export default function DiscoverScreen() {
         setQuickAddModalMode(null);
         setEditingEntryId(null);
         setQuickAddError(null);
+        setActiveQuickAddField(null);
+        setIsNameFocused(false);
     };
+
+    const handleQuickAddFieldChange = (field: Exclude<QuickAddField, null>, value: string) => {
+        setQuickAddForm((current) => ({
+            ...current,
+            [field]: value,
+        }));
+    };
+
+    const activeQuickAddMode: CustomKeypadMode = activeQuickAddField === "time" ? "time" : "decimal";
 
     const handleSaveQuickAdd = async () => {
         const loggedAt = buildLoggedAtForInput(selectedDate, quickAddForm.time);
@@ -901,10 +976,7 @@ export default function DiscoverScreen() {
                         </>
                     ) : (
                         <>
-                            <Pressable style={styles.searchPlaceholder}>
-                                <Ionicons name="search" size={20} color="#8C8C8C" />
-                                <Text style={styles.searchPlaceholderText}>Search for a food</Text>
-                            </Pressable>
+                            {/**  Placeholder for future actions such as search bar */}
 
                             <Pressable style={styles.quickAddButton} onPress={() => openQuickAdd(TIME_SLOTS[DEFAULT_QUICK_ADD_SLOT_INDEX])}>
                                 <Text style={styles.quickAddButtonText}>Quick Add</Text>
@@ -922,6 +994,9 @@ export default function DiscoverScreen() {
                 <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
                     <View style={styles.modalOverlay}>
                         <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
+                            <KeyboardAvoidingView
+                                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                                keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}>
                             <View style={styles.modalSheet}>
                                 <View style={styles.modalHandle} />
                                 <Text style={styles.modalTitle}>
@@ -939,69 +1014,199 @@ export default function DiscoverScreen() {
 
                                 {quickAddModalMode !== "time" ? (
                                     <TextInput
-                                        style={styles.modalInput}
+                                        style={[styles.modalInput, isNameFocused && styles.modalInputFocused]}
                                         value={quickAddForm.name}
                                         onChangeText={(value) => setQuickAddForm((current) => ({ ...current, name: value }))}
                                         placeholder="Name"
                                         placeholderTextColor="#6F6F6F"
                                         editable={!isSavingEntry}
+                                        onFocus={() => setIsNameFocused(true)}
+                                        onBlur={() => setIsNameFocused(false)}
                                     />
                                 ) : null}
 
                                 <View style={styles.modalGrid}>
-                                    <TextInput
-                                        style={styles.modalInputHalf}
-                                        value={quickAddForm.time}
-                                        onChangeText={(value) => setQuickAddForm((current) => ({ ...current, time: value }))}
-                                        placeholder="7:34pm"
-                                        placeholderTextColor="#6F6F6F"
-                                        autoCapitalize="none"
-                                        editable={!isSavingEntry}
-                                    />
+                                    <Pressable
+                                        style={[
+                                            styles.modalInputHalf,
+                                            styles.modalPressableField,
+                                            activeQuickAddField === "time" && styles.modalInputFocused,
+                                        ]}
+                                        onFocus={() => {
+                                            Keyboard.dismiss();
+                                        }}
+                                        onPress={() => {
+                                            Keyboard.dismiss();
+                                            setIsNameFocused(false);
+                                            setActiveQuickAddField("time");
+                                        }}>
+                                        <Text style={[styles.modalPressableFieldText, !quickAddForm.time && styles.modalPlaceholderText]}>
+                                            {quickAddForm.time || "7:34pm"}
+                                        </Text>
+                                    </Pressable>
 
                                     {quickAddModalMode !== "time" ? (
                                         <>
                                             <TextInput
-                                                style={styles.modalInputHalf}
+                                                style={[styles.modalInputHalf, activeQuickAddField === "energyKcal" && styles.modalInputFocused]}
                                                 value={quickAddForm.energyKcal}
                                                 onChangeText={(value) => setQuickAddForm((current) => ({ ...current, energyKcal: value }))}
                                                 placeholder="Calories"
                                                 placeholderTextColor="#6F6F6F"
                                                 keyboardType="numeric"
                                                 editable={!isSavingEntry}
+                                                showSoftInputOnFocus={false}
+                                                onFocus={() => {
+                                                    Keyboard.dismiss();
+                                                    setIsNameFocused(false);
+                                                    setActiveQuickAddField("energyKcal");
+                                                }}
                                             />
                                             <View style={styles.modalBottomRow}>
                                                 <TextInput
-                                                    style={styles.modalInputThirds}
+                                                    style={[styles.modalInputThirds, activeQuickAddField === "protein" && styles.modalInputFocused]}
                                                     value={quickAddForm.protein}
                                                     onChangeText={(value) => setQuickAddForm((current) => ({ ...current, protein: value }))}
                                                     placeholder="Protein"
                                                     placeholderTextColor="#6F6F6F"
                                                     keyboardType="numeric"
                                                     editable={!isSavingEntry}
+                                                    showSoftInputOnFocus={false}
+                                                    onFocus={() => {
+                                                        Keyboard.dismiss();
+                                                        setIsNameFocused(false);
+                                                        setActiveQuickAddField("protein");
+                                                    }}
                                                 />
                                                 <TextInput
-                                                    style={styles.modalInputThirds}
+                                                    style={[styles.modalInputThirds, activeQuickAddField === "fat" && styles.modalInputFocused]}
                                                     value={quickAddForm.fat}
                                                     onChangeText={(value) => setQuickAddForm((current) => ({ ...current, fat: value }))}
                                                     placeholder="Fat"
                                                     placeholderTextColor="#6F6F6F"
                                                     keyboardType="numeric"
                                                     editable={!isSavingEntry}
+                                                    showSoftInputOnFocus={false}
+                                                    onFocus={() => {
+                                                        Keyboard.dismiss();
+                                                        setIsNameFocused(false);
+                                                        setActiveQuickAddField("fat");
+                                                    }}
                                                 />
                                                 <TextInput
-                                                    style={styles.modalInputThirds}
+                                                    style={[styles.modalInputThirds, activeQuickAddField === "carbs" && styles.modalInputFocused]}
                                                     value={quickAddForm.carbs}
                                                     onChangeText={(value) => setQuickAddForm((current) => ({ ...current, carbs: value }))}
                                                     placeholder="Carbs"
                                                     placeholderTextColor="#6F6F6F"
                                                     keyboardType="numeric"
                                                     editable={!isSavingEntry}
+                                                    showSoftInputOnFocus={false}
+                                                    onFocus={() => {
+                                                        Keyboard.dismiss();
+                                                        setIsNameFocused(false);
+                                                        setActiveQuickAddField("carbs");
+                                                    }}
                                                 />
                                             </View>
                                         </>
                                     ) : null}
                                 </View>
+
+                                {activeQuickAddField === "time" ? (
+                                    <View style={styles.timePickerColumns}>
+                                        <View style={styles.timePickerColumn}>
+                                            <Text style={styles.timePickerLabel}>Hour</Text>
+                                            <View style={styles.timePickerScrollContainer}>
+                                                <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                                                    {TIME_HOUR_OPTIONS.map((hourOption) => {
+                                                        const isSelected = selectedQuickAddTime.hour === hourOption;
+
+                                                        return (
+                                                            <Pressable
+                                                                key={`hour-${hourOption}`}
+                                                                style={[styles.timePickerOption, isSelected && styles.timePickerOptionSelected]}
+                                                                onPress={() =>
+                                                                    handleQuickAddFieldChange(
+                                                                        "time",
+                                                                        buildTimeInputValue(hourOption, selectedQuickAddTime.minute, selectedQuickAddTime.period)
+                                                                    )
+                                                                }>
+                                                                <Text style={[styles.timePickerOptionText, isSelected && styles.timePickerOptionTextSelected]}>
+                                                                    {hourOption}
+                                                                </Text>
+                                                            </Pressable>
+                                                        );
+                                                    })}
+                                                </ScrollView>
+                                                <TimePickerFadeMask />
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.timePickerColumn}>
+                                            <Text style={styles.timePickerLabel}>Minute</Text>
+                                            <View style={styles.timePickerScrollContainer}>
+                                                <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                                                    {TIME_MINUTE_OPTIONS.map((minuteOption) => {
+                                                        const isSelected = selectedQuickAddTime.minute === minuteOption;
+
+                                                        return (
+                                                            <Pressable
+                                                                key={`minute-${minuteOption}`}
+                                                                style={[styles.timePickerOption, isSelected && styles.timePickerOptionSelected]}
+                                                                onPress={() =>
+                                                                    handleQuickAddFieldChange(
+                                                                        "time",
+                                                                        buildTimeInputValue(selectedQuickAddTime.hour, minuteOption, selectedQuickAddTime.period)
+                                                                    )
+                                                                }>
+                                                                <Text style={[styles.timePickerOptionText, isSelected && styles.timePickerOptionTextSelected]}>
+                                                                    {minuteOption}
+                                                                </Text>
+                                                            </Pressable>
+                                                        );
+                                                    })}
+                                                </ScrollView>
+                                                <TimePickerFadeMask />
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.timePickerPeriodColumn}>
+                                            <Text style={styles.timePickerLabel}>Period</Text>
+                                            <View style={styles.timePickerScrollContainer}>
+                                                <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                                                    {TIME_PERIOD_OPTIONS.map((periodOption) => {
+                                                        const isSelected = selectedQuickAddTime.period === periodOption;
+
+                                                        return (
+                                                            <Pressable
+                                                                key={`period-${periodOption}`}
+                                                                style={[styles.timePickerOption, isSelected && styles.timePickerOptionSelected]}
+                                                                onPress={() =>
+                                                                    handleQuickAddFieldChange(
+                                                                        "time",
+                                                                        buildTimeInputValue(selectedQuickAddTime.hour, selectedQuickAddTime.minute, periodOption)
+                                                                    )
+                                                                }>
+                                                                <Text style={[styles.timePickerOptionText, isSelected && styles.timePickerOptionTextSelected]}>
+                                                                    {periodOption}
+                                                                </Text>
+                                                            </Pressable>
+                                                        );
+                                                    })}
+                                                </ScrollView>
+                                                <TimePickerFadeMask />
+                                            </View>
+                                        </View>
+                                    </View>
+                                ) : activeQuickAddField ? (
+                                    <CustomKeypad
+                                        mode={activeQuickAddMode}
+                                        value={quickAddForm[activeQuickAddField]}
+                                        onChange={(value) => handleQuickAddFieldChange(activeQuickAddField, value)}
+                                        onDone={() => setActiveQuickAddField(null)}
+                                    />
+                                ) : null}
 
                                 {quickAddError ? <Text style={styles.quickAddError}>{quickAddError}</Text> : null}
 
@@ -1020,6 +1225,7 @@ export default function DiscoverScreen() {
                                     </Pressable>
                                 </View>
                             </View>
+                            </KeyboardAvoidingView>
                         </TouchableWithoutFeedback>
                     </View>
                 </TouchableWithoutFeedback>
@@ -1333,6 +1539,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         fontSize: 16,
         marginBottom: 12,
+        borderWidth: 1,
+        borderColor: "#202020",
+    },
+    modalInputFocused: {
+        borderColor: "#5E8BFF",
     },
     modalGrid: {
         flexDirection: "row",
@@ -1347,6 +1558,8 @@ const styles = StyleSheet.create({
         color: "#F4F4F4",
         paddingHorizontal: 16,
         fontSize: 16,
+        borderWidth: 1,
+        borderColor: "#202020",
     },
     modalInputThirds: {
         width: "31.25%",
@@ -1356,6 +1569,70 @@ const styles = StyleSheet.create({
         color: "#F4F4F4",
         paddingHorizontal: 16,
         fontSize: 16,
+        borderWidth: 1,
+        borderColor: "#202020",
+    },
+    modalPressableField: {
+        justifyContent: "center",
+    },
+    modalPressableFieldText: {
+        color: "#F4F4F4",
+        fontSize: 16,
+    },
+    modalPlaceholderText: {
+        color: "#6F6F6F",
+    },
+    timePickerColumns: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 12,
+    },
+    timePickerColumn: {
+        flex: 1,
+    },
+    timePickerPeriodColumn: {
+        width: 88,
+    },
+    timePickerLabel: {
+        color: "#8B8B8B",
+        fontSize: 13,
+        marginBottom: 10,
+    },
+    timePickerScroll: {
+        maxHeight: 214,
+    },
+    timePickerScrollContainer: {
+        position: "relative",
+    },
+    timePickerOption: {
+        minHeight: 46,
+        borderRadius: 14,
+        backgroundColor: "#212121",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 10,
+        marginBottom: 8,
+    },
+    timePickerOptionSelected: {
+        backgroundColor: "#20273A",
+        borderWidth: 1,
+        borderColor: "#5E8BFF",
+    },
+    timePickerOptionText: {
+        color: "#C7C7C7",
+        fontSize: 15,
+        fontWeight: "500",
+    },
+    timePickerOptionTextSelected: {
+        color: "#F4F4F4",
+        fontWeight: "700",
+    },
+    timePickerFadeOverlay: {
+        position: "absolute",
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
     },
     bottomActionBar: {
         position: "absolute",
@@ -1363,6 +1640,7 @@ const styles = StyleSheet.create({
         right: 18,
         bottom: 50,
         flexDirection: "row",
+        justifyContent: "flex-end",
         gap: 10,
     },
     searchPlaceholder: {

@@ -10,7 +10,13 @@ import {
   TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import CustomKeypad from "@/components/ui/CustomKeypad";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
+
+type ActiveSetField = {
+  setId: string;
+  field: "weight" | "reps";
+} | null;
 
 function formatElapsedTime(totalSeconds: number) {
   const hours = Math.floor(totalSeconds / 3600);
@@ -40,6 +46,7 @@ export default function ActiveScreen() {
 
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
   const [isFinishBlockedModalVisible, setIsFinishBlockedModalVisible] = useState(false);
+  const [activeSetField, setActiveSetField] = useState<ActiveSetField>(null);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -61,6 +68,40 @@ export default function ActiveScreen() {
       clearInterval(timerId);
     };
   }, [workoutStartTime]);
+
+  useEffect(() => {
+    if (!selectedExercise || !activeSetField) {
+      return;
+    }
+
+    const fieldStillExists = selectedExercise.sets.some((set) => set.id === activeSetField.setId);
+
+    if (!fieldStillExists) {
+      setActiveSetField(null);
+    }
+  }, [activeSetField, selectedExercise]);
+
+  const activeSetValue = useMemo(() => {
+    if (!selectedExercise || !activeSetField) {
+      return "";
+    }
+
+    const activeSet = selectedExercise.sets.find((set) => set.id === activeSetField.setId);
+
+    if (!activeSet) {
+      return "";
+    }
+
+    return activeSet[activeSetField.field];
+  }, [activeSetField, selectedExercise]);
+
+  const handleSetFieldChange = (value: string) => {
+    if (!selectedExercise || !activeSetField) {
+      return;
+    }
+
+    updateSet(selectedExercise.id, activeSetField.setId, activeSetField.field, value);
+  };
 
   const handleCancelWorkout = () => {
     setIsCancelModalVisible(true);
@@ -164,6 +205,8 @@ export default function ActiveScreen() {
                       placeholder="0"
                       placeholderTextColor="#666"
                       keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => setActiveSetField({ setId: set.id, field: "weight" })}
                     />
                   </View>
 
@@ -178,6 +221,8 @@ export default function ActiveScreen() {
                       placeholder="0"
                       placeholderTextColor="#666"
                       keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => setActiveSetField({ setId: set.id, field: "reps" })}
                     />
                   </View>
 
@@ -198,12 +243,24 @@ export default function ActiveScreen() {
           )}
         </ScrollView>
 
-        <View style={styles.finishButtonContainer}>
-          <Pressable style={styles.finishButton} onPress={handleFinishWorkout}>
-            <Text style={styles.finishButtonText}>
-              Finish Workout</Text>
-          </Pressable>
-        </View>
+        {activeSetField ? (
+          <View style={styles.keypadContainer}>
+            <CustomKeypad
+              mode={activeSetField.field === "weight" ? "decimal" : "integer"}
+              value={activeSetValue}
+              onChange={handleSetFieldChange}
+              onDone={() => setActiveSetField(null)}
+            />
+          </View>
+        ) : null}
+
+        {!activeSetField ? (
+          <View style={styles.finishButtonContainer}>
+            <Pressable style={styles.finishButton} onPress={handleFinishWorkout}>
+              <Text style={styles.finishButtonText}>Finish Workout</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <Modal
           animationType="slide"
@@ -463,6 +520,9 @@ const styles = StyleSheet.create({
     color: "#7C7C7C",
     alignSelf: "center",
     fontSize: 14,
+  },
+  keypadContainer: {
+    marginTop: 8,
   },
   finishButtonContainer: {
     flex: 1,

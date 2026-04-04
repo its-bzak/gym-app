@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import CustomKeypad from "@/components/ui/CustomKeypad";
 
 import {
   getLifetimeTrainingMetrics as getMockLifetimeTrainingMetrics,
@@ -51,6 +52,9 @@ const EMPTY_LIFETIME_TRAINING_METRICS: LifetimeTrainingMetrics = {
   totalWorkouts: 0,
   totalReps: null,
 };
+
+type TargetsField = "calorieGoal" | "proteinGoal" | "carbsGoal" | "fatGoal" | null;
+type GoalField = "startWeight" | "targetWeight" | "targetRate" | null;
 
 function getProgramModeLabel(mode: NutritionGoal["programMode"]): string {
   return mode === "guided" ? "Generated Program" : "Manual Program";
@@ -225,9 +229,11 @@ export default function PerformanceScreen() {
   const [isTargetsModalVisible, setIsTargetsModalVisible] = useState(false);
   const [targetsError, setTargetsError] = useState<string | null>(null);
   const [isSavingTargets, setIsSavingTargets] = useState(false);
+  const [activeTargetsField, setActiveTargetsField] = useState<TargetsField>(null);
   const [isGoalModalVisible, setIsGoalModalVisible] = useState(false);
   const [goalError, setGoalError] = useState<string | null>(null);
   const [isSavingGoal, setIsSavingGoal] = useState(false);
+  const [activeGoalField, setActiveGoalField] = useState<GoalField>(null);
   const { unitPreference } = useDisplayUnitPreference();
   const [targetsForm, setTargetsForm] = useState({
     calorieGoal: String(mockNutritionGoal.calorieGoal),
@@ -365,12 +371,14 @@ export default function PerformanceScreen() {
   const openTargetsModal = () => {
     resetTargetsForm(nutritionGoal);
     setTargetsError(null);
+    setActiveTargetsField("calorieGoal");
     setIsTargetsModalVisible(true);
   };
 
   const openGoalModal = () => {
     resetGoalForm(resolvedWeightGoal);
     setGoalError(null);
+    setActiveGoalField("startWeight");
     setIsGoalModalVisible(true);
   };
 
@@ -380,6 +388,7 @@ export default function PerformanceScreen() {
     }
 
     setTargetsError(null);
+    setActiveTargetsField(null);
     setIsTargetsModalVisible(false);
   };
 
@@ -389,6 +398,7 @@ export default function PerformanceScreen() {
     }
 
     setGoalError(null);
+    setActiveGoalField(null);
     setIsGoalModalVisible(false);
   };
 
@@ -690,6 +700,11 @@ export default function PerformanceScreen() {
                     placeholder={`Starting Weight (${getWeightUnitLabel(unitPreference)})`}
                     placeholderTextColor="#6F6F6F"
                     keyboardType="numeric"
+                    showSoftInputOnFocus={false}
+                    onFocus={() => {
+                      Keyboard.dismiss();
+                      setActiveGoalField("startWeight");
+                    }}
                   />
                   <TextInput
                     style={styles.input}
@@ -698,6 +713,11 @@ export default function PerformanceScreen() {
                     placeholder={`Goal Weight (${getWeightUnitLabel(unitPreference)})`}
                     placeholderTextColor="#6F6F6F"
                     keyboardType="numeric"
+                    showSoftInputOnFocus={false}
+                    onFocus={() => {
+                      Keyboard.dismiss();
+                      setActiveGoalField("targetWeight");
+                    }}
                   />
                   <TextInput
                     style={styles.input}
@@ -706,7 +726,21 @@ export default function PerformanceScreen() {
                     placeholder={`Rate Per Week (${getWeightUnitLabel(unitPreference)})`}
                     placeholderTextColor="#6F6F6F"
                     keyboardType="numeric"
+                    showSoftInputOnFocus={false}
+                    onFocus={() => {
+                      Keyboard.dismiss();
+                      setActiveGoalField("targetRate");
+                    }}
                   />
+
+                  {activeGoalField ? (
+                    <CustomKeypad
+                      mode="decimal"
+                      value={goalForm[activeGoalField]}
+                      onChange={(value) => setGoalForm((current) => ({ ...current, [activeGoalField]: value }))}
+                      onDone={() => setActiveGoalField(null)}
+                    />
+                  ) : null}
 
                   {goalError ? <Text style={styles.modalError}>{goalError}</Text> : null}
 
@@ -743,6 +777,11 @@ export default function PerformanceScreen() {
                     placeholder="Calories"
                     placeholderTextColor="#6F6F6F"
                     keyboardType="numeric"
+                    showSoftInputOnFocus={false}
+                    onFocus={() => {
+                      Keyboard.dismiss();
+                      setActiveTargetsField("calorieGoal");
+                    }}
                   />
                   <TextInput
                     style={styles.input}
@@ -751,6 +790,11 @@ export default function PerformanceScreen() {
                     placeholder="Protein (g)"
                     placeholderTextColor="#6F6F6F"
                     keyboardType="numeric"
+                    showSoftInputOnFocus={false}
+                    onFocus={() => {
+                      Keyboard.dismiss();
+                      setActiveTargetsField("proteinGoal");
+                    }}
                   />
                   <TextInput
                     style={styles.input}
@@ -759,6 +803,11 @@ export default function PerformanceScreen() {
                     placeholder="Carbs (g)"
                     placeholderTextColor="#6F6F6F"
                     keyboardType="numeric"
+                    showSoftInputOnFocus={false}
+                    onFocus={() => {
+                      Keyboard.dismiss();
+                      setActiveTargetsField("carbsGoal");
+                    }}
                   />
                   <TextInput
                     style={styles.input}
@@ -767,7 +816,21 @@ export default function PerformanceScreen() {
                     placeholder="Fat (g)"
                     placeholderTextColor="#6F6F6F"
                     keyboardType="numeric"
+                    showSoftInputOnFocus={false}
+                    onFocus={() => {
+                      Keyboard.dismiss();
+                      setActiveTargetsField("fatGoal");
+                    }}
                   />
+
+                  {activeTargetsField ? (
+                    <CustomKeypad
+                      mode="decimal"
+                      value={targetsForm[activeTargetsField]}
+                      onChange={(value) => setTargetsForm((current) => ({ ...current, [activeTargetsField]: value }))}
+                      onDone={() => setActiveTargetsField(null)}
+                    />
+                  ) : null}
 
                   {targetsError ? <Text style={styles.modalError}>{targetsError}</Text> : null}
 
