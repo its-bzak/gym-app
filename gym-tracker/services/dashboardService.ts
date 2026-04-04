@@ -662,12 +662,15 @@ export async function getLifetimeTrainingMetrics(userId: string): Promise<Lifeti
     (totals, row) => {
       totals.totalVolume += Number(row.volume_kg ?? 0);
       totals.totalDurationMins += Number(row.duration_mins ?? 0);
+      totals.totalWorkouts += Number(row.volume_kg ?? 0) > 0 || Number(row.duration_mins ?? 0) > 0 ? 1 : 0;
 
       return totals;
     },
     {
+      totalSets: null,
       totalVolume: 0,
       totalDurationMins: 0,
+      totalWorkouts: 0,
       totalReps: null,
     }
   );
@@ -718,7 +721,13 @@ export async function appendFoodLogEntry(
   date: Date | string,
   entry: FoodLogInput
 ): Promise<DashboardWriteResult<MacroBarProps>> {
-  const values = Object.values(entry);
+  const values = [
+    entry.energyKcal ?? 0,
+    entry.protein,
+    entry.fat,
+    entry.carbs,
+    entry.alcoholGrams ?? 0,
+  ];
   const hasNegativeValue = values.some((value) => value < 0);
   const hasAnyPositiveValue = values.some((value) => value > 0);
 
@@ -1214,7 +1223,7 @@ export async function upsertActiveGoalPlan(
 
     return {
       success: true,
-      data: updatedPlan ?? null,
+      data: updatedPlan ?? undefined,
     };
   } catch (error) {
     return {

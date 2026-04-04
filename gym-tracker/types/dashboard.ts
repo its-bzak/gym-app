@@ -19,8 +19,10 @@ export type DailyExerciseMetrics = {
 };
 
 export type LifetimeTrainingMetrics = {
+  totalSets: number | null;
   totalVolume: number;
   totalDurationMins: number;
+  totalWorkouts: number;
   totalReps: number | null;
 };
 

@@ -115,6 +115,14 @@ const mockTrainingRepsByDate: Record<string, number> = {
     "2026-03-29": 0,
 };
 
+const mockTrainingSetsByDate: Record<string, number> = {
+    "2026-03-25": 18,
+    "2026-03-26": 21,
+    "2026-03-27": 29,
+    "2026-03-28": 16,
+    "2026-03-29": 0,
+};
+
 export const mockWeightEntries: WeightEntry[] = [
     { date: "2026-03-25", weightKg: 74 },
     { date: "2026-03-26", weightKg: 74 },
@@ -244,15 +252,19 @@ export function getDailyExerciseMetrics(date: Date | string) {
 export function getLifetimeTrainingMetrics(): LifetimeTrainingMetrics {
     return dailyExerciseMetricsByDate.reduce<LifetimeTrainingMetrics>(
         (totals, entry) => {
+            totals.totalSets = (totals.totalSets ?? 0) + (mockTrainingSetsByDate[entry.date] ?? 0);
             totals.totalVolume += entry.volume;
             totals.totalDurationMins += entry.durationMins;
+            totals.totalWorkouts += entry.volume > 0 || entry.durationMins > 0 ? 1 : 0;
             totals.totalReps = (totals.totalReps ?? 0) + (mockTrainingRepsByDate[entry.date] ?? 0);
 
             return totals;
         },
         {
+            totalSets: 0,
             totalVolume: 0,
             totalDurationMins: 0,
+            totalWorkouts: 0,
             totalReps: 0,
         }
     );

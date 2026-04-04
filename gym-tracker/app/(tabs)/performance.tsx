@@ -12,9 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Polyline } from "react-native-svg";
 
-import NutritionSplitDonut from "@/components/performance/NutritionSplitDonut";
 import {
   getLifetimeTrainingMetrics as getMockLifetimeTrainingMetrics,
   mockGoal,
@@ -34,46 +32,12 @@ import type { LifetimeTrainingMetrics, NutritionGoal, WeightEntry, WeightGoal } 
 import { getLatestWeight, getWeightTrend } from "@/utils/weightProgress";
 
 const EMPTY_LIFETIME_TRAINING_METRICS: LifetimeTrainingMetrics = {
+  totalSets: null,
   totalVolume: 0,
   totalDurationMins: 0,
+  totalWorkouts: 0,
   totalReps: null,
 };
-
-function WeightTrendMiniChart({ entries }: { entries: WeightEntry[] }) {
-  const chartEntries = entries.slice(-7);
-  const values = chartEntries.map((entry) => entry.weightKg);
-  const width = 110;
-  const height = 56;
-
-  if (!values.length) {
-    return <View style={{ height }} />;
-  }
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const stepX = values.length === 1 ? 0 : width / (values.length - 1);
-  const points = values
-    .map((value, index) => {
-      const x = index * stepX;
-      const y = height - ((value - min) / range) * (height - 12) - 6;
-
-      return `${x},${y}`;
-    })
-    .join(" ");
-
-  return (
-    <Svg width={width} height={height}>
-      <Polyline points={points} fill="none" stroke="#D9D9D9" strokeWidth={1.5} />
-      {values.map((value, index) => {
-        const x = index * stepX;
-        const y = height - ((value - min) / range) * (height - 12) - 6;
-
-        return <Circle key={`${value}-${index}`} cx={x} cy={y} r={4.5} fill="#F5F5F5" />;
-      })}
-    </Svg>
-  );
-}
 
 function getProgramModeLabel(mode: NutritionGoal["programMode"]): string {
   return mode === "guided" ? "Generated Program" : "Manual Program";
@@ -152,6 +116,44 @@ function formatDurationTotal(durationMins: number): string {
   return `${hours} hr ${minutes} min`;
 }
 
+function getGoalStartDelta(goal: WeightGoal | null, entries: WeightEntry[]): number | null {
+  if (!goal) {
+    return null;
+  }
+
+  const latestWeight = getLatestWeight(entries);
+
+  if (latestWeight === null) {
+    return null;
+  }
+
+  return latestWeight - goal.startWeightKg;
+}
+
+function getTrendArrow(value: number): string {
+  if (value > 0.05) {
+    return "↑";
+  }
+
+  if (value < -0.05) {
+    return "↓";
+  }
+
+  return "→";
+}
+
+function formatTrendValue(value: number): string {
+  return `${getTrendArrow(value)} ${Math.abs(value).toFixed(1)} kg`;
+}
+
+function formatMetricCount(value: number | null, suffix: string): string {
+  if (value === null) {
+    return "Not tracked yet";
+  }
+
+  return `${value.toLocaleString()} ${suffix}`;
+}
+
 export default function PerformanceScreen() {
   const [nutritionGoal, setNutritionGoal] = useState<NutritionGoal>(mockNutritionGoal);
   const [weightGoal, setWeightGoal] = useState<WeightGoal | null>(mockGoal);
@@ -178,6 +180,10 @@ export default function PerformanceScreen() {
     [weightEntries, weightGoal]
   );
   const trendRateKgPerWeek = useMemo(() => getTrendRateKgPerWeek(weightEntries), [weightEntries]);
+  const goalStartDeltaKg = useMemo(
+    () => getGoalStartDelta(weightGoal, weightEntries),
+    [weightEntries, weightGoal]
+  );
 
   const resetTargetsForm = (goal: NutritionGoal) => {
     setTargetsForm({
@@ -361,19 +367,18 @@ export default function PerformanceScreen() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Weight Trend</Text>
-              <Text style={styles.summarySubtitle}>Last seven days</Text>
-              <WeightTrendMiniChart entries={weightEntries} />
-              <Text style={styles.summaryFooterText}>{`${weightTrend.changeKg >= 0 ? "+" : ""}${weightTrend.changeKg.toFixed(1)} kg`}</Text>
+              <Text style={styles.weightTrendValue}>{formatTrendValue(weightTrend.changeKg)}</Text>
+              <Text style={styles.summaryFooterText}>{`in the last week`}</Text>
+              <Text style={styles.weightSummaryFooterText}>
+                {goalStartDeltaKg === null
+                  ? "No active goal baseline"
+                  : `${formatTrendValue(goalStartDeltaKg)} total`}
+              </Text>
             </View>
 
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Estimated Goal Date</Text>
-              <Text style={styles.summarySubtitle}>
-                {trendRateKgPerWeek === null
-                  ? "Based on real trend rate"
-                  : `${trendRateKgPerWeek >= 0 ? "+" : ""}${trendRateKgPerWeek.toFixed(2)} kg/wk actual`}
-              </Text>
-              <Text style={styles.summaryDate}>{estimatedGoalDate}</Text>
+              <Text style={styles.summaryTitle}>Projected Goal Date</Text>
+              <Text style={styles.summaryGoalDate}>{estimatedGoalDate}</Text>
             </View>
           </View>
 
@@ -382,19 +387,11 @@ export default function PerformanceScreen() {
             <View style={styles.sectionHeaderRow}>
               <View>
                 <Text style={styles.sectionTitle}>{getProgramModeLabel(nutritionGoal.programMode)}</Text>
-                <Text style={styles.sectionSubtitle}>Manual targets you can update anytime</Text>
               </View>
               <Pressable style={styles.sectionButton} onPress={openTargetsModal}>
                 <Text style={styles.sectionButtonText}>Edit Targets</Text>
               </Pressable>
             </View>
-
-            <NutritionSplitDonut
-              calories={nutritionGoal.calorieGoal}
-              protein={nutritionGoal.proteinGoal}
-              carbs={nutritionGoal.carbsGoal}
-              fat={nutritionGoal.fatGoal}
-            />
 
             <View style={styles.metricRow}>
               <View style={styles.metricBlock}>
@@ -424,25 +421,29 @@ export default function PerformanceScreen() {
             <Text style={styles.sectionTitle}>All-time totals</Text>
             <Text style={styles.sectionSubtitle}>Built from recorded training history</Text>
 
-            <View style={styles.metricRow}>
-              <View style={styles.metricBlock}>
-                <Text style={styles.metricLabel}>Lifetime Volume</Text>
-                <Text style={styles.metricValue}>{`${Math.round(lifetimeTrainingMetrics.totalVolume).toLocaleString()} kg`}</Text>
+            <View style={styles.metricRowTop}>
+              <View style={styles.metricBlockTop}>
+                <Text style={styles.metricLabel}>Total Sets</Text>
+                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalSets, "sets")}</Text>
               </View>
-              <View style={styles.metricBlock}>
-                <Text style={styles.metricLabel}>Lifetime Duration</Text>
-                <Text style={styles.metricValue}>{formatDurationTotal(lifetimeTrainingMetrics.totalDurationMins)}</Text>
+              <View style={styles.metricBlockTop}>
+                <Text style={styles.metricLabel}>Total Reps</Text>
+                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalReps, "reps")}</Text>
+              </View>
+              <View style={styles.metricBlockTop}>
+                <Text style={styles.metricLabel}>Total Workouts</Text>
+                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalWorkouts, "workouts")}</Text>
               </View>
             </View>
 
             <View style={styles.metricRow}>
-              <View style={styles.metricBlockWide}>
-                <Text style={styles.metricLabel}>Lifetime Reps</Text>
-                <Text style={styles.metricValue}>
-                  {lifetimeTrainingMetrics.totalReps === null
-                    ? "Not tracked yet"
-                    : lifetimeTrainingMetrics.totalReps.toLocaleString()}
-                </Text>
+              <View style={styles.metricBlock}>
+                <Text style={styles.metricLabel}>Total Duration</Text>
+                <Text style={styles.metricValue}>{formatDurationTotal(lifetimeTrainingMetrics.totalDurationMins)}</Text>
+              </View>
+              <View style={styles.metricBlock}>
+                <Text style={styles.metricLabel}>Total Volume</Text>
+                <Text style={styles.metricValue}>{`${Math.round(lifetimeTrainingMetrics.totalVolume).toLocaleString()} kg`}</Text>
               </View>
             </View>
           </View>
@@ -564,25 +565,41 @@ const styles = StyleSheet.create({
   summaryTitle: {
     color: "#F4F4F4",
     fontSize: 18,
+    marginBottom: 12,
     fontWeight: "600",
   },
   summarySubtitle: {
     color: "#6C6C6C",
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 4,
     marginBottom: 16,
   },
   summaryFooterText: {
     color: "#BDBDBD",
     fontSize: 13,
-    marginTop: 10,
+    marginTop: 4,
+    marginBottom: 8,
   },
-  summaryDate: {
+  weightSummaryFooterText: {
+    color: "#6C6C6C",
+    fontSize: 12,
+  },
+  weightTrendValue: {
     color: "#F4F4F4",
     fontSize: 22,
     fontWeight: "500",
     lineHeight: 30,
-    marginTop: 8,
+  },
+  summaryGoalDate: {
+    color: "#F4F4F4",
+    fontSize: 22,
+    fontWeight: "500",
+    lineHeight: 30,
+  },
+  metricRowTop: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 16,
   },
   sectionHeading: {
     color: "#F4F4F4",
@@ -636,11 +653,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#1A1A1A",
     padding: 14,
   },
-  metricBlockWide: {
+  metricBlockTop: {
     flex: 1,
     borderRadius: 18,
     backgroundColor: "#1A1A1A",
-    padding: 14,
+    padding: 12,
   },
   metricLabel: {
     color: "#8E8E8E",
