@@ -216,6 +216,56 @@ function formatGoalRate(rateKgPerWeek: number, unitPreference: UnitPreference): 
   return `${formatWeightValue(rateKgPerWeek, unitPreference, 1)} ${getWeightUnitLabel(unitPreference)} / week`;
 }
 
+function getGoalFieldLabel(field: Exclude<GoalField, null>) {
+  switch (field) {
+    case "startWeight":
+      return "Starting point";
+    case "targetWeight":
+      return "Goal weight";
+    case "targetRate":
+      return "Weekly pace";
+  }
+}
+
+function getGoalFieldHelper(field: Exclude<GoalField, null>, unitPreference: UnitPreference) {
+  const unitLabel = getWeightUnitLabel(unitPreference);
+
+  switch (field) {
+    case "startWeight":
+      return `What's your current weight in ${unitLabel}?`;
+    case "targetWeight":
+      return `What's your goal weight in ${unitLabel}?`;
+    case "targetRate":
+      return `How much do you want to gain or lose per week in ${unitLabel}?`;
+  }
+}
+
+function getTargetsFieldLabel(field: Exclude<TargetsField, null>) {
+  switch (field) {
+    case "calorieGoal":
+      return "Calories";
+    case "proteinGoal":
+      return "Protein";
+    case "carbsGoal":
+      return "Carbs";
+    case "fatGoal":
+      return "Fat";
+  }
+}
+
+function getTargetsFieldHelper(field: Exclude<TargetsField, null>) {
+  switch (field) {
+    case "calorieGoal":
+      return "What's your daily energy target in kcal?";
+    case "proteinGoal":
+      return "What's your daily protein target in grams?";
+    case "carbsGoal":
+      return "What's your daily carbohydrate target in grams?";
+    case "fatGoal":
+      return "What's your daily fat target in grams?";
+  }
+}
+
 export default function PerformanceScreen() {
   const [nutritionGoal, setNutritionGoal] = useState<NutritionGoal>(mockNutritionGoal);
   const [weightGoal, setWeightGoal] = useState<WeightGoal | null>(mockGoal);
@@ -691,55 +741,77 @@ export default function PerformanceScreen() {
               <TouchableWithoutFeedback>
                 <View style={styles.modalCard}>
                   <Text style={styles.modalTitle}>Edit Goal</Text>
-                  <Text style={styles.modalSubtitle}>Set your starting weight, goal weight, and ideal weekly pace.</Text>
 
-                  <TextInput
-                    style={styles.input}
-                    value={goalForm.startWeight}
-                    onChangeText={(value) => setGoalForm((current) => ({ ...current, startWeight: value }))}
-                    placeholder={`Starting Weight (${getWeightUnitLabel(unitPreference)})`}
-                    placeholderTextColor="#6F6F6F"
-                    keyboardType="numeric"
-                    showSoftInputOnFocus={false}
-                    onFocus={() => {
-                      Keyboard.dismiss();
-                      setActiveGoalField("startWeight");
-                    }}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={goalForm.targetWeight}
-                    onChangeText={(value) => setGoalForm((current) => ({ ...current, targetWeight: value }))}
-                    placeholder={`Goal Weight (${getWeightUnitLabel(unitPreference)})`}
-                    placeholderTextColor="#6F6F6F"
-                    keyboardType="numeric"
-                    showSoftInputOnFocus={false}
-                    onFocus={() => {
-                      Keyboard.dismiss();
-                      setActiveGoalField("targetWeight");
-                    }}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={goalForm.targetRate}
-                    onChangeText={(value) => setGoalForm((current) => ({ ...current, targetRate: value }))}
-                    placeholder={`Rate Per Week (${getWeightUnitLabel(unitPreference)})`}
-                    placeholderTextColor="#6F6F6F"
-                    keyboardType="numeric"
-                    showSoftInputOnFocus={false}
-                    onFocus={() => {
-                      Keyboard.dismiss();
-                      setActiveGoalField("targetRate");
-                    }}
-                  />
+                  <View style={styles.inputGroup}>
+                    <View style={styles.inputHeadingRow}>
+                      <Text style={styles.inputLabel}>Starting point</Text>
+                      <Text style={styles.inputUnit}>{getWeightUnitLabel(unitPreference)}</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, activeGoalField === "startWeight" && styles.inputActive]}
+                      value={goalForm.startWeight}
+                      onChangeText={(value) => setGoalForm((current) => ({ ...current, startWeight: value }))}
+                      placeholder={`Current weight (${getWeightUnitLabel(unitPreference)})`}
+                      placeholderTextColor="#6F6F6F"
+                      keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => {
+                        Keyboard.dismiss();
+                        setActiveGoalField("startWeight");
+                      }}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <View style={styles.inputHeadingRow}>
+                      <Text style={styles.inputLabel}>Goal weight</Text>
+                      <Text style={styles.inputUnit}>{getWeightUnitLabel(unitPreference)}</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, activeGoalField === "targetWeight" && styles.inputActive]}
+                      value={goalForm.targetWeight}
+                      onChangeText={(value) => setGoalForm((current) => ({ ...current, targetWeight: value }))}
+                      placeholder={`Target weight (${getWeightUnitLabel(unitPreference)})`}
+                      placeholderTextColor="#6F6F6F"
+                      keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => {
+                        Keyboard.dismiss();
+                        setActiveGoalField("targetWeight");
+                      }}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <View style={styles.inputHeadingRow}>
+                      <Text style={styles.inputLabel}>Weekly pace</Text>
+                      <Text style={styles.inputUnit}>{`${getWeightUnitLabel(unitPreference)} / wk`}</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, activeGoalField === "targetRate" && styles.inputActive]}
+                      value={goalForm.targetRate}
+                      onChangeText={(value) => setGoalForm((current) => ({ ...current, targetRate: value }))}
+                      placeholder={`Weekly change (${getWeightUnitLabel(unitPreference)})`}
+                      placeholderTextColor="#6F6F6F"
+                      keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => {
+                        Keyboard.dismiss();
+                        setActiveGoalField("targetRate");
+                      }}
+                    />
+                  </View>
 
                   {activeGoalField ? (
-                    <CustomKeypad
-                      mode="decimal"
-                      value={goalForm[activeGoalField]}
-                      onChange={(value) => setGoalForm((current) => ({ ...current, [activeGoalField]: value }))}
-                      onDone={() => setActiveGoalField(null)}
-                    />
+                    <View style={styles.keypadSection}>
+                      <View style={styles.keypadContextRow}>
+                        <Text style={styles.keypadContextHelper}>{getGoalFieldHelper(activeGoalField, unitPreference)}</Text>
+                      </View>
+                      <CustomKeypad
+                        mode="decimal"
+                        value={goalForm[activeGoalField]}
+                        onChange={(value) => setGoalForm((current) => ({ ...current, [activeGoalField]: value }))}
+                        onDone={() => setActiveGoalField(null)}
+                      />
+                    </View>
                   ) : null}
 
                   {goalError ? <Text style={styles.modalError}>{goalError}</Text> : null}
@@ -769,67 +841,97 @@ export default function PerformanceScreen() {
             <View style={styles.modalOverlay}>
               <TouchableWithoutFeedback>
                 <View style={styles.modalCard}>
+                  <Text style={styles.modalTitle}>Edit Targets</Text>
 
-                  <TextInput
-                    style={styles.input}
-                    value={targetsForm.calorieGoal}
-                    onChangeText={(value) => setTargetsForm((current) => ({ ...current, calorieGoal: value }))}
-                    placeholder="Calories"
-                    placeholderTextColor="#6F6F6F"
-                    keyboardType="numeric"
-                    showSoftInputOnFocus={false}
-                    onFocus={() => {
-                      Keyboard.dismiss();
-                      setActiveTargetsField("calorieGoal");
-                    }}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={targetsForm.proteinGoal}
-                    onChangeText={(value) => setTargetsForm((current) => ({ ...current, proteinGoal: value }))}
-                    placeholder="Protein (g)"
-                    placeholderTextColor="#6F6F6F"
-                    keyboardType="numeric"
-                    showSoftInputOnFocus={false}
-                    onFocus={() => {
-                      Keyboard.dismiss();
-                      setActiveTargetsField("proteinGoal");
-                    }}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={targetsForm.carbsGoal}
-                    onChangeText={(value) => setTargetsForm((current) => ({ ...current, carbsGoal: value }))}
-                    placeholder="Carbs (g)"
-                    placeholderTextColor="#6F6F6F"
-                    keyboardType="numeric"
-                    showSoftInputOnFocus={false}
-                    onFocus={() => {
-                      Keyboard.dismiss();
-                      setActiveTargetsField("carbsGoal");
-                    }}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    value={targetsForm.fatGoal}
-                    onChangeText={(value) => setTargetsForm((current) => ({ ...current, fatGoal: value }))}
-                    placeholder="Fat (g)"
-                    placeholderTextColor="#6F6F6F"
-                    keyboardType="numeric"
-                    showSoftInputOnFocus={false}
-                    onFocus={() => {
-                      Keyboard.dismiss();
-                      setActiveTargetsField("fatGoal");
-                    }}
-                  />
+                  <View style={styles.inputGroup}>
+                    <View style={styles.inputHeadingRow}>
+                      <Text style={styles.inputLabel}>Calories</Text>
+                      <Text style={styles.inputUnit}>kcal</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, activeTargetsField === "calorieGoal" && styles.inputActive]}
+                      value={targetsForm.calorieGoal}
+                      onChangeText={(value) => setTargetsForm((current) => ({ ...current, calorieGoal: value }))}
+                      placeholder="Daily calories"
+                      placeholderTextColor="#6F6F6F"
+                      keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => {
+                        Keyboard.dismiss();
+                        setActiveTargetsField("calorieGoal");
+                      }}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <View style={styles.inputHeadingRow}>
+                      <Text style={styles.inputLabel}>Protein</Text>
+                      <Text style={styles.inputUnit}>g</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, activeTargetsField === "proteinGoal" && styles.inputActive]}
+                      value={targetsForm.proteinGoal}
+                      onChangeText={(value) => setTargetsForm((current) => ({ ...current, proteinGoal: value }))}
+                      placeholder="Daily protein"
+                      placeholderTextColor="#6F6F6F"
+                      keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => {
+                        Keyboard.dismiss();
+                        setActiveTargetsField("proteinGoal");
+                      }}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <View style={styles.inputHeadingRow}>
+                      <Text style={styles.inputLabel}>Carbs</Text>
+                      <Text style={styles.inputUnit}>g</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, activeTargetsField === "carbsGoal" && styles.inputActive]}
+                      value={targetsForm.carbsGoal}
+                      onChangeText={(value) => setTargetsForm((current) => ({ ...current, carbsGoal: value }))}
+                      placeholder="Daily carbs"
+                      placeholderTextColor="#6F6F6F"
+                      keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => {
+                        Keyboard.dismiss();
+                        setActiveTargetsField("carbsGoal");
+                      }}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <View style={styles.inputHeadingRow}>
+                      <Text style={styles.inputLabel}>Fat</Text>
+                      <Text style={styles.inputUnit}>g</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.input, activeTargetsField === "fatGoal" && styles.inputActive]}
+                      value={targetsForm.fatGoal}
+                      onChangeText={(value) => setTargetsForm((current) => ({ ...current, fatGoal: value }))}
+                      placeholder="Daily fat"
+                      placeholderTextColor="#6F6F6F"
+                      keyboardType="numeric"
+                      showSoftInputOnFocus={false}
+                      onFocus={() => {
+                        Keyboard.dismiss();
+                        setActiveTargetsField("fatGoal");
+                      }}
+                    />
+                  </View>
 
                   {activeTargetsField ? (
-                    <CustomKeypad
-                      mode="decimal"
-                      value={targetsForm[activeTargetsField]}
-                      onChange={(value) => setTargetsForm((current) => ({ ...current, [activeTargetsField]: value }))}
-                      onDone={() => setActiveTargetsField(null)}
-                    />
+                    <View style={styles.keypadSection}>
+                      <View style={styles.keypadContextRow}>
+                        <Text style={styles.keypadContextHelper}>{getTargetsFieldHelper(activeTargetsField)}</Text>
+                      </View>
+                      <CustomKeypad
+                        mode="decimal"
+                        value={targetsForm[activeTargetsField]}
+                        onChange={(value) => setTargetsForm((current) => ({ ...current, [activeTargetsField]: value }))}
+                        onDone={() => setActiveTargetsField(null)}
+                      />
+                    </View>
                   ) : null}
 
                   {targetsError ? <Text style={styles.modalError}>{targetsError}</Text> : null}
@@ -1067,6 +1169,31 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 6,
   },
+  inputGroup: {
+    gap: 6,
+  },
+  inputHeadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  inputLabel: {
+    color: "#D7D7D7",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  inputUnit: {
+    color: "#7E7E7E",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  inputHelper: {
+    color: "#7E7E7E",
+    fontSize: 12,
+    lineHeight: 17,
+  },
   input: {
     width: "100%",
     minHeight: 50,
@@ -1075,6 +1202,27 @@ const styles = StyleSheet.create({
     color: "#F4F4F4",
     paddingHorizontal: 16,
     fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#202020",
+  },
+  inputActive: {
+    borderColor: "#5E8BFF",
+  },
+  keypadSection: {
+    gap: 10,
+  },
+  keypadContextRow: {
+    gap: 3,
+  },
+  keypadContextLabel: {
+    color: "#F4F4F4",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  keypadContextHelper: {
+    color: "#8E8E8E",
+    fontSize: 12,
+    lineHeight: 17,
   },
   modalError: {
     color: "#F28B82",

@@ -15,7 +15,7 @@ import {
 import { formatDate } from "@/utils/dateFormat";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -30,9 +30,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 const CURRENT_USER_ID = "user_ryan";
 const CONTACT_EMAIL = "support@gymtracker.app";
+const MIN_BIRTH_YEAR = 1900;
+const BIRTH_PICKER_ITEM_HEIGHT = 54;
+const BIRTH_PICKER_VISIBLE_HEIGHT = 216;
+const BIRTH_PICKER_VERTICAL_INSET = (BIRTH_PICKER_VISIBLE_HEIGHT - BIRTH_PICKER_ITEM_HEIGHT) / 2;
 
 const unitOptions: Array<{
   value: DisplayUnitPreference;
@@ -51,40 +56,76 @@ const unitOptions: Array<{
   },
 ];
 
+function clampBirthDateParts(year: number, month: number, day: number) {
+  const today = new Date();
+  const maxYear = today.getFullYear();
+  const safeYear = Math.min(Math.max(year, MIN_BIRTH_YEAR), maxYear);
+  const safeMonth = Math.min(Math.max(month, 1), 12);
+  let maxDay = new Date(safeYear, safeMonth, 0).getDate();
+
+  if (safeYear === maxYear && safeMonth === today.getMonth() + 1) {
+    maxDay = Math.min(maxDay, today.getDate());
+  }
+
+  return {
+    year: safeYear,
+    month: safeMonth,
+    day: Math.min(Math.max(day, 1), maxDay),
+  };
+}
+
+function getClosestPickerIndex(offsetY: number, itemCount: number) {
+  return Math.max(0, Math.min(itemCount - 1, Math.round(offsetY / BIRTH_PICKER_ITEM_HEIGHT)));
+}
+
+function BirthPickerFadeMask() {
+  return (
+    <View pointerEvents="none" style={styles.birthPickerFadeOverlay}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id="birth-picker-fade-top" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#161616" />
+            <Stop offset="0%" stopColor="#161616" stopOpacity="0" />
+          </LinearGradient>
+          <LinearGradient id="birth-picker-fade-bottom" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#161616" stopOpacity="0" />
+            <Stop offset="0%" stopColor="#161616" />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="0%" fill="url(#birth-picker-fade-top)" />
+        <Rect x="0" y="25%" width="100%" height="0%" fill="url(#birth-picker-fade-bottom)" />
+      </Svg>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const fallbackProfile = getMockUserProfileById(CURRENT_USER_ID);
+  const fallbackDateParts = useMemo(() => {
+    if (!fallbackProfile?.dateOfBirth) {
+      return clampBirthDateParts(1998, 6, 14);
+    }
+
+    const [year, month, day] = fallbackProfile.dateOfBirth.split("-").map(Number);
+    return clampBirthDateParts(year, month, day);
+  }, [fallbackProfile?.dateOfBirth]);
   const [selectedUnit, setSelectedUnit] = useState<DisplayUnitPreference>(() =>
     getMockDisplayUnitPreference(CURRENT_USER_ID)
   );
   const [name, setName] = useState(fallbackProfile?.name ?? "");
   const [username, setUsername] = useState(fallbackProfile?.username ?? "");
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    if (!fallbackProfile?.dateOfBirth) {
-      return 6;
-    }
-
-    return Number(fallbackProfile.dateOfBirth.split("-")[1]);
-  });
-  const [selectedDay, setSelectedDay] = useState(() => {
-    if (!fallbackProfile?.dateOfBirth) {
-      return 14;
-    }
-
-    return Number(fallbackProfile.dateOfBirth.split("-")[2]);
-  });
-  const [selectedYear, setSelectedYear] = useState(() => {
-    if (!fallbackProfile?.dateOfBirth) {
-      return 1998;
-    }
-
-    return Number(fallbackProfile.dateOfBirth.split("-")[0]);
-  });
+  const [selectedMonth, setSelectedMonth] = useState(fallbackDateParts.month);
+  const [selectedDay, setSelectedDay] = useState(fallbackDateParts.day);
+  const [selectedYear, setSelectedYear] = useState(fallbackDateParts.year);
   const [isBirthDateModalVisible, setIsBirthDateModalVisible] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [usernameError, setUsernameError] = useState(false);
   const [isSyncingProfile, setIsSyncingProfile] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
+  const monthPickerRef = useRef<ScrollView | null>(null);
+  const dayPickerRef = useRef<ScrollView | null>(null);
+  const yearPickerRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -95,10 +136,11 @@ export default function SettingsScreen() {
       }
 
       const [year, month, day] = dateOfBirth.split("-").map(Number);
+      const clampedDate = clampBirthDateParts(year, month, day);
 
-      setSelectedYear(year);
-      setSelectedMonth(month);
-      setSelectedDay(day);
+      setSelectedYear(clampedDate.year);
+      setSelectedMonth(clampedDate.month);
+      setSelectedDay(clampedDate.day);
     };
 
     const loadProfileSettings = async () => {
@@ -146,6 +188,8 @@ export default function SettingsScreen() {
     };
   }, []);
 
+  const today = useMemo(() => new Date(), []);
+
   const monthOptions = [
     "January",
     "February",
@@ -162,22 +206,67 @@ export default function SettingsScreen() {
   ];
 
   const yearOptions = useMemo(() => {
-    const currentYear = new Date().getFullYear();
+    const currentYear = today.getFullYear();
 
-    return Array.from({ length: 90 }, (_, index) => currentYear - 13 - index);
-  }, []);
+    return Array.from({ length: currentYear - MIN_BIRTH_YEAR + 1 }, (_, index) => currentYear - index);
+  }, [today]);
+
+  const availableMonthValues = useMemo(() => {
+    const maxMonth = selectedYear === today.getFullYear() ? today.getMonth() + 1 : 12;
+
+    return Array.from({ length: maxMonth }, (_, index) => index + 1);
+  }, [selectedYear, today]);
 
   const dayOptions = useMemo(() => {
     const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+    const maxDay = selectedYear === today.getFullYear() && selectedMonth === today.getMonth() + 1
+      ? Math.min(daysInMonth, today.getDate())
+      : daysInMonth;
 
-    return Array.from({ length: daysInMonth }, (_, index) => index + 1);
-  }, [selectedMonth, selectedYear]);
+    return Array.from({ length: maxDay }, (_, index) => index + 1);
+  }, [selectedMonth, selectedYear, today]);
+
+  useEffect(() => {
+    if (!availableMonthValues.includes(selectedMonth)) {
+      setSelectedMonth(availableMonthValues[availableMonthValues.length - 1] ?? 1);
+    }
+  }, [availableMonthValues, selectedMonth]);
 
   useEffect(() => {
     if (selectedDay > dayOptions.length) {
       setSelectedDay(dayOptions.length);
     }
   }, [dayOptions, selectedDay]);
+
+  useEffect(() => {
+    if (!isBirthDateModalVisible) {
+      return;
+    }
+
+    const frameId = requestAnimationFrame(() => {
+      monthPickerRef.current?.scrollTo({
+        y: availableMonthValues.indexOf(selectedMonth) * BIRTH_PICKER_ITEM_HEIGHT,
+        animated: false,
+      });
+      dayPickerRef.current?.scrollTo({
+        y: dayOptions.indexOf(selectedDay) * BIRTH_PICKER_ITEM_HEIGHT,
+        animated: false,
+      });
+      yearPickerRef.current?.scrollTo({
+        y: yearOptions.indexOf(selectedYear) * BIRTH_PICKER_ITEM_HEIGHT,
+        animated: false,
+      });
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [availableMonthValues, dayOptions, isBirthDateModalVisible, selectedDay, selectedMonth, selectedYear, yearOptions]);
+
+  const scrollBirthPickerToIndex = (ref: React.RefObject<ScrollView | null>, index: number) => {
+    ref.current?.scrollTo({
+      y: index * BIRTH_PICKER_ITEM_HEIGHT,
+      animated: true,
+    });
+  };
 
   const dateOfBirthIso = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}-${String(
     Math.min(selectedDay, dayOptions.length)
@@ -314,9 +403,26 @@ export default function SettingsScreen() {
             <View style={styles.birthPickerColumns}>
               <View style={styles.birthPickerColumn}>
                 <Text style={styles.birthPickerLabel}>Month</Text>
-                <ScrollView style={styles.birthPickerScroll} showsVerticalScrollIndicator={false}>
-                  {monthOptions.map((month, index) => {
-                    const monthValue = index + 1;
+                <View style={styles.birthPickerScrollContainer}>
+                  <View style={styles.birthPickerCenterHighlight} pointerEvents="none" />
+                  <ScrollView
+                    ref={monthPickerRef}
+                    style={styles.birthPickerScroll}
+                    contentContainerStyle={styles.birthPickerScrollContent}
+                    showsVerticalScrollIndicator={false}
+                    snapToInterval={BIRTH_PICKER_ITEM_HEIGHT}
+                    decelerationRate="normal"
+                    scrollEventThrottle={16}
+                    onScroll={(event) => {
+                      const index = getClosestPickerIndex(event.nativeEvent.contentOffset.y, availableMonthValues.length);
+                      const monthValue = availableMonthValues[index];
+
+                      if (monthValue && monthValue !== selectedMonth) {
+                        setSelectedMonth(monthValue);
+                      }
+                    }}>
+                  {availableMonthValues.map((monthValue) => {
+                    const month = monthOptions[monthValue - 1];
                     const isSelected = selectedMonth === monthValue;
 
                     return (
@@ -326,7 +432,7 @@ export default function SettingsScreen() {
                           styles.birthPickerOption,
                           isSelected && styles.birthPickerOptionSelected,
                         ]}
-                        onPress={() => setSelectedMonth(monthValue)}>
+                        onPress={() => scrollBirthPickerToIndex(monthPickerRef, availableMonthValues.indexOf(monthValue))}>
                         <Text
                           style={[
                             styles.birthPickerOptionText,
@@ -337,12 +443,31 @@ export default function SettingsScreen() {
                       </Pressable>
                     );
                   })}
-                </ScrollView>
+                  </ScrollView>
+                  <BirthPickerFadeMask />
+                </View>
               </View>
 
               <View style={styles.birthPickerColumnDay}>
                 <Text style={styles.birthPickerLabel}>Day</Text>
-                <ScrollView style={styles.birthPickerScroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.birthPickerScrollContainer}>
+                  <View style={styles.birthPickerCenterHighlight} pointerEvents="none" />
+                  <ScrollView
+                    ref={dayPickerRef}
+                    style={styles.birthPickerScroll}
+                    contentContainerStyle={styles.birthPickerScrollContent}
+                    showsVerticalScrollIndicator={false}
+                    snapToInterval={BIRTH_PICKER_ITEM_HEIGHT}
+                    decelerationRate="normal"
+                    scrollEventThrottle={16}
+                    onScroll={(event) => {
+                      const index = getClosestPickerIndex(event.nativeEvent.contentOffset.y, dayOptions.length);
+                      const day = dayOptions[index];
+
+                      if (day && day !== selectedDay) {
+                        setSelectedDay(day);
+                      }
+                    }}>
                   {dayOptions.map((day) => {
                     const isSelected = selectedDay === day;
 
@@ -353,7 +478,7 @@ export default function SettingsScreen() {
                           styles.birthPickerOption,
                           isSelected && styles.birthPickerOptionSelected,
                         ]}
-                        onPress={() => setSelectedDay(day)}>
+                        onPress={() => scrollBirthPickerToIndex(dayPickerRef, dayOptions.indexOf(day))}>
                         <Text
                           style={[
                             styles.birthPickerOptionText,
@@ -364,12 +489,31 @@ export default function SettingsScreen() {
                       </Pressable>
                     );
                   })}
-                </ScrollView>
+                  </ScrollView>
+                  <BirthPickerFadeMask />
+                </View>
               </View>
 
               <View style={styles.birthPickerColumnDay}>
                 <Text style={styles.birthPickerLabel}>Year</Text>
-                <ScrollView style={styles.birthPickerScroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.birthPickerScrollContainer}>
+                  <View style={styles.birthPickerCenterHighlight} pointerEvents="none" />
+                  <ScrollView
+                    ref={yearPickerRef}
+                    style={styles.birthPickerScroll}
+                    contentContainerStyle={styles.birthPickerScrollContent}
+                    showsVerticalScrollIndicator={false}
+                    snapToInterval={BIRTH_PICKER_ITEM_HEIGHT}
+                    decelerationRate="normal"
+                    scrollEventThrottle={16}
+                    onScroll={(event) => {
+                      const index = getClosestPickerIndex(event.nativeEvent.contentOffset.y, yearOptions.length);
+                      const year = yearOptions[index];
+
+                      if (year && year !== selectedYear) {
+                        setSelectedYear(year);
+                      }
+                    }}>
                   {yearOptions.map((year) => {
                     const isSelected = selectedYear === year;
 
@@ -380,7 +524,7 @@ export default function SettingsScreen() {
                           styles.birthPickerOption,
                           isSelected && styles.birthPickerOptionSelected,
                         ]}
-                        onPress={() => setSelectedYear(year)}>
+                        onPress={() => scrollBirthPickerToIndex(yearPickerRef, yearOptions.indexOf(year))}>
                         <Text
                           style={[
                             styles.birthPickerOptionText,
@@ -391,7 +535,9 @@ export default function SettingsScreen() {
                       </Pressable>
                     );
                   })}
-                </ScrollView>
+                  </ScrollView>
+                  <BirthPickerFadeMask />
+                </View>
               </View>
             </View>
           </View>
@@ -804,21 +950,38 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   birthPickerScroll: {
-    maxHeight: 300,
+    height: BIRTH_PICKER_VISIBLE_HEIGHT,
+    maxHeight: BIRTH_PICKER_VISIBLE_HEIGHT,
+  },
+  birthPickerScrollContent: {
+    paddingVertical: BIRTH_PICKER_VERTICAL_INSET,
+  },
+  birthPickerScrollContainer: {
+    position: "relative",
+    height: BIRTH_PICKER_VISIBLE_HEIGHT,
+    justifyContent: "center",
+  },
+  birthPickerCenterHighlight: {
+    position: "absolute",
+    top: BIRTH_PICKER_VERTICAL_INSET,
+    left: 0,
+    right: 0,
+    height: BIRTH_PICKER_ITEM_HEIGHT,
+    borderRadius: 14,
+    backgroundColor: "#20273A",
+    borderWidth: 1,
+    borderColor: "rgba(94, 139, 255, 0.45)",
   },
   birthPickerOption: {
-    minHeight: 46,
+    height: BIRTH_PICKER_ITEM_HEIGHT,
     borderRadius: 14,
-    backgroundColor: "#212121",
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 10,
-    marginBottom: 8,
   },
   birthPickerOptionSelected: {
-    backgroundColor: "#20273A",
-    borderWidth: 1,
-    borderColor: "#5E8BFF",
+    transform: [{ scale: 1.08 }],
   },
   birthPickerOptionText: {
     color: "#C7C7C7",
@@ -828,6 +991,14 @@ const styles = StyleSheet.create({
   birthPickerOptionTextSelected: {
     color: "#F4F4F4",
     fontWeight: "700",
+    fontSize: 17,
+  },
+  birthPickerFadeOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
   },
   confirmChangesButton: {
     marginTop: 8,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import {
     ActivityIndicator,
@@ -88,6 +88,9 @@ const TIMELINE_ENTRY_GAP = 6;
 const TIME_PERIOD_OPTIONS = ["AM", "PM"] as const;
 const TIME_HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => `${index + 1}`);
 const TIME_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) => index.toString().padStart(2, "0"));
+const TIME_PICKER_ITEM_HEIGHT = 54;
+const TIME_PICKER_VISIBLE_HEIGHT = 216;
+const TIME_PICKER_VERTICAL_INSET = (TIME_PICKER_VISIBLE_HEIGHT - TIME_PICKER_ITEM_HEIGHT) / 2;
 
 function formatNowTimeInput() {
     return formatEntryTimeLabel(new Date().toISOString());
@@ -118,6 +121,10 @@ function buildTimeInputValue(
     period: typeof TIME_PERIOD_OPTIONS[number]
 ) {
     return `${hour}:${minute}${period.toLowerCase()}`;
+}
+
+function getClosestPickerIndex(offsetY: number, itemCount: number) {
+    return Math.max(0, Math.min(itemCount - 1, Math.round(offsetY / TIME_PICKER_ITEM_HEIGHT)));
 }
 
 function buildDateStrip(selectedDate: Date) {
@@ -302,15 +309,15 @@ function TimePickerFadeMask() {
                 <Defs>
                     <LinearGradient id="time-picker-fade-top" x1="0" y1="0" x2="0" y2="1">
                         <Stop offset="0" stopColor="#161616" />
-                        <Stop offset="1" stopColor="#161616" stopOpacity="0" />
+                        <Stop offset="60%" stopColor="#161616" stopOpacity="0" />
                     </LinearGradient>
                     <LinearGradient id="time-picker-fade-bottom" x1="0" y1="0" x2="0" y2="1">
                         <Stop offset="0" stopColor="#161616" stopOpacity="0" />
-                        <Stop offset="1" stopColor="#161616" />
+                        <Stop offset="60%" stopColor="#161616" />
                     </LinearGradient>
                 </Defs>
-                <Rect x="0" y="0" width="100%" height="20%" fill="url(#time-picker-fade-top)" />
-                <Rect x="0" y="80%" width="100%" height="20%" fill="url(#time-picker-fade-bottom)" />
+                <Rect x="0" y="0" width="100%" height="55%" fill="url(#time-picker-fade-top)" />
+                <Rect x="0" y="45%" width="100%" height="55%" fill="url(#time-picker-fade-bottom)" />
             </Svg>
         </View>
     );
@@ -337,6 +344,9 @@ export default function DiscoverScreen() {
     const [quickAddError, setQuickAddError] = useState<string | null>(null);
     const [activeQuickAddField, setActiveQuickAddField] = useState<QuickAddField>(null);
     const [isNameFocused, setIsNameFocused] = useState(false);
+    const hourPickerRef = useRef<ScrollView | null>(null);
+    const minutePickerRef = useRef<ScrollView | null>(null);
+    const periodPickerRef = useRef<ScrollView | null>(null);
     const [quickAddForm, setQuickAddForm] = useState({
         name: "",
         time: formatNowTimeInput(),
@@ -418,6 +428,43 @@ export default function DiscoverScreen() {
             setSelectedEntryId(null);
         }
     }, [entries, selectedEntryId]);
+
+    useEffect(() => {
+        const keyboardShowSubscription = Keyboard.addListener("keyboardDidShow", () => {
+            if (isNameFocused) {
+                setActiveQuickAddField(null);
+            }
+        });
+
+        return () => {
+            keyboardShowSubscription.remove();
+        };
+    }, [isNameFocused]);
+
+    useEffect(() => {
+        if (activeQuickAddField !== "time") {
+            return;
+        }
+
+        const frameId = requestAnimationFrame(() => {
+            hourPickerRef.current?.scrollTo({
+                y: TIME_HOUR_OPTIONS.indexOf(selectedQuickAddTime.hour) * TIME_PICKER_ITEM_HEIGHT,
+                animated: false,
+            });
+            minutePickerRef.current?.scrollTo({
+                y: TIME_MINUTE_OPTIONS.indexOf(selectedQuickAddTime.minute) * TIME_PICKER_ITEM_HEIGHT,
+                animated: false,
+            });
+            periodPickerRef.current?.scrollTo({
+                y: TIME_PERIOD_OPTIONS.indexOf(selectedQuickAddTime.period) * TIME_PICKER_ITEM_HEIGHT,
+                animated: false,
+            });
+        });
+
+        return () => {
+            cancelAnimationFrame(frameId);
+        };
+    }, [activeQuickAddField]);
 
     const selectedEntry = useMemo(
         () => entries.find((entry) => entry.id === selectedEntryId) ?? null,
@@ -524,6 +571,35 @@ export default function DiscoverScreen() {
             ...current,
             [field]: value,
         }));
+    };
+
+    const handleTimePickerSelection = (
+        field: "hour" | "minute" | "period",
+        index: number
+    ) => {
+        const safeHour = TIME_HOUR_OPTIONS[Math.max(0, Math.min(TIME_HOUR_OPTIONS.length - 1, index))] ?? selectedQuickAddTime.hour;
+        const safeMinute = TIME_MINUTE_OPTIONS[Math.max(0, Math.min(TIME_MINUTE_OPTIONS.length - 1, index))] ?? selectedQuickAddTime.minute;
+        const safePeriod = TIME_PERIOD_OPTIONS[Math.max(0, Math.min(TIME_PERIOD_OPTIONS.length - 1, index))] ?? selectedQuickAddTime.period;
+
+        const nextTime = buildTimeInputValue(
+            field === "hour" ? safeHour : selectedQuickAddTime.hour,
+            field === "minute" ? safeMinute : selectedQuickAddTime.minute,
+            field === "period" ? safePeriod : selectedQuickAddTime.period
+        );
+
+        if (nextTime !== quickAddForm.time) {
+            handleQuickAddFieldChange("time", nextTime);
+        }
+    };
+
+    const scrollTimePickerToIndex = (
+        ref: React.RefObject<ScrollView | null>,
+        index: number
+    ) => {
+        ref.current?.scrollTo({
+            y: index * TIME_PICKER_ITEM_HEIGHT,
+            animated: true,
+        });
     };
 
     const activeQuickAddMode: CustomKeypadMode = activeQuickAddField === "time" ? "time" : "decimal";
@@ -1020,7 +1096,10 @@ export default function DiscoverScreen() {
                                         placeholder="Name"
                                         placeholderTextColor="#6F6F6F"
                                         editable={!isSavingEntry}
-                                        onFocus={() => setIsNameFocused(true)}
+                                        onFocus={() => {
+                                            setIsNameFocused(true);
+                                            setActiveQuickAddField(null);
+                                        }}
                                         onBlur={() => setIsNameFocused(false)}
                                     />
                                 ) : null}
@@ -1118,7 +1197,21 @@ export default function DiscoverScreen() {
                                         <View style={styles.timePickerColumn}>
                                             <Text style={styles.timePickerLabel}>Hour</Text>
                                             <View style={styles.timePickerScrollContainer}>
-                                                <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                                                <View style={styles.timePickerCenterHighlight} pointerEvents="none" />
+                                                <ScrollView
+                                                    ref={hourPickerRef}
+                                                    style={styles.timePickerScroll}
+                                                    contentContainerStyle={styles.timePickerScrollContent}
+                                                    showsVerticalScrollIndicator={false}
+                                                    snapToInterval={TIME_PICKER_ITEM_HEIGHT}
+                                                    decelerationRate="normal"
+                                                    onScroll={(event) =>
+                                                        handleTimePickerSelection(
+                                                            "hour",
+                                                            getClosestPickerIndex(event.nativeEvent.contentOffset.y, TIME_HOUR_OPTIONS.length)
+                                                        )
+                                                    }
+                                                    scrollEventThrottle={16}>
                                                     {TIME_HOUR_OPTIONS.map((hourOption) => {
                                                         const isSelected = selectedQuickAddTime.hour === hourOption;
 
@@ -1126,12 +1219,7 @@ export default function DiscoverScreen() {
                                                             <Pressable
                                                                 key={`hour-${hourOption}`}
                                                                 style={[styles.timePickerOption, isSelected && styles.timePickerOptionSelected]}
-                                                                onPress={() =>
-                                                                    handleQuickAddFieldChange(
-                                                                        "time",
-                                                                        buildTimeInputValue(hourOption, selectedQuickAddTime.minute, selectedQuickAddTime.period)
-                                                                    )
-                                                                }>
+                                                                onPress={() => scrollTimePickerToIndex(hourPickerRef, TIME_HOUR_OPTIONS.indexOf(hourOption))}>
                                                                 <Text style={[styles.timePickerOptionText, isSelected && styles.timePickerOptionTextSelected]}>
                                                                     {hourOption}
                                                                 </Text>
@@ -1146,7 +1234,21 @@ export default function DiscoverScreen() {
                                         <View style={styles.timePickerColumn}>
                                             <Text style={styles.timePickerLabel}>Minute</Text>
                                             <View style={styles.timePickerScrollContainer}>
-                                                <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                                                <View style={styles.timePickerCenterHighlight} pointerEvents="none" />
+                                                <ScrollView
+                                                    ref={minutePickerRef}
+                                                    style={styles.timePickerScroll}
+                                                    contentContainerStyle={styles.timePickerScrollContent}
+                                                    showsVerticalScrollIndicator={false}
+                                                    snapToInterval={TIME_PICKER_ITEM_HEIGHT}
+                                                    decelerationRate="normal"
+                                                    onScroll={(event) =>
+                                                        handleTimePickerSelection(
+                                                            "minute",
+                                                            getClosestPickerIndex(event.nativeEvent.contentOffset.y, TIME_MINUTE_OPTIONS.length)
+                                                        )
+                                                    }
+                                                    scrollEventThrottle={16}>
                                                     {TIME_MINUTE_OPTIONS.map((minuteOption) => {
                                                         const isSelected = selectedQuickAddTime.minute === minuteOption;
 
@@ -1154,12 +1256,7 @@ export default function DiscoverScreen() {
                                                             <Pressable
                                                                 key={`minute-${minuteOption}`}
                                                                 style={[styles.timePickerOption, isSelected && styles.timePickerOptionSelected]}
-                                                                onPress={() =>
-                                                                    handleQuickAddFieldChange(
-                                                                        "time",
-                                                                        buildTimeInputValue(selectedQuickAddTime.hour, minuteOption, selectedQuickAddTime.period)
-                                                                    )
-                                                                }>
+                                                                onPress={() => scrollTimePickerToIndex(minutePickerRef, TIME_MINUTE_OPTIONS.indexOf(minuteOption))}>
                                                                 <Text style={[styles.timePickerOptionText, isSelected && styles.timePickerOptionTextSelected]}>
                                                                     {minuteOption}
                                                                 </Text>
@@ -1174,7 +1271,21 @@ export default function DiscoverScreen() {
                                         <View style={styles.timePickerPeriodColumn}>
                                             <Text style={styles.timePickerLabel}>Period</Text>
                                             <View style={styles.timePickerScrollContainer}>
-                                                <ScrollView style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                                                <View style={styles.timePickerCenterHighlight} pointerEvents="none" />
+                                                <ScrollView
+                                                    ref={periodPickerRef}
+                                                    style={styles.timePickerScroll}
+                                                    contentContainerStyle={styles.timePickerScrollContent}
+                                                    showsVerticalScrollIndicator={false}
+                                                    snapToInterval={TIME_PICKER_ITEM_HEIGHT}
+                                                    decelerationRate="normal"
+                                                    onScroll={(event) =>
+                                                        handleTimePickerSelection(
+                                                            "period",
+                                                            getClosestPickerIndex(event.nativeEvent.contentOffset.y, TIME_PERIOD_OPTIONS.length)
+                                                        )
+                                                    }
+                                                    scrollEventThrottle={16}>
                                                     {TIME_PERIOD_OPTIONS.map((periodOption) => {
                                                         const isSelected = selectedQuickAddTime.period === periodOption;
 
@@ -1182,12 +1293,7 @@ export default function DiscoverScreen() {
                                                             <Pressable
                                                                 key={`period-${periodOption}`}
                                                                 style={[styles.timePickerOption, isSelected && styles.timePickerOptionSelected]}
-                                                                onPress={() =>
-                                                                    handleQuickAddFieldChange(
-                                                                        "time",
-                                                                        buildTimeInputValue(selectedQuickAddTime.hour, selectedQuickAddTime.minute, periodOption)
-                                                                    )
-                                                                }>
+                                                                onPress={() => scrollTimePickerToIndex(periodPickerRef, TIME_PERIOD_OPTIONS.indexOf(periodOption))}>
                                                                 <Text style={[styles.timePickerOptionText, isSelected && styles.timePickerOptionTextSelected]}>
                                                                     {periodOption}
                                                                 </Text>
@@ -1599,24 +1705,38 @@ const styles = StyleSheet.create({
         marginBottom: 10,
     },
     timePickerScroll: {
-        maxHeight: 214,
+        height: TIME_PICKER_VISIBLE_HEIGHT,
+        maxHeight: TIME_PICKER_VISIBLE_HEIGHT,
+    },
+    timePickerScrollContent: {
+        paddingVertical: TIME_PICKER_VERTICAL_INSET,
     },
     timePickerScrollContainer: {
         position: "relative",
+        height: TIME_PICKER_VISIBLE_HEIGHT,
+        justifyContent: "center",
+    },
+    timePickerCenterHighlight: {
+        position: "absolute",
+        top: TIME_PICKER_VERTICAL_INSET,
+        left: 0,
+        right: 0,
+        height: TIME_PICKER_ITEM_HEIGHT,
+        borderRadius: 14,
+        backgroundColor: "#20273A",
+        borderWidth: 1,
+        borderColor: "rgba(94, 139, 255, 0.45)",
     },
     timePickerOption: {
-        minHeight: 46,
+        height: TIME_PICKER_ITEM_HEIGHT,
         borderRadius: 14,
-        backgroundColor: "#212121",
+        backgroundColor: "transparent",
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: 10,
-        marginBottom: 8,
     },
     timePickerOptionSelected: {
-        backgroundColor: "#20273A",
-        borderWidth: 1,
-        borderColor: "#5E8BFF",
+        transform: [{ scale: 1.08 }],
     },
     timePickerOptionText: {
         color: "#C7C7C7",
@@ -1626,6 +1746,7 @@ const styles = StyleSheet.create({
     timePickerOptionTextSelected: {
         color: "#F4F4F4",
         fontWeight: "700",
+        fontSize: 17,
     },
     timePickerFadeOverlay: {
         position: "absolute",
