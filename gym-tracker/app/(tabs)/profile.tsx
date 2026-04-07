@@ -1,18 +1,29 @@
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native";
-import { getUsernameById as getMockUsernameById } from "@/mock/mockDataService";
-import { Ionicons } from '@expo/vector-icons';
-import { router } from "expo-router";
-import { ScrollView } from "react-native";
-import { mockBadgeCategories } from "@/mock/badges";
 import { useEffect, useState } from "react";
+import { router } from "expo-router";
+import { supabase } from "@/lib/supabase";
+import { RedesignProfileScreen } from "@/design/components/profile";
+import { getUsernameById as getMockUsernameById } from "@/mock/mockDataService";
+import { mockBadgeCategories } from "@/mock/badges";
 import {
   getAuthenticatedUserId,
   getUsernameById as getSupabaseUsernameById,
 } from "@/services/profileService";
 
 const CURRENT_USER_ID = "user_ryan";
+
+function formatDisplayName(username: string) {
+  const normalizedUsername = username.replace(/^@+/, "").trim();
+
+  if (!normalizedUsername) {
+    return "Guest User";
+  }
+
+  return normalizedUsername
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 export default function ProfileScreen() {
   const fallbackUsername = getMockUsernameById(CURRENT_USER_ID) ?? "guest";
@@ -62,210 +73,63 @@ export default function ProfileScreen() {
   const displayedBadges = mockBadgeCategories
     .flatMap((category) => category.badges)
     .filter((badge) => badge.isDisplayed)
-    .slice(0, 3);
+    .slice(0, 4)
+    .map((badge) => ({
+      id: badge.id,
+      name: badge.name,
+      tier: badge.tier,
+      isAchieved: badge.isAchieved,
+    }));
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.screen} showsVerticalScrollIndicator={false}>
-        <Pressable style={styles.gymsButton} onPress={() => router.push("/gyms")}>
-          <Text style={styles.gymsButtonText}>Gyms</Text>
-        </Pressable>
-        <Pressable style={styles.settingsButton} onPress={() => router.push("/settings")}>
-          <Ionicons name="settings-outline" size={24} color="#F4F4F4" />
-        </Pressable>
-        <View style={styles.profilePictureContainer}>
-
-        </View>
-        <Text style={styles.usernameText}>
-          @{username}
-        </Text>
-        {isLoadingProfile ? (
-          <View style={styles.statusRow}>
-            <ActivityIndicator size="small" color="#8B8B8B" />
-            <Text style={styles.statusText}>Syncing profile</Text>
-          </View>
-        ) : null}
-        {profileLoadError ? <Text style={styles.statusText}>{profileLoadError}</Text> : null}
-        
-        <View style={styles.bodyMapContainer}>
-          {/* Placeholder for BodyMap component */}
-        </View>
-        <View style={styles.badgesContainer}>
-          <View style={styles.badgeRow}>
-            {displayedBadges.map((badge) => (
-              <View key={badge.id} style={styles.badge}>
-                <Text style={styles.badgeText}>{badge.name}</Text>
-              </View>
-            ))}
-          </View>
-          <Pressable style={styles.seeMoreBadgesButton} onPress={() => router.push("/badges")}>
-            <Text style={styles.seeMoreBadgesButtonText}>See More Badges</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <RedesignProfileScreen
+      appTitle="Fitness Tracker"
+      displayName={formatDisplayName(username)}
+      username={username}
+      verified
+      stats={[
+        { label: "Workouts", value: "124" },
+        { label: "Volume", value: "8.2k" },
+        { label: "Streak", value: "12" },
+      ]}
+      badges={displayedBadges}
+      settingsItems={[
+        {
+          id: "gyms",
+          iconName: "barbell-outline",
+          label: "Gyms",
+          value: "2 nearby",
+          onPress: () => router.push("/gyms"),
+        },
+        {
+          id: "general",
+          iconName: "settings-outline",
+          label: "General",
+          onPress: () => router.push("/settings"),
+        },
+        {
+          id: "notifications",
+          iconName: "notifications-outline",
+          label: "Notifications",
+          onPress: () => router.push("/settings"),
+        },
+        {
+          id: "logout",
+          iconName: "log-out-outline",
+          label: "Logout",
+          tone: "danger",
+          showChevron: false,
+          onPress: async () => {
+            await supabase.auth.signOut();
+          },
+        },
+      ]}
+      statusMessage={isLoadingProfile ? "Syncing profile" : profileLoadError ?? undefined}
+      isLoading={isLoadingProfile}
+      onPressMenu={() => router.push("/gyms")}
+      onPressAvatar={() => router.push("/settings")}
+      onPressViewAllBadges={() => router.push("/badges")}
+      onPressBadge={() => router.push("/badges")}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#151515",
-  },
-  screen: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    backgroundColor: "#151515",
-    paddingHorizontal: 18,
-    paddingTop: 14,
-  },
-  gymsButton: {
-    position: "absolute",
-    top: 18,
-    left: 18,
-    zIndex: 10,
-    width: 56,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  settingsButton: {
-    position: "absolute",
-    top: 18,
-    right: 18,
-    zIndex: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gymsButtonText: {
-    color: "#F4F4F4",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  profilePictureContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    alignSelf: "center",
-    backgroundColor: "#1A1A1A",
-    marginBottom: 5,
-  },
-  usernameText: {
-    color: "#8b8b8b",
-    fontSize: 18,
-    fontWeight: "400",
-    textAlign: "center",
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 8,
-  },
-  statusText: {
-    color: "#7C7C7C",
-    fontSize: 13,
-    textAlign: "center",
-    marginTop: 6,
-  },
-  buttonsContainer: {
-    marginTop: 20,
-    width: "100%",
-    alignSelf: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  routinesButton: {
-    flex: 1,
-    height: 30,
-    borderRadius: 20,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 5,
-  },
-  routinesButtonText: {
-    color: "#F4F4F4",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  goalsButton: {
-    flex: 1,
-    height: 30,
-    borderRadius: 20,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 5,
-  },
-  goalsButtonText: {
-    color: "#F4F4F4",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  exercisesButton: {
-    flex: 1,
-    height: 30,
-    borderRadius: 20,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 5,
-  },
-  exercisesButtonText: {
-    color: "#F4F4F4",
-    fontSize: 14,
-    fontWeight: "500",
-    },
-  bodyMapContainer: {
-    marginTop: 20,
-    height: 360,
-    backgroundColor: "#1A1A1A",
-    borderRadius: 10,
-  },
-  badgesContainer: {
-    marginTop: 20,
-    justifyContent: "space-between",
-  },
-  badgeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  badge: {
-    flex: 1,
-    height: 100,
-    borderRadius: 10,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 5,
-  },
-  badgeText: {
-    color: "#F4F4F4",
-    fontSize: 14,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  seeMoreBadgesButton: {
-    height: 30,
-    borderRadius: 20,
-    marginBottom: 40,
-    backgroundColor: "#1A1A1A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  seeMoreBadgesButtonText: {
-    color: "#F4F4F4",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-});
