@@ -1,14 +1,15 @@
 import "../global.css";
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { ThemeProvider } from '@react-navigation/native';
 import { router, Stack, useRootNavigationState, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import { ActiveWorkoutProvider } from "@/context/ActiveWorkoutContext";
 import { LibraryProvider } from "@/context/LibraryContext";
+import { useAppTheme } from '@/design/hooks/use-app-theme';
+import { createNavigationTheme } from '@/design/themes/navigation-theme';
 import { supabase } from "@/lib/supabase";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { initDB } from '@/db/sqlite';
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
@@ -17,6 +18,7 @@ export const unstable_settings = {
 };
 
 function AuthGate() {
+  const { isDark, theme } = useAppTheme();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -73,8 +75,12 @@ function AuthGate() {
 
   if (!isAuthReady) {
     return (
-      <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color="#F4F4F4" />
+      <View
+        style={[
+          styles.loadingScreen,
+          { backgroundColor: theme.colors.background },
+        ]}>
+        <ActivityIndicator size="large" color={isDark ? theme.colors.textPrimary : theme.colors.accent} />
       </View>
     );
   }
@@ -83,7 +89,8 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const { isDark, theme } = useAppTheme();
+  const navigationTheme = createNavigationTheme(theme);
 
   useEffect(() => {
     initDB(); //init on app load
@@ -92,7 +99,7 @@ export default function RootLayout() {
   return (
     <LibraryProvider>
       <ActiveWorkoutProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <ThemeProvider value={navigationTheme}>
           <AuthGate />
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -109,7 +116,7 @@ export default function RootLayout() {
             <Stack.Screen name="settings" options={{ headerShown: false }} />
             <Stack.Screen name="badges" options={{ headerShown: false }} />
           </Stack>
-          <StatusBar style="auto" />
+          <StatusBar style={isDark ? 'light' : 'dark'} />
         </ThemeProvider>
       </ActiveWorkoutProvider>
     </LibraryProvider>
@@ -119,7 +126,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   loadingScreen: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#151515',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100,

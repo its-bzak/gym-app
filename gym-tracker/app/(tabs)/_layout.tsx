@@ -1,51 +1,28 @@
 import { Tabs } from "expo-router";
-import { View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { useAppTheme } from "@/design/hooks/use-app-theme";
+import { TabBarItemVisual } from "@/design/components/navigation";
 
 import { HapticTab } from "@/components/haptic-tab";
 
-function TabIcon({
-  focused,
-  name,
-}: {
-  focused: boolean;
-  name: React.ComponentProps<typeof Ionicons>["name"];
-}) {
-  if (focused) {
-    return (
-      <View
-        style={{
-          width: 45,
-          height: 45,
-          borderRadius: 32,
-          backgroundColor: "#393939",
-          alignItems: "center",
-          justifyContent: "center",
-        }}>
-        <Ionicons name={name} size={24} color="#E4E4E4" />
-      </View>
-    );
-  }
-
-  return <Ionicons name={name} size={24} color="#BFBFBF" />;
-}
-
 export default function TabsLayout() {
+  const { theme } = useAppTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        sceneStyle: { backgroundColor: "#151515" },
+        sceneStyle: { backgroundColor: theme.colors.background },
         tabBarStyle: {
           position: "absolute",
-          height: 65,
-          paddingTop: 6,
-          paddingBottom: 10,
-          backgroundColor: "#282828",
-          borderTopWidth: 0,
-          borderTopLeftRadius: 32,
-          borderTopRightRadius: 32,
+          height: theme.components.tabBar.height + theme.spacing.md,
+          paddingTop: theme.spacing.xs,
+          paddingBottom: theme.spacing.sm,
+          backgroundColor: theme.colors.tabBarBackground,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.tabBarBorder,
+          borderTopLeftRadius: theme.radii.xl,
+          borderTopRightRadius: theme.radii.xl,
         },
         tabBarItemStyle: {
           justifyContent: "center",
@@ -57,7 +34,9 @@ export default function TabsLayout() {
         options={{
           title: "Food Log",
           tabBarButton: HapticTab,
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="restaurant-outline" />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarItemVisual focused={focused} iconName="restaurant-outline" label="Log" />
+          ),
         }}
       />
       <Tabs.Screen
@@ -65,7 +44,9 @@ export default function TabsLayout() {
         options={{
           title: "Workout",
           tabBarButton: HapticTab,
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="barbell-outline" />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarItemVisual focused={focused} iconName="barbell-outline" label="Workout" />
+          ),
         }}
       />
       <Tabs.Screen
@@ -73,7 +54,9 @@ export default function TabsLayout() {
         options={{
           title: "Performance",
           tabBarButton: HapticTab,
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="stats-chart-outline" />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarItemVisual focused={focused} iconName="stats-chart-outline" label="Stats" />
+          ),
         }}
       />
       <Tabs.Screen
@@ -81,7 +64,9 @@ export default function TabsLayout() {
         options={{
           title: "Profile",
           tabBarButton: HapticTab,
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} name="person-outline" />,
+          tabBarIcon: ({ focused }) => (
+            <TabBarItemVisual focused={focused} iconName="person-outline" label="Profile" />
+          ),
         }}
       />
     </Tabs>
