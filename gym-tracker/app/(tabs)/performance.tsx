@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
 import {
   Keyboard,
+  LayoutChangeEvent,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -51,8 +54,22 @@ const EMPTY_LIFETIME_TRAINING_METRICS: LifetimeTrainingMetrics = {
   totalReps: null,
 };
 
+const GOAL_WEIGHT_PICKER_STEP_WIDTH = 20;
+const GOAL_WEIGHT_PICKER_VISIBLE_HEIGHT = 132;
+const GOAL_WEIGHT_MIN_LBS = 60;
+const GOAL_WEIGHT_MAX_LBS = 300;
+const GOAL_RATE_PERCENT_MIN = 0.001;
+const GOAL_RATE_PERCENT_MAX = 0.015;
+const GOAL_RATE_PERCENT_STEP = 0.001;
+const GOAL_SLIDER_HORIZONTAL_INSET = 12;
+const GOAL_SLIDER_THUMB_SIZE = 18;
+
 type TargetsField = "calorieGoal" | "proteinGoal" | "carbsGoal" | "fatGoal" | null;
-type GoalField = "startWeight" | "targetWeight" | "targetRate" | null;
+
+type TargetStatusResult = {
+  label: string;
+  tone: "success" | "warning" | "danger" | "info";
+};
 
 function getWeekStart(dateString: string) {
   const date = new Date(`${dateString}T00:00:00`);
@@ -83,48 +100,207 @@ function formatWeekRangeLabel(weekStart: string) {
   return `${startMonth} ${startDay}-${endMonth} ${endDay}`;
 }
 
-function getAverageWeightChangeKgPerWeek(entries: WeightEntry[]) {
-  if (entries.length < 2) {
+function getClosestPickerIndex(offset: number, itemCount: number, itemSize: number) {
+  return Math.max(0, Math.min(itemCount - 1, Math.round(offset / itemSize)));
+}
+
+function getRateDisplayUnitLabel(unitPreference: UnitPreference) {
+  return unitPreference === "imperial" ? "lbs" : "kg";
+}
+
+function getGoalRatePercentOptions() {
+  const optionCount = Math.round((GOAL_RATE_PERCENT_MAX - GOAL_RATE_PERCENT_MIN) / GOAL_RATE_PERCENT_STEP);
+  return Array.from({ length: optionCount + 1 }, (_, index) =>
+    Number((GOAL_RATE_PERCENT_MIN + index * GOAL_RATE_PERCENT_STEP).toFixed(3))
+  );
+}
+
+function formatGoalRatePercent(percentValue: number) {
+  return `${(percentValue * 100).toFixed(1)}% body weight / wk`;
+}
+
+function isMultipleOf(value: number, step: number) {
+  return Math.abs(value / step - Math.round(value / step)) < 0.001;
+}
+
+function formatGoalWeightValue(value: number, unitPreference: UnitPreference) {
+  return `${value.toFixed(unitPreference === "imperial" ? 0 : 1)} ${getWeightUnitLabel(unitPreference)}`;
+}
+
+function getGoalWeightPickerOptions(unitPreference: UnitPreference) {
+  if (unitPreference === "imperial") {
+    const optionCount = Math.round((GOAL_WEIGHT_MAX_LBS - GOAL_WEIGHT_MIN_LBS) / 1);
+    return Array.from({ length: optionCount + 1 }, (_, index) => GOAL_WEIGHT_MIN_LBS + index);
+  }
+
+  const minimumKg = Math.ceil(convertWeightUnitToKg(GOAL_WEIGHT_MIN_LBS, "imperial") * 2) / 2;
+  const maximumKg = Math.floor(convertWeightUnitToKg(GOAL_WEIGHT_MAX_LBS, "imperial") * 2) / 2;
+  const optionCount = Math.round((maximumKg - minimumKg) / 0.5);
+  return Array.from({ length: optionCount + 1 }, (_, index) => Number((minimumKg + index * 0.5).toFixed(1)));
+}
+
+function getGoalWeightTickType(value: number, unitPreference: UnitPreference) {
+  if (unitPreference === "imperial") {
+    if (isMultipleOf(value, 10)) {
+      return "major";
+    }
+
+    if (isMultipleOf(value, 5)) {
+      return "mid";
+    }
+
+    return "minor";
+  }
+
+  if (isMultipleOf(value, 5)) {
+    return "major";
+  }
+
+  if (isMultipleOf(value, 2.5)) {
+    return "mid";
+  }
+
+  return "minor";
+}
+
+function getClosestGoalWeightOption(value: number, options: number[]) {
+  return options.reduce((closestOption, option) => {
+    if (Math.abs(option - value) < Math.abs(closestOption - value)) {
+      return option;
+    }
+
+    return closestOption;
+  }, options[0]);
+}
+
+function getClosestGoalRatePercent(percentValue: number) {
+  const clampedPercent = Math.min(GOAL_RATE_PERCENT_MAX, Math.max(GOAL_RATE_PERCENT_MIN, percentValue));
+  const stepIndex = Math.round((clampedPercent - GOAL_RATE_PERCENT_MIN) / GOAL_RATE_PERCENT_STEP);
+
+  return Number((GOAL_RATE_PERCENT_MIN + stepIndex * GOAL_RATE_PERCENT_STEP).toFixed(3));
+}
+
+function getProjectedGoalDatePreview(
+  startWeightKg: number,
+  targetWeightKg: number,
+  targetRateKgPerWeek: number
+) {
+  const goalType = getGoalType(startWeightKg, targetWeightKg);
+
+  if (goalType === "maintain") {
+    return "No target date";
+  }
+
+  if (targetRateKgPerWeek <= 0) {
+    return "Choose a pace";
+  }
+
+  const remainingKg = Math.abs(targetWeightKg - startWeightKg);
+
+  if (remainingKg < 0.01) {
+    return "Goal reached";
+  }
+
+  const daysRemaining = Math.ceil((remainingKg / targetRateKgPerWeek) * 7);
+  const projectedDate = new Date();
+  projectedDate.setDate(projectedDate.getDate() + Math.max(daysRemaining, 0));
+
+  return projectedDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+type WeeklyAveragePoint = {
+  weekStart: string;
+  averageKg: number;
+};
+
+function getWeeklyAverageSeries(entries: WeightEntry[], startDate?: string): WeeklyAveragePoint[] {
+  const filteredEntries = [...entries]
+    .filter((entry) => (startDate ? entry.date >= startDate : true))
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  const weeklyGroups = filteredEntries.reduce<Map<string, WeightEntry[]>>((aggregate, entry) => {
+    const weekKey = getWeekStart(entry.date);
+    const currentEntries = aggregate.get(weekKey) ?? [];
+    currentEntries.push(entry);
+    aggregate.set(weekKey, currentEntries);
+
+    return aggregate;
+  }, new Map());
+
+  return Array.from(weeklyGroups.entries()).map(([weekStart, weeklyEntries]) => ({
+    weekStart,
+    averageKg: weeklyEntries.reduce((sum, entry) => sum + entry.weightKg, 0) / Math.max(weeklyEntries.length, 1),
+  }));
+}
+
+function getAverageWeightChangeKgPerWeek(entries: WeightEntry[], startDate?: string) {
+  const weeklySeries = getWeeklyAverageSeries(entries, startDate);
+
+  if (weeklySeries.length < 2) {
     return null;
   }
 
-  const sortedEntries = [...entries].sort((left, right) => left.date.localeCompare(right.date));
-  const firstEntry = sortedEntries[0];
-  const lastEntry = sortedEntries[sortedEntries.length - 1];
-  const firstDate = new Date(`${firstEntry.date}T00:00:00`);
-  const lastDate = new Date(`${lastEntry.date}T00:00:00`);
+  const firstPoint = weeklySeries[0];
+  const lastPoint = weeklySeries[weeklySeries.length - 1];
+  const firstDate = new Date(`${firstPoint.weekStart}T00:00:00`);
+  const lastDate = new Date(`${lastPoint.weekStart}T00:00:00`);
   const elapsedDays = Math.round((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
 
   if (elapsedDays <= 0) {
     return null;
   }
 
-  return ((lastEntry.weightKg - firstEntry.weightKg) / elapsedDays) * 7;
+  return ((lastPoint.averageKg - firstPoint.averageKg) / elapsedDays) * 7;
+}
+
+function getEntriesSinceDate(entries: WeightEntry[], startDate: string) {
+  return [...entries]
+    .filter((entry) => entry.date >= startDate)
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function getSignedTargetRateKgPerWeek(goal: WeightGoal | null) {
+  if (!goal || goal.goalType === "maintain") {
+    return 0;
+  }
+
+  const targetRate = Math.abs(goal.targetRateKgPerWeek ?? 0);
+
+  if (goal.goalType === "lose") {
+    return -targetRate;
+  }
+
+  if (goal.goalType === "gain") {
+    return targetRate;
+  }
+
+  return 0;
+}
+
+function getActualGoalRateKgPerWeek(goal: WeightGoal | null, entries: WeightEntry[]) {
+  if (!goal) {
+    return null;
+  }
+
+  return getAverageWeightChangeKgPerWeek(entries, goal.startedOn);
 }
 
 function getWeeklyAverageTrendPoints(entries: WeightEntry[], unitPreference: UnitPreference) {
-  const weeklyGroups = [...entries]
-    .sort((left, right) => left.date.localeCompare(right.date))
-    .reduce<Map<string, WeightEntry[]>>((aggregate, entry) => {
-      const weekKey = getWeekStart(entry.date);
-      const currentEntries = aggregate.get(weekKey) ?? [];
-      currentEntries.push(entry);
-      aggregate.set(weekKey, currentEntries);
-
-      return aggregate;
-    }, new Map());
-
-  return Array.from(weeklyGroups.entries())
-    .map(([weekKey, weeklyEntries]) => {
+  return getWeeklyAverageSeries(entries)
+    .map(({ weekStart, averageKg }) => {
       const averageValue = convertWeightKgToUnit(
-        weeklyEntries.reduce((sum, entry) => sum + entry.weightKg, 0) / Math.max(weeklyEntries.length, 1),
+        averageKg,
         unitPreference
       );
       const displayUnitLabel = unitPreference === "imperial" ? "lbs" : getWeightUnitLabel(unitPreference);
 
       return {
-        label: formatWeekRangeLabel(weekKey),
-        detailLabel: formatWeekRangeLabel(weekKey),
+        label: formatWeekRangeLabel(weekStart),
+        detailLabel: formatWeekRangeLabel(weekStart),
         value: averageValue,
         displayValue: `Week Avg: ${averageValue.toFixed(1)} ${displayUnitLabel}`,
       };
@@ -136,26 +312,13 @@ function getProgramModeLabel(mode: NutritionGoal["programMode"]): string {
   return mode === "guided" ? "Generated Program" : "Manual Program";
 }
 
-function getTrendRateKgPerWeek(entries: WeightEntry[]): number | null {
-  if (!entries.length) {
-    return null;
-  }
-
-  const weeklyTrend = getWeightTrend(entries, 7);
-
-  if (weeklyTrend.currentWeight === weeklyTrend.previousWeight) {
-    return null;
-  }
-
-  return weeklyTrend.changeKg;
-}
-
 function getEstimatedGoalDate(goal: WeightGoal | null, entries: WeightEntry[]): string {
   if (!goal || goal.goalType === "maintain") {
     return "No target date";
   }
 
-  const currentWeight = getLatestWeight(entries) ?? goal.startWeightKg;
+  const weeklySeries = getWeeklyAverageSeries(entries, goal.startedOn);
+  const currentWeight = weeklySeries[weeklySeries.length - 1]?.averageKg ?? getLatestWeight(entries) ?? goal.startWeightKg;
 
   if (goal.goalType === "lose" && currentWeight <= goal.targetWeightKg) {
     return "Goal reached";
@@ -165,17 +328,17 @@ function getEstimatedGoalDate(goal: WeightGoal | null, entries: WeightEntry[]): 
     return "Goal reached";
   }
 
-  const actualRateKgPerWeek = getTrendRateKgPerWeek(entries);
+  const actualRateKgPerWeek = getActualGoalRateKgPerWeek(goal, entries);
 
   if (!actualRateKgPerWeek || Math.abs(actualRateKgPerWeek) < 0.01) {
     return "No trend yet";
   }
 
-  if (goal.goalType === "lose" && actualRateKgPerWeek >= 0) {
+  if (goal.goalType === "gain" && actualRateKgPerWeek <= 0) {
     return "Trend off target";
   }
 
-  if (goal.goalType === "gain" && actualRateKgPerWeek <= 0) {
+  if (goal.goalType === "lose" && actualRateKgPerWeek >= 0) {
     return "Trend off target";
   }
 
@@ -185,6 +348,34 @@ function getEstimatedGoalDate(goal: WeightGoal | null, entries: WeightEntry[]): 
   estimatedDate.setDate(estimatedDate.getDate() + Math.max(daysRemaining, 0));
 
   return estimatedDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getTargetGoalDate(goal: WeightGoal | null): string {
+  if (!goal || goal.goalType === "maintain") {
+    return "No target date";
+  }
+
+  const targetRateKgPerWeek = Math.abs(goal.targetRateKgPerWeek ?? 0);
+
+  if (targetRateKgPerWeek <= 0) {
+    return "No target date";
+  }
+
+  const remainingKg = Math.abs(goal.targetWeightKg - goal.startWeightKg);
+
+  if (remainingKg < 0.01) {
+    return "Goal reached";
+  }
+
+  const daysRemaining = Math.ceil((remainingKg / targetRateKgPerWeek) * 7);
+  const targetDate = new Date(`${goal.startedOn}T00:00:00`);
+  targetDate.setDate(targetDate.getDate() + Math.max(daysRemaining, 0));
+
+  return targetDate.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -286,13 +477,13 @@ function getGoalType(startWeightKg: number, targetWeightKg: number): WeightGoal[
 
 function formatGoalRate(rateKgPerWeek: number, unitPreference: UnitPreference): string {
   if (rateKgPerWeek <= 0) {
-    return `0 ${getWeightUnitLabel(unitPreference)} / week`;
+    return `0 ${unitPreference === "imperial" ? "lbs" : getWeightUnitLabel(unitPreference)} / week`;
   }
 
-  return `${formatWeightValue(rateKgPerWeek, unitPreference, 1)} ${getWeightUnitLabel(unitPreference)} / week`;
+  return `${formatWeightValue(rateKgPerWeek, unitPreference, 1)} ${unitPreference === "imperial" ? "lbs" : getWeightUnitLabel(unitPreference)} / week`;
 }
 
-function getTargetStatus(goal: WeightGoal | null, estimatedGoalDate: string) {
+function getTargetStatus(goal: WeightGoal | null, entries: WeightEntry[]): TargetStatusResult {
   if (!goal || goal.goalType === "maintain") {
     return {
       label: "Maintaining",
@@ -300,24 +491,45 @@ function getTargetStatus(goal: WeightGoal | null, estimatedGoalDate: string) {
     };
   }
 
-  if (estimatedGoalDate === "Goal reached") {
+  const currentWeight = getLatestWeight(entries) ?? goal.startWeightKg;
+
+  if (goal.goalType === "lose" && currentWeight <= goal.targetWeightKg) {
     return {
       label: "Goal Reached",
       tone: "success" as const,
     };
   }
 
-  if (estimatedGoalDate === "Trend off target") {
+  if (goal.goalType === "gain" && currentWeight >= goal.targetWeightKg) {
     return {
-      label: "Off Track",
-      tone: "warning" as const,
+      label: "Goal Reached",
+      tone: "success" as const,
     };
   }
 
-  if (estimatedGoalDate === "No trend yet") {
+  const actualRateKgPerWeek = getActualGoalRateKgPerWeek(goal, entries);
+
+  if (actualRateKgPerWeek === null || Math.abs(actualRateKgPerWeek) < 0.01) {
     return {
       label: "No Trend Yet",
       tone: "info" as const,
+    };
+  }
+
+  const targetRateKgPerWeek = getSignedTargetRateKgPerWeek(goal);
+  const differenceKgPerWeek = Math.abs(actualRateKgPerWeek - targetRateKgPerWeek);
+
+  if (differenceKgPerWeek >= 0.2) {
+    return {
+      label: "Off Target",
+      tone: "danger" as const,
+    };
+  }
+
+  if (differenceKgPerWeek >= 0.1) {
+    return {
+      label: "Slightly Off Target",
+      tone: "warning" as const,
     };
   }
 
@@ -327,28 +539,19 @@ function getTargetStatus(goal: WeightGoal | null, estimatedGoalDate: string) {
   };
 }
 
-function getGoalFieldLabel(field: Exclude<GoalField, null>) {
-  switch (field) {
-    case "startWeight":
-      return "Starting point";
-    case "targetWeight":
-      return "Goal weight";
-    case "targetRate":
-      return "Weekly pace";
-  }
-}
+function getCompletionDateDisplay(goal: WeightGoal | null, entries: WeightEntry[]) {
+  const targetStatus = getTargetStatus(goal, entries);
+  const estimatedDate = getEstimatedGoalDate(goal, entries);
+  const shouldShowEstimate =
+    targetStatus.label === "Off Target" ||
+    targetStatus.label === "Slightly Off Target";
 
-function getGoalFieldHelper(field: Exclude<GoalField, null>, unitPreference: UnitPreference) {
-  const unitLabel = getWeightUnitLabel(unitPreference);
-
-  switch (field) {
-    case "startWeight":
-      return `What's your current weight in ${unitLabel}?`;
-    case "targetWeight":
-      return `What's your goal weight in ${unitLabel}?`;
-    case "targetRate":
-      return `How much do you want to gain or lose per week in ${unitLabel}?`;
-  }
+  return {
+    targetLabel: "Target Completion Date",
+    targetValue: getTargetGoalDate(goal),
+    estimatedLabel: shouldShowEstimate ? "Estimated Completion Date" : undefined,
+    estimatedValue: shouldShowEstimate ? estimatedDate : undefined,
+  };
 }
 
 function getTargetsFieldLabel(field: Exclude<TargetsField, null>) {
@@ -394,7 +597,11 @@ export default function PerformanceScreen() {
   const [isGoalModalVisible, setIsGoalModalVisible] = useState(false);
   const [goalError, setGoalError] = useState<string | null>(null);
   const [isSavingGoal, setIsSavingGoal] = useState(false);
-  const [activeGoalField, setActiveGoalField] = useState<GoalField>(null);
+  const goalWeightPickerRef = useRef<ScrollView | null>(null);
+  const goalWeightHapticValueRef = useRef<number | null>(null);
+  const goalRateHapticPercentRef = useRef<number | null>(null);
+  const [goalWeightPickerWidth, setGoalWeightPickerWidth] = useState(0);
+  const [goalSliderWidth, setGoalSliderWidth] = useState(0);
   const { unitPreference } = useDisplayUnitPreference();
   const [targetsForm, setTargetsForm] = useState({
     calorieGoal: String(mockNutritionGoal.calorieGoal),
@@ -402,19 +609,20 @@ export default function PerformanceScreen() {
     carbsGoal: String(mockNutritionGoal.carbsGoal),
     fatGoal: String(mockNutritionGoal.fatGoal),
   });
-  const [goalForm, setGoalForm] = useState({
-    startWeight: String(mockGoal.startWeightKg),
-    targetWeight: String(mockGoal.targetWeightKg),
-    targetRate: String(mockGoal.targetRateKgPerWeek),
-  });
+  const [goalTargetWeightValue, setGoalTargetWeightValue] = useState<number>(
+    Number(formatWeightValue(mockGoal.targetWeightKg, unitPreference, 1))
+  );
+  const [goalRatePercent, setGoalRatePercent] = useState<number>(GOAL_RATE_PERCENT_MIN);
 
   const weightTrend = useMemo(() => getWeightTrend(weightEntries), [weightEntries]);
-  const estimatedGoalDate = useMemo(
-    () => getEstimatedGoalDate(weightGoal, weightEntries),
+  const targetCompletion = useMemo(
+    () => getCompletionDateDisplay(weightGoal, weightEntries),
     [weightEntries, weightGoal]
   );
-  const trendRateKgPerWeek = useMemo(() => getTrendRateKgPerWeek(weightEntries), [weightEntries]);
-  const averageWeightChangeKgPerWeek = useMemo(() => getAverageWeightChangeKgPerWeek(weightEntries), [weightEntries]);
+  const averageWeightChangeKgPerWeek = useMemo(
+    () => getActualGoalRateKgPerWeek(weightGoal, weightEntries),
+    [weightEntries, weightGoal]
+  );
   const goalStartDeltaKg = useMemo(
     () => getGoalStartDelta(weightGoal, weightEntries),
     [weightEntries, weightGoal]
@@ -425,9 +633,10 @@ export default function PerformanceScreen() {
     [unitPreference, weightEntries]
   );
   const targetStatus = useMemo(
-    () => getTargetStatus(weightGoal, estimatedGoalDate),
-    [estimatedGoalDate, weightGoal]
+    () => getTargetStatus(weightGoal, weightEntries),
+    [weightEntries, weightGoal]
   );
+  const signedTargetRateKgPerWeek = useMemo(() => getSignedTargetRateKgPerWeek(weightGoal), [weightGoal]);
   const volumeUnitLabel = unitPreference === "imperial" ? "lbs" : getWeightUnitLabel(unitPreference);
 
   const resolvedWeightGoal = useMemo<WeightGoal>(() => {
@@ -447,20 +656,102 @@ export default function PerformanceScreen() {
     };
   }, [weightEntries, weightGoal]);
 
+  const currentGoalStartWeightKg = latestWeight ?? resolvedWeightGoal.startWeightKg;
+  const goalRatePercentOptions = useMemo(() => getGoalRatePercentOptions(), []);
+  const selectedGoalRateKgPerWeek = currentGoalStartWeightKg * goalRatePercent;
+  const selectedGoalRateValue = convertWeightKgToUnit(selectedGoalRateKgPerWeek, unitPreference);
+  const selectedGoalTargetWeightKg = convertWeightUnitToKg(goalTargetWeightValue, unitPreference);
+  const goalWeightOptions = useMemo(() => getGoalWeightPickerOptions(unitPreference), [unitPreference]);
+  const goalWeightPickerInset = useMemo(
+    () => Math.max(goalWeightPickerWidth / 2 - GOAL_WEIGHT_PICKER_STEP_WIDTH / 2, 0),
+    [goalWeightPickerWidth]
+  );
+  const selectedGoalWeightIndex = useMemo(() => {
+    const closestOption = getClosestGoalWeightOption(goalTargetWeightValue, goalWeightOptions);
+    return goalWeightOptions.findIndex((value) => Math.abs(value - closestOption) < 0.001);
+  }, [goalTargetWeightValue, goalWeightOptions]);
+  const goalSliderTrackWidth = useMemo(
+    () => Math.max(goalSliderWidth - GOAL_SLIDER_HORIZONTAL_INSET * 2, 0),
+    [goalSliderWidth]
+  );
+  const goalSliderThumbLeft = useMemo(() => {
+    if (goalSliderTrackWidth <= 0) {
+      return GOAL_SLIDER_HORIZONTAL_INSET - GOAL_SLIDER_THUMB_SIZE / 2;
+    }
+
+    const progress = (goalRatePercent - GOAL_RATE_PERCENT_MIN) / (GOAL_RATE_PERCENT_MAX - GOAL_RATE_PERCENT_MIN);
+    return GOAL_SLIDER_HORIZONTAL_INSET + progress * goalSliderTrackWidth - GOAL_SLIDER_THUMB_SIZE / 2;
+  }, [goalRatePercent, goalSliderTrackWidth]);
+  const goalSliderActiveWidth = useMemo(() => {
+    if (goalSliderTrackWidth <= 0) {
+      return 0;
+    }
+
+    const progress = (goalRatePercent - GOAL_RATE_PERCENT_MIN) / (GOAL_RATE_PERCENT_MAX - GOAL_RATE_PERCENT_MIN);
+    return progress * goalSliderTrackWidth;
+  }, [goalRatePercent, goalSliderTrackWidth]);
+  const projectedGoalDatePreview = useMemo(
+    () => getProjectedGoalDatePreview(currentGoalStartWeightKg, selectedGoalTargetWeightKg, selectedGoalRateKgPerWeek),
+    [currentGoalStartWeightKg, selectedGoalRateKgPerWeek, selectedGoalTargetWeightKg]
+  );
+
+  const triggerSelectionHaptic = () => {
+    void Haptics.selectionAsync();
+  };
+
+  const updateGoalRatePercent = (nextPercent: number) => {
+    if (Math.abs((goalRateHapticPercentRef.current ?? -1) - nextPercent) >= 0.0005) {
+      triggerSelectionHaptic();
+      goalRateHapticPercentRef.current = nextPercent;
+    }
+
+    setGoalRatePercent(nextPercent);
+  };
+
+  const updateGoalTargetWeightValue = (nextValue: number) => {
+    if (Math.abs((goalWeightHapticValueRef.current ?? Number.NaN) - nextValue) >= 0.001) {
+      triggerSelectionHaptic();
+      goalWeightHapticValueRef.current = nextValue;
+    }
+
+    setGoalTargetWeightValue(nextValue);
+  };
+
+  const handleGoalRateSliderPosition = (locationX: number) => {
+    if (goalSliderWidth <= 0) {
+      return;
+    }
+
+    const clampedX = Math.max(
+      GOAL_SLIDER_HORIZONTAL_INSET,
+      Math.min(goalSliderWidth - GOAL_SLIDER_HORIZONTAL_INSET, locationX)
+    );
+    const normalizedPosition = goalSliderTrackWidth <= 0
+      ? 0
+      : (clampedX - GOAL_SLIDER_HORIZONTAL_INSET) / goalSliderTrackWidth;
+    const nextPercent = GOAL_RATE_PERCENT_MIN + normalizedPosition * (GOAL_RATE_PERCENT_MAX - GOAL_RATE_PERCENT_MIN);
+    updateGoalRatePercent(getClosestGoalRatePercent(nextPercent));
+  };
+
+  const handleGoalSliderLayout = (event: LayoutChangeEvent) => {
+    setGoalSliderWidth(event.nativeEvent.layout.width);
+  };
+
+  const handleGoalWeightPickerLayout = (event: LayoutChangeEvent) => {
+    setGoalWeightPickerWidth(event.nativeEvent.layout.width);
+  };
+
+  const handleGoalWeightPickerPosition = (offsetX: number) => {
+    const nextIndex = getClosestPickerIndex(offsetX, goalWeightOptions.length, GOAL_WEIGHT_PICKER_STEP_WIDTH);
+    updateGoalTargetWeightValue(goalWeightOptions[nextIndex]);
+  };
+
   const resetTargetsForm = (goal: NutritionGoal) => {
     setTargetsForm({
       calorieGoal: String(goal.calorieGoal),
       proteinGoal: String(goal.proteinGoal),
       carbsGoal: String(goal.carbsGoal),
       fatGoal: String(goal.fatGoal),
-    });
-  };
-
-  const resetGoalForm = (goal: WeightGoal) => {
-    setGoalForm({
-      startWeight: formatWeightValue(goal.startWeightKg, unitPreference, 1),
-      targetWeight: formatWeightValue(goal.targetWeightKg, unitPreference, 1),
-      targetRate: formatWeightValue(goal.targetRateKgPerWeek, unitPreference, 1),
     });
   };
 
@@ -548,9 +839,20 @@ export default function PerformanceScreen() {
   };
 
   const openGoalModal = () => {
-    resetGoalForm(resolvedWeightGoal);
+    const nextTargetWeightValue = getClosestGoalWeightOption(
+      Number(formatWeightValue(resolvedWeightGoal.targetWeightKg, unitPreference, 1)),
+      goalWeightOptions
+    );
+    const nextRatePercent =
+      currentGoalStartWeightKg > 0
+        ? getClosestGoalRatePercent(resolvedWeightGoal.targetRateKgPerWeek / currentGoalStartWeightKg)
+        : GOAL_RATE_PERCENT_MIN;
+
+    setGoalTargetWeightValue(nextTargetWeightValue);
+    goalWeightHapticValueRef.current = nextTargetWeightValue;
+    goalRateHapticPercentRef.current = nextRatePercent;
+    setGoalRatePercent(nextRatePercent);
     setGoalError(null);
-    setActiveGoalField("startWeight");
     setIsGoalModalVisible(true);
   };
 
@@ -570,9 +872,21 @@ export default function PerformanceScreen() {
     }
 
     setGoalError(null);
-    setActiveGoalField(null);
     setIsGoalModalVisible(false);
   };
+
+  useEffect(() => {
+    if (!isGoalModalVisible || goalWeightPickerWidth <= 0) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      goalWeightPickerRef.current?.scrollTo({
+        x: selectedGoalWeightIndex * GOAL_WEIGHT_PICKER_STEP_WIDTH,
+        animated: false,
+      });
+    });
+  }, [goalWeightPickerWidth, isGoalModalVisible, selectedGoalWeightIndex]);
 
   const handleSaveTargets = async () => {
     const calorieGoal = Number(targetsForm.calorieGoal);
@@ -640,26 +954,16 @@ export default function PerformanceScreen() {
   };
 
   const handleSaveGoal = async () => {
-    const startWeightValue = Number(goalForm.startWeight);
-    const targetWeightValue = Number(goalForm.targetWeight);
-    const targetRateValue = Number(goalForm.targetRate);
-
-    if (
-      [startWeightValue, targetWeightValue, targetRateValue].some(
-        (value) => !Number.isFinite(value) || value < 0
-      ) ||
-      startWeightValue <= 0 ||
-      targetWeightValue <= 0
-    ) {
-      setGoalError("Enter valid starting, target, and weekly rate values.");
+    if (!Number.isFinite(goalTargetWeightValue) || goalTargetWeightValue <= 0 || goalRatePercent <= 0) {
+      setGoalError("Choose a valid goal weight and weekly pace.");
       return;
     }
 
-    const startWeightKg = convertWeightUnitToKg(startWeightValue, unitPreference);
-    const targetWeightKg = convertWeightUnitToKg(targetWeightValue, unitPreference);
+    const startWeightKg = currentGoalStartWeightKg;
+    const targetWeightKg = selectedGoalTargetWeightKg;
     const goalType = getGoalType(startWeightKg, targetWeightKg);
     const targetRateKgPerWeek =
-      goalType === "maintain" ? 0 : convertWeightUnitToKg(targetRateValue, unitPreference);
+      goalType === "maintain" ? 0 : selectedGoalRateKgPerWeek;
 
     const nextGoal: WeightGoal = {
       ...resolvedWeightGoal,
@@ -668,7 +972,7 @@ export default function PerformanceScreen() {
       startWeightKg,
       targetWeightKg,
       targetRateKgPerWeek,
-      startedOn: weightGoal?.startedOn ?? new Date().toISOString().slice(0, 10),
+      startedOn: new Date().toISOString().slice(0, 10),
     };
 
     const input: WeightGoalInput = {
@@ -730,8 +1034,10 @@ export default function PerformanceScreen() {
         pageTitle="Stats"
         statusMessage={isLoading ? "Syncing performance" : loadError ?? undefined}
         isLoading={isLoading}
-        targetCompletionLabel="Target Completion Date"
-        targetCompletionDate={estimatedGoalDate}
+        targetCompletionLabel={targetCompletion.targetLabel}
+        targetCompletionDate={targetCompletion.targetValue}
+        estimatedCompletionLabel={targetCompletion.estimatedLabel}
+        estimatedCompletionDate={targetCompletion.estimatedValue}
         targetStatusLabel={targetStatus.label}
         targetStatusTone={targetStatus.tone}
         primaryAction={{ label: "Update Weight Goal", onPress: openGoalModal }}
@@ -739,8 +1045,10 @@ export default function PerformanceScreen() {
         trendTitle="Weight Trend"
         trendValue={formatTrendValue(averageWeightChangeKgPerWeek ?? 0, unitPreference)}
         trendSupportingText="Avg. Rate"
-        currentWeight={latestWeight === null ? "No Info" : formatWeight(latestWeight, unitPreference)}
-        currentWeightSupportingText={
+        targetPaceValue={formatTrendValue(signedTargetRateKgPerWeek, unitPreference)}
+        targetPaceSupportingText={formatGoalRate(Math.abs(signedTargetRateKgPerWeek), unitPreference)}
+        actualPaceValue={formatTrendValue(averageWeightChangeKgPerWeek ?? 0, unitPreference)}
+        actualPaceSupportingText={
           goalStartDeltaKg === null
             ? "No goal baseline"
             : `${formatTrendValue(goalStartDeltaKg, unitPreference)} from start`
@@ -803,78 +1111,114 @@ export default function PerformanceScreen() {
                 <View style={styles.modalCard}>
                   <Text style={styles.modalTitle}>Edit Goal</Text>
 
-                  <View style={styles.inputGroup}>
+                  <View style={styles.goalModalSection}>
                     <View style={styles.inputHeadingRow}>
-                      <Text style={styles.inputLabel}>Starting point</Text>
+                      <Text style={styles.inputLabel}>Target weight</Text>
                       <Text style={styles.inputUnit}>{getWeightUnitLabel(unitPreference)}</Text>
                     </View>
-                    <TextInput
-                      style={[styles.input, activeGoalField === "startWeight" && styles.inputActive]}
-                      value={goalForm.startWeight}
-                      onChangeText={(value) => setGoalForm((current) => ({ ...current, startWeight: value }))}
-                      placeholder={`Current weight (${getWeightUnitLabel(unitPreference)})`}
-                      placeholderTextColor="#6F6F6F"
-                      keyboardType="numeric"
-                      showSoftInputOnFocus={false}
-                      onFocus={() => {
-                        Keyboard.dismiss();
-                        setActiveGoalField("startWeight");
-                      }}
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <View style={styles.inputHeadingRow}>
-                      <Text style={styles.inputLabel}>Goal weight</Text>
-                      <Text style={styles.inputUnit}>{getWeightUnitLabel(unitPreference)}</Text>
+                    <Text style={styles.goalPickerSelectedValue}>
+                      {formatGoalWeightValue(goalTargetWeightValue, unitPreference)}
+                    </Text>
+                    <View style={styles.goalPickerScrollContainer} onLayout={handleGoalWeightPickerLayout}>
+                      <View style={styles.goalPickerCenterIndicator} pointerEvents="none">
+                        <View style={styles.goalPickerCenterArrow} />
+                        <View style={styles.goalPickerCenterLine} />
+                      </View>
+                      <ScrollView
+                        ref={goalWeightPickerRef}
+                        style={styles.goalPickerScroll}
+                        contentContainerStyle={[
+                          styles.goalPickerScrollContent,
+                          { paddingHorizontal: goalWeightPickerInset },
+                        ]}
+                        horizontal
+                        bounces={false}
+                        showsHorizontalScrollIndicator={false}
+                        decelerationRate="normal"
+                        onScroll={(event) => handleGoalWeightPickerPosition(event.nativeEvent.contentOffset.x)}
+                        onMomentumScrollEnd={(event) =>
+                          handleGoalWeightPickerPosition(event.nativeEvent.contentOffset.x)
+                        }
+                        onScrollEndDrag={(event) =>
+                          handleGoalWeightPickerPosition(event.nativeEvent.contentOffset.x)
+                        }
+                        scrollEventThrottle={16}>
+                        {goalWeightOptions.map((weightOption) => {
+                          const isSelected = Math.abs(weightOption - goalTargetWeightValue) < 0.001;
+                          const tickType = getGoalWeightTickType(weightOption, unitPreference);
+                          const showsLabel = tickType === "major";
+
+                          return (
+                            <Pressable
+                              key={`goal-weight-${weightOption}`}
+                              style={[styles.goalPickerOption, showsLabel && styles.goalPickerOptionMajor]}
+                              onPress={() => {
+                                updateGoalTargetWeightValue(weightOption);
+                                goalWeightPickerRef.current?.scrollTo({
+                                  x: goalWeightOptions.indexOf(weightOption) * GOAL_WEIGHT_PICKER_STEP_WIDTH,
+                                  animated: true,
+                                });
+                              }}>
+                              <View
+                                style={[
+                                  styles.goalPickerTick,
+                                  tickType === "major"
+                                    ? styles.goalPickerTickMajor
+                                    : tickType === "mid"
+                                      ? styles.goalPickerTickMid
+                                      : styles.goalPickerTickMinor,
+                                  isSelected && styles.goalPickerTickSelected,
+                                ]}
+                              />
+                              {showsLabel ? (
+                                <Text
+                                  numberOfLines={1}
+                                  style={[styles.goalPickerTickLabel, isSelected && styles.goalPickerTickLabelSelected]}>
+                                  {unitPreference === "imperial" ? weightOption.toFixed(0) : weightOption.toFixed(0)}
+                                </Text>
+                              ) : null}
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
                     </View>
-                    <TextInput
-                      style={[styles.input, activeGoalField === "targetWeight" && styles.inputActive]}
-                      value={goalForm.targetWeight}
-                      onChangeText={(value) => setGoalForm((current) => ({ ...current, targetWeight: value }))}
-                      placeholder={`Target weight (${getWeightUnitLabel(unitPreference)})`}
-                      placeholderTextColor="#6F6F6F"
-                      keyboardType="numeric"
-                      showSoftInputOnFocus={false}
-                      onFocus={() => {
-                        Keyboard.dismiss();
-                        setActiveGoalField("targetWeight");
-                      }}
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <View style={styles.inputHeadingRow}>
-                      <Text style={styles.inputLabel}>Weekly pace</Text>
-                      <Text style={styles.inputUnit}>{`${getWeightUnitLabel(unitPreference)} / wk`}</Text>
-                    </View>
-                    <TextInput
-                      style={[styles.input, activeGoalField === "targetRate" && styles.inputActive]}
-                      value={goalForm.targetRate}
-                      onChangeText={(value) => setGoalForm((current) => ({ ...current, targetRate: value }))}
-                      placeholder={`Weekly change (${getWeightUnitLabel(unitPreference)})`}
-                      placeholderTextColor="#6F6F6F"
-                      keyboardType="numeric"
-                      showSoftInputOnFocus={false}
-                      onFocus={() => {
-                        Keyboard.dismiss();
-                        setActiveGoalField("targetRate");
-                      }}
-                    />
                   </View>
 
-                  {activeGoalField ? (
-                    <View style={styles.keypadSection}>
-                      <View style={styles.keypadContextRow}>
-                        <Text style={styles.keypadContextHelper}>{getGoalFieldHelper(activeGoalField, unitPreference)}</Text>
-                      </View>
-                      <CustomKeypad
-                        mode="decimal"
-                        value={goalForm[activeGoalField]}
-                        onChange={(value) => setGoalForm((current) => ({ ...current, [activeGoalField]: value }))}
-                        showClearKey={false}
-                        showDoneKey={false}
-                      />
+                  <View style={styles.goalModalSection}>
+                    <View style={styles.inputHeadingRow}>
+                      <Text style={styles.inputLabel}>Weekly pace</Text>
+                      <Text style={styles.inputUnit}>% body weight / wk</Text>
                     </View>
-                  ) : null}
+                    <Text style={styles.goalSliderValue}>{formatGoalRatePercent(goalRatePercent)}</Text>
+                    <Text style={styles.goalSliderHelper}>{`${selectedGoalRateValue.toFixed(1)} ${getRateDisplayUnitLabel(unitPreference)} / wk`}</Text>
+                    <View
+                      style={styles.goalSliderTrackWrap}
+                      onLayout={handleGoalSliderLayout}
+                      onStartShouldSetResponder={() => true}
+                      onMoveShouldSetResponder={() => true}
+                      onResponderGrant={(event) => handleGoalRateSliderPosition(event.nativeEvent.locationX)}
+                      onResponderMove={(event) => handleGoalRateSliderPosition(event.nativeEvent.locationX)}>
+                      <View style={styles.goalSliderTrack} />
+                      <View style={[styles.goalSliderActiveTrack, { width: goalSliderActiveWidth }]} pointerEvents="none" />
+                      <View style={styles.goalSliderStepsRow} pointerEvents="none">
+                        {goalRatePercentOptions.map((rateOption) => {
+                          const isSelected = Math.abs(rateOption - goalRatePercent) < 0.0005;
+
+                          return <View key={`goal-rate-${rateOption}`} style={[styles.goalSliderStepDot, isSelected && styles.goalSliderStepDotSelected]} />;
+                        })}
+                      </View>
+                      <View style={[styles.goalSliderThumb, { left: goalSliderThumbLeft }]} pointerEvents="none" />
+                    </View>
+                    <View style={styles.goalSliderLabelsRow}>
+                      <Text style={styles.goalSliderLabel}>0.1%</Text>
+                      <Text style={styles.goalSliderLabel}>1.5%</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.goalProjectionCard}>
+                    <Text style={styles.goalProjectionLabel}>Projected Goal Date</Text>
+                    <Text style={styles.goalProjectionValue}>{projectedGoalDatePreview}</Text>
+                  </View>
 
                   {goalError ? <Text style={styles.modalError}>{goalError}</Text> : null}
 
@@ -1225,11 +1569,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
   },
-  modalSubtitle: {
-    color: "#8E8E8E",
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 6,
+  goalModalSection: {
+    gap: 10,
   },
   inputGroup: {
     gap: 6,
@@ -1269,6 +1610,179 @@ const styles = StyleSheet.create({
   },
   inputActive: {
     borderColor: "#5E8BFF",
+  },
+  goalPickerScrollContainer: {
+    height: GOAL_WEIGHT_PICKER_VISIBLE_HEIGHT,
+    borderRadius: 18,
+    backgroundColor: "#202020",
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  goalPickerSelectedValue: {
+    color: "#F4F4F4",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  goalPickerCenterIndicator: {
+    position: "absolute",
+    top: 10,
+    bottom: 16,
+    left: "50%",
+    marginLeft: -12,
+    width: 24,
+    alignItems: "center",
+    zIndex: 3,
+  },
+  goalPickerCenterArrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 10,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#5E8BFF",
+  },
+  goalPickerCenterLine: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+    borderRadius: 999,
+    backgroundColor: "#5E8BFF",
+  },
+  goalPickerScroll: {
+    flex: 1,
+  },
+  goalPickerScrollContent: {
+    alignItems: "flex-end",
+    minHeight: GOAL_WEIGHT_PICKER_VISIBLE_HEIGHT,
+  },
+  goalPickerOption: {
+    width: GOAL_WEIGHT_PICKER_STEP_WIDTH,
+    height: GOAL_WEIGHT_PICKER_VISIBLE_HEIGHT,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingBottom: 14,
+    gap: 8,
+  },
+  goalPickerOptionMajor: {
+    overflow: "visible",
+  },
+  goalPickerTick: {
+    width: 2,
+    borderRadius: 999,
+    backgroundColor: "#6A6A6A",
+  },
+  goalPickerTickMinor: {
+    height: 16,
+  },
+  goalPickerTickMid: {
+    height: 26,
+  },
+  goalPickerTickMajor: {
+    height: 38,
+  },
+  goalPickerTickSelected: {
+    backgroundColor: "#F4F4F4",
+  },
+  goalPickerTickLabel: {
+    color: "#8E8E8E",
+    fontSize: 12,
+    fontWeight: "600",
+    width: 40,
+    textAlign: "center",
+  },
+  goalPickerTickLabelSelected: {
+    color: "#F4F4F4",
+  },
+  goalSliderValue: {
+    color: "#F4F4F4",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  goalSliderHelper: {
+    color: "#8E8E8E",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  goalSliderTrackWrap: {
+    justifyContent: "center",
+    height: 40,
+  },
+  goalSliderTrack: {
+    position: "absolute",
+    left: GOAL_SLIDER_HORIZONTAL_INSET,
+    right: GOAL_SLIDER_HORIZONTAL_INSET,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#343434",
+  },
+  goalSliderActiveTrack: {
+    position: "absolute",
+    left: GOAL_SLIDER_HORIZONTAL_INSET,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#5E8BFF",
+  },
+  goalSliderStepsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: GOAL_SLIDER_HORIZONTAL_INSET,
+  },
+  goalSliderThumb: {
+    position: "absolute",
+    top: 7,
+    width: GOAL_SLIDER_THUMB_SIZE,
+    height: GOAL_SLIDER_THUMB_SIZE,
+    borderRadius: 999,
+    backgroundColor: "#F4F4F4",
+    borderWidth: 2,
+    borderColor: "#5E8BFF",
+  },
+  goalSliderStepButton: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goalSliderStepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#5A5A5A",
+  },
+  goalSliderStepDotSelected: {
+    backgroundColor: "#F4F4F4",
+    transform: [{ scale: 1.4 }],
+  },
+  goalSliderLabelsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  goalSliderLabel: {
+    color: "#8E8E8E",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  goalProjectionCard: {
+    borderRadius: 18,
+    backgroundColor: "#202020",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 4,
+  },
+  goalProjectionLabel: {
+    color: "#8E8E8E",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  goalProjectionValue: {
+    color: "#F4F4F4",
+    fontSize: 20,
+    fontWeight: "700",
   },
   keypadSection: {
     gap: 10,

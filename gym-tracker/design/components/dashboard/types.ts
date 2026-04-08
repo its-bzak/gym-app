@@ -38,6 +38,8 @@ export type RedesignPerformanceScreenProps = {
   isLoading?: boolean;
   targetCompletionLabel: string;
   targetCompletionDate: string;
+  estimatedCompletionLabel?: string;
+  estimatedCompletionDate?: string;
   targetStatusLabel: string;
   targetStatusTone?: Tone;
   primaryAction?: PerformanceAction;
@@ -45,8 +47,10 @@ export type RedesignPerformanceScreenProps = {
   trendTitle: string;
   trendValue: string;
   trendSupportingText: string;
-  currentWeight: string;
-  currentWeightSupportingText: string;
+  targetPaceValue: string;
+  targetPaceSupportingText: string;
+  actualPaceValue: string;
+  actualPaceSupportingText: string;
   trendPoints?: PerformanceTrendPoint[];
   kpis: PerformanceKpi[];
   nutritionPlan: NutritionPlanSummary;

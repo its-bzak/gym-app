@@ -15,6 +15,8 @@ export default function RedesignPerformanceScreen({
   isLoading = false,
   targetCompletionLabel,
   targetCompletionDate,
+  estimatedCompletionLabel,
+  estimatedCompletionDate,
   targetStatusLabel,
   targetStatusTone = "success",
   primaryAction,
@@ -22,8 +24,10 @@ export default function RedesignPerformanceScreen({
   trendTitle,
   trendValue,
   trendSupportingText,
-  currentWeight,
-  currentWeightSupportingText,
+  targetPaceValue,
+  targetPaceSupportingText,
+  actualPaceValue,
+  actualPaceSupportingText,
   trendPoints = [],
   kpis,
   nutritionPlan,
@@ -50,6 +54,14 @@ export default function RedesignPerformanceScreen({
     hero: {
       gap: currentTheme.spacing.md,
     },
+    heroDates: {
+      gap: currentTheme.spacing.sm,
+      flex: 1,
+      minWidth: 0,
+    },
+    heroDateBlock: {
+      gap: currentTheme.spacing.xs,
+    },
     eyebrow: {
       color: currentTheme.colors.textSecondary,
       fontSize: currentTheme.typography.caption.fontSize + 1,
@@ -69,7 +81,12 @@ export default function RedesignPerformanceScreen({
       fontSize: currentTheme.typography.title.fontSize + 10,
       lineHeight: currentTheme.typography.title.lineHeight + 10,
       fontWeight: currentTheme.typography.title.fontWeight,
-      flex: 1,
+    },
+    heroDateSecondary: {
+      color: currentTheme.colors.textPrimary,
+      fontSize: currentTheme.typography.title.fontSize - 1,
+      lineHeight: currentTheme.typography.title.lineHeight - 1,
+      fontWeight: currentTheme.typography.title.fontWeight,
     },
     statusPill: {
       borderRadius: currentTheme.radii.pill,
@@ -181,9 +198,19 @@ export default function RedesignPerformanceScreen({
         {statusMessage ? <StatusBanner tone="info" message={statusMessage} loading={isLoading} /> : null}
 
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>{targetCompletionLabel}</Text>
           <View style={styles.heroRow}>
-            <Text style={styles.heroDate}>{targetCompletionDate}</Text>
+            <View style={styles.heroDates}>
+              <View style={styles.heroDateBlock}>
+                <Text style={styles.eyebrow}>{targetCompletionLabel}</Text>
+                <Text style={styles.heroDate}>{targetCompletionDate}</Text>
+              </View>
+              {estimatedCompletionLabel && estimatedCompletionDate ? (
+                <View style={styles.heroDateBlock}>
+                  <Text style={styles.eyebrow}>{estimatedCompletionLabel}</Text>
+                  <Text style={styles.heroDateSecondary}>{estimatedCompletionDate}</Text>
+                </View>
+              ) : null}
+            </View>
             <View style={styles.statusPill}>
               <Text style={styles.statusText}>{targetStatusLabel}</Text>
             </View>
@@ -205,8 +232,10 @@ export default function RedesignPerformanceScreen({
         <SurfaceCard padding="lg">
           <PerformanceWeightChart
             title={trendTitle}
-            currentWeight={currentWeight}
-            currentWeightSupportingText={currentWeightSupportingText}
+            targetPaceValue={targetPaceValue}
+            targetPaceSupportingText={targetPaceSupportingText}
+            actualPaceValue={actualPaceValue}
+            actualPaceSupportingText={actualPaceSupportingText}
             trendValue={trendValue}
             trendSupportingText={trendSupportingText}
             trendPoints={trendPoints}

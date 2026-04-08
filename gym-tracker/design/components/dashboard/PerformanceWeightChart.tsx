@@ -7,8 +7,10 @@ import type { PerformanceTrendPoint } from "@/design/components/dashboard/types"
 
 type PerformanceWeightChartProps = {
   title: string;
-  currentWeight: string;
-  currentWeightSupportingText: string;
+  targetPaceValue: string;
+  targetPaceSupportingText: string;
+  actualPaceValue: string;
+  actualPaceSupportingText: string;
   trendValue: string;
   trendSupportingText: string;
   trendPoints?: PerformanceTrendPoint[];
@@ -123,8 +125,10 @@ function buildAreaPath(linePath: string, points: PlottedPoint[], baseline: numbe
 
 export default function PerformanceWeightChart({
   title,
-  currentWeight: _currentWeight,
-  currentWeightSupportingText: _currentWeightSupportingText,
+  targetPaceValue,
+  targetPaceSupportingText: _targetPaceSupportingText,
+  actualPaceValue,
+  actualPaceSupportingText: _actualPaceSupportingText,
   trendValue,
   trendSupportingText,
   trendPoints = [],
@@ -300,6 +304,38 @@ export default function PerformanceWeightChart({
       fontWeight: currentTheme.typography.caption.fontWeight,
       textAlign: "right" as const,
     },
+    paceContainer: {
+      borderRadius: currentTheme.radii.md,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+      backgroundColor: currentTheme.colors.surfaceMuted,
+      paddingHorizontal: currentTheme.spacing.md,
+      paddingVertical: currentTheme.spacing.sm,
+    },
+    paceInline: {
+      color: currentTheme.colors.textPrimary,
+      fontSize: currentTheme.typography.label.fontSize,
+      lineHeight: currentTheme.typography.label.lineHeight,
+      fontWeight: currentTheme.typography.label.fontWeight,
+    },
+    paceInlineMuted: {
+      color: currentTheme.colors.textSecondary,
+      fontSize: currentTheme.typography.label.fontSize,
+      lineHeight: currentTheme.typography.label.lineHeight,
+      fontWeight: "700" as const,
+    },
+    paceInlineValue: {
+      color: currentTheme.colors.textPrimary,
+      fontSize: currentTheme.typography.label.fontSize,
+      lineHeight: currentTheme.typography.label.lineHeight,
+      fontWeight: "700" as const,
+    },
+    paceInlineDivider: {
+      color: currentTheme.colors.border,
+      fontSize: currentTheme.typography.label.fontSize,
+      lineHeight: currentTheme.typography.label.lineHeight,
+      fontWeight: currentTheme.typography.label.fontWeight,
+    },
   }));
 
   return (
@@ -439,6 +475,16 @@ export default function PerformanceWeightChart({
             <Text style={styles.trendSummaryValue}>{trendValue}</Text>
             <Text style={styles.trendSummaryText}>{trendSupportingText}</Text>
           </View>
+        </View>
+
+        <View style={styles.paceContainer}>
+          <Text style={styles.paceInline}>
+            <Text style={styles.paceInlineMuted}>Target:</Text>
+            <Text style={styles.paceInlineValue}>{` ${targetPaceValue} /wk`}</Text>
+            <Text style={styles.paceInlineDivider}>{`  |  `}</Text>
+            <Text style={styles.paceInlineMuted}>Actual:</Text>
+            <Text style={styles.paceInlineValue}>{` ${actualPaceValue} /wk`}</Text>
+          </Text>
         </View>
       </View>
     </View>
