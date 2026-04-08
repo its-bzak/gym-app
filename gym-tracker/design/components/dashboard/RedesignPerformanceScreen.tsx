@@ -3,6 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AppHeader } from "@/design/components/navigation";
 import { StatusBanner, SurfaceCard } from "@/design/components/primitives";
 import NutritionPlanCard from "@/design/components/dashboard/NutritionPlanCard";
+import PerformanceWeightChart from "./PerformanceWeightChart";
 import { useAppTheme } from "@/design/hooks/use-app-theme";
 import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import { getToneColor, getToneSoftColor } from "@/design/utils/theme-resolvers";
@@ -23,6 +24,7 @@ export default function RedesignPerformanceScreen({
   trendSupportingText,
   currentWeight,
   currentWeightSupportingText,
+  trendPoints = [],
   kpis,
   nutritionPlan,
 }: RedesignPerformanceScreenProps) {
@@ -117,51 +119,6 @@ export default function RedesignPerformanceScreen({
       lineHeight: currentTheme.typography.label.lineHeight,
       fontWeight: currentTheme.typography.label.fontWeight,
     },
-    trendCard: {
-      gap: currentTheme.spacing.lg,
-    },
-    trendHeader: {
-      flexDirection: "row" as const,
-      alignItems: "flex-start" as const,
-      justifyContent: "space-between" as const,
-      gap: currentTheme.spacing.md,
-    },
-    trendTitle: {
-      color: currentTheme.colors.textPrimary,
-      fontSize: currentTheme.typography.section.fontSize + 2,
-      lineHeight: currentTheme.typography.section.lineHeight + 2,
-      fontWeight: currentTheme.typography.section.fontWeight,
-      flex: 1,
-    },
-    trendValue: {
-      color: currentTheme.colors.accent,
-      fontSize: currentTheme.typography.title.fontSize + 8,
-      lineHeight: currentTheme.typography.title.lineHeight + 8,
-      fontWeight: currentTheme.typography.title.fontWeight,
-      textAlign: "right" as const,
-    },
-    trendSupporting: {
-      color: currentTheme.colors.success,
-      fontSize: currentTheme.typography.caption.fontSize + 1,
-      lineHeight: currentTheme.typography.caption.lineHeight + 1,
-      textAlign: "right" as const,
-    },
-    chartPlaceholder: {
-      height: 260,
-      borderRadius: currentTheme.radii.lg,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
-      backgroundColor: currentTheme.colors.surfaceMuted,
-      overflow: "hidden" as const,
-      justifyContent: "flex-end" as const,
-      padding: currentTheme.spacing.md,
-    },
-    chartCaption: {
-      color: currentTheme.colors.textSecondary,
-      fontSize: currentTheme.typography.caption.fontSize,
-      lineHeight: currentTheme.typography.caption.lineHeight,
-      fontWeight: currentTheme.typography.caption.fontWeight,
-    },
     metricsSection: {
       gap: currentTheme.spacing.md,
     },
@@ -246,22 +203,14 @@ export default function RedesignPerformanceScreen({
         </View>
 
         <SurfaceCard padding="lg">
-          <View style={styles.trendCard}>
-            <View style={styles.trendHeader}>
-              <View>
-                <Text style={styles.trendTitle}>{trendTitle}</Text>
-                <Text style={styles.chartCaption}>Last 30 days performance</Text>
-              </View>
-              <View>
-                <Text style={styles.trendValue}>{currentWeight}</Text>
-                <Text style={styles.trendSupporting}>{currentWeightSupportingText}</Text>
-              </View>
-            </View>
-            <View style={styles.chartPlaceholder}>
-              <Text style={styles.trendValue}>{trendValue}</Text>
-              <Text style={styles.chartCaption}>{trendSupportingText}</Text>
-            </View>
-          </View>
+          <PerformanceWeightChart
+            title={trendTitle}
+            currentWeight={currentWeight}
+            currentWeightSupportingText={currentWeightSupportingText}
+            trendValue={trendValue}
+            trendSupportingText={trendSupportingText}
+            trendPoints={trendPoints}
+          />
         </SurfaceCard>
 
         <View style={styles.metricsSection}>

@@ -54,6 +54,84 @@ const EMPTY_LIFETIME_TRAINING_METRICS: LifetimeTrainingMetrics = {
 type TargetsField = "calorieGoal" | "proteinGoal" | "carbsGoal" | "fatGoal" | null;
 type GoalField = "startWeight" | "targetWeight" | "targetRate" | null;
 
+function getWeekStart(dateString: string) {
+  const date = new Date(`${dateString}T00:00:00`);
+  date.setDate(date.getDate() - date.getDay());
+
+  return date.toISOString().slice(0, 10);
+}
+
+function getWeekEnd(weekStart: string) {
+  const date = new Date(`${weekStart}T00:00:00`);
+  date.setDate(date.getDate() + 6);
+
+  return date;
+}
+
+function formatWeekRangeLabel(weekStart: string) {
+  const startDate = new Date(`${weekStart}T00:00:00`);
+  const endDate = getWeekEnd(weekStart);
+  const startMonth = startDate.toLocaleDateString("en-US", { month: "short" });
+  const endMonth = endDate.toLocaleDateString("en-US", { month: "short" });
+  const startDay = startDate.getDate();
+  const endDay = endDate.getDate();
+
+  if (startMonth === endMonth) {
+    return `${startMonth} ${startDay}-${endDay}`;
+  }
+
+  return `${startMonth} ${startDay}-${endMonth} ${endDay}`;
+}
+
+function getAverageWeightChangeKgPerWeek(entries: WeightEntry[]) {
+  if (entries.length < 2) {
+    return null;
+  }
+
+  const sortedEntries = [...entries].sort((left, right) => left.date.localeCompare(right.date));
+  const firstEntry = sortedEntries[0];
+  const lastEntry = sortedEntries[sortedEntries.length - 1];
+  const firstDate = new Date(`${firstEntry.date}T00:00:00`);
+  const lastDate = new Date(`${lastEntry.date}T00:00:00`);
+  const elapsedDays = Math.round((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (elapsedDays <= 0) {
+    return null;
+  }
+
+  return ((lastEntry.weightKg - firstEntry.weightKg) / elapsedDays) * 7;
+}
+
+function getWeeklyAverageTrendPoints(entries: WeightEntry[], unitPreference: UnitPreference) {
+  const weeklyGroups = [...entries]
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .reduce<Map<string, WeightEntry[]>>((aggregate, entry) => {
+      const weekKey = getWeekStart(entry.date);
+      const currentEntries = aggregate.get(weekKey) ?? [];
+      currentEntries.push(entry);
+      aggregate.set(weekKey, currentEntries);
+
+      return aggregate;
+    }, new Map());
+
+  return Array.from(weeklyGroups.entries())
+    .map(([weekKey, weeklyEntries]) => {
+      const averageValue = convertWeightKgToUnit(
+        weeklyEntries.reduce((sum, entry) => sum + entry.weightKg, 0) / Math.max(weeklyEntries.length, 1),
+        unitPreference
+      );
+      const displayUnitLabel = unitPreference === "imperial" ? "lbs" : getWeightUnitLabel(unitPreference);
+
+      return {
+        label: formatWeekRangeLabel(weekKey),
+        detailLabel: formatWeekRangeLabel(weekKey),
+        value: averageValue,
+        displayValue: `Week Avg: ${averageValue.toFixed(1)} ${displayUnitLabel}`,
+      };
+    })
+    .slice(-6);
+}
+
 function getProgramModeLabel(mode: NutritionGoal["programMode"]): string {
   return mode === "guided" ? "Generated Program" : "Manual Program";
 }
@@ -336,11 +414,16 @@ export default function PerformanceScreen() {
     [weightEntries, weightGoal]
   );
   const trendRateKgPerWeek = useMemo(() => getTrendRateKgPerWeek(weightEntries), [weightEntries]);
+  const averageWeightChangeKgPerWeek = useMemo(() => getAverageWeightChangeKgPerWeek(weightEntries), [weightEntries]);
   const goalStartDeltaKg = useMemo(
     () => getGoalStartDelta(weightGoal, weightEntries),
     [weightEntries, weightGoal]
   );
   const latestWeight = useMemo(() => getLatestWeight(weightEntries), [weightEntries]);
+  const trendPoints = useMemo(
+    () => getWeeklyAverageTrendPoints(weightEntries, unitPreference),
+    [unitPreference, weightEntries]
+  );
   const targetStatus = useMemo(
     () => getTargetStatus(weightGoal, estimatedGoalDate),
     [estimatedGoalDate, weightGoal]
@@ -653,15 +736,16 @@ export default function PerformanceScreen() {
         targetStatusTone={targetStatus.tone}
         primaryAction={{ label: "Update Weight Goal", onPress: openGoalModal }}
         secondaryAction={{ label: "Edit Nutrition Targets", onPress: openTargetsModal }}
-        trendTitle={`Weight Trend (${getWeightUnitLabel(unitPreference)})`}
-        trendValue={formatTrendValue(weightTrend.changeKg, unitPreference)}
-        trendSupportingText="In the last week"
+        trendTitle="Weight Trend"
+        trendValue={formatTrendValue(averageWeightChangeKgPerWeek ?? 0, unitPreference)}
+        trendSupportingText="Avg. Rate"
         currentWeight={latestWeight === null ? "No Info" : formatWeight(latestWeight, unitPreference)}
         currentWeightSupportingText={
           goalStartDeltaKg === null
             ? "No goal baseline"
             : `${formatTrendValue(goalStartDeltaKg, unitPreference)} from start`
         }
+        trendPoints={trendPoints}
         kpis={[
           {
             id: "total-reps",

@@ -25,6 +25,13 @@ export type NutritionPlanSummary = {
   onPressAction?: () => void;
 };
 
+export type PerformanceTrendPoint = {
+  label: string;
+  detailLabel?: string;
+  displayValue?: string;
+  value: number;
+};
+
 export type RedesignPerformanceScreenProps = {
   pageTitle?: string;
   statusMessage?: string;
@@ -40,6 +47,7 @@ export type RedesignPerformanceScreenProps = {
   trendSupportingText: string;
   currentWeight: string;
   currentWeightSupportingText: string;
+  trendPoints?: PerformanceTrendPoint[];
   kpis: PerformanceKpi[];
   nutritionPlan: NutritionPlanSummary;
 };
