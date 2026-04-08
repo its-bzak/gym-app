@@ -115,20 +115,12 @@ export default function WorkoutScreen() {
     weightTrendContainer: {
       flex: 1,
       height: 80,
-      borderRadius: currentTheme.radii.xl,
-      backgroundColor: currentTheme.colors.surface,
       marginRight: 5,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
     },
     goalProgressContainer: {
       flex: 1,
       height: 80,
-      borderRadius: currentTheme.radii.xl,
-      backgroundColor: currentTheme.colors.surface,
       marginLeft: 5,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
     },
     bodyMapContainer: {
       marginTop: 20,
@@ -518,7 +510,10 @@ export default function WorkoutScreen() {
                   params: {
                     quickAdd: "1",
                     date: getDateKey(selectedDate),
-                    hour: "12",
+                    time: new Date().toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    }).replace(" ", "").toLowerCase(),
                   },
                 })
               }>

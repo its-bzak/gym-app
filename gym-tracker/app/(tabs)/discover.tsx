@@ -350,6 +350,7 @@ export default function DiscoverScreen() {
         quickAdd?: string;
         date?: string;
         hour?: string;
+        time?: string;
     }>();
     const [selectedDate, setSelectedDate] = useState(() => new Date(getCurrentDate()));
     const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
@@ -422,12 +423,10 @@ export default function DiscoverScreen() {
             flex: 1,
         },
         dateCircle: {
-            backgroundColor: currentTheme.colors.surface,
+            backgroundColor: "transparent",
             alignItems: "center" as const,
             justifyContent: "center" as const,
             position: "relative" as const,
-            borderWidth: 1,
-            borderColor: currentTheme.colors.borderMuted,
         },
         dateCircleContent: {
             alignItems: "center" as const,
@@ -965,9 +964,14 @@ export default function DiscoverScreen() {
             return;
         }
 
-        openQuickAdd(getQuickAddSlotFromHour(quickAddParams.hour));
-        router.setParams({ quickAdd: undefined, date: undefined, hour: undefined });
-    }, [quickAddParams.date, quickAddParams.hour, quickAddParams.quickAdd, selectedDate]);
+        const requestedTime = Array.isArray(quickAddParams.time) ? quickAddParams.time[0] : quickAddParams.time;
+
+        openQuickAdd({
+            timeSlot: requestedTime ? undefined : getQuickAddSlotFromHour(quickAddParams.hour),
+            timeInput: requestedTime,
+        });
+        router.setParams({ quickAdd: undefined, date: undefined, hour: undefined, time: undefined });
+    }, [quickAddParams.date, quickAddParams.hour, quickAddParams.quickAdd, quickAddParams.time, selectedDate]);
 
     useEffect(() => {
         if (selectedEntryId && !entries.some((entry) => entry.id === selectedEntryId)) {
@@ -1052,8 +1056,12 @@ export default function DiscoverScreen() {
         });
     }, [entries]);
 
-    const openQuickAdd = (timeSlot: TimeSlot) => {
-        const nextTime = formatEntryTimeLabel(buildLoggedAtForSlot(selectedDate, timeSlot.hour));
+    const openQuickAdd = ({ timeSlot, timeInput }: { timeSlot?: TimeSlot; timeInput?: string } = {}) => {
+        const nextTime = timeInput
+            ? timeInput
+            : timeSlot
+                ? formatEntryTimeLabel(buildLoggedAtForSlot(selectedDate, timeSlot.hour))
+                : formatNowTimeInput();
         setQuickAddForm({
             name: "",
             time: nextTime,
@@ -1537,7 +1545,7 @@ export default function DiscoverScreen() {
                             <View key={slot.label} style={[styles.timelineHourBlock, hasEntries && styles.timelineHourBlockExpanded]}>
                                 <View style={styles.timelineHourHeaderRow}>
                                     <Text style={styles.timeSlotLabel}>{formatAxisHourLabel(slot.hour)}</Text>
-                                    <Pressable style={styles.timelineHourHeaderContent} onPress={() => openQuickAdd(slot)}>
+                                    <Pressable style={styles.timelineHourHeaderContent} onPress={() => openQuickAdd({ timeSlot: slot })}>
                                         <View style={styles.timelineHourRule} />
                                         {hasEntries ? (
                                             <Text style={styles.timelineHourTotals} numberOfLines={1}>
@@ -1600,7 +1608,7 @@ export default function DiscoverScreen() {
                         <>
                             {/**  Placeholder for future actions such as search bar */}
 
-                            <Pressable style={styles.quickAddButton} onPress={() => openQuickAdd(TIME_SLOTS[DEFAULT_QUICK_ADD_SLOT_INDEX])}>
+                            <Pressable style={styles.quickAddButton} onPress={() => openQuickAdd()}>
                                 <Text style={styles.quickAddButtonText}>Quick Add</Text>
                             </Pressable>
                         </>
