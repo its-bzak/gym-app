@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Keyboard,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import CustomKeypad from "@/components/ui/CustomKeypad";
+import { RedesignPerformanceScreen } from "@/design/components/dashboard";
 
 import {
   getLifetimeTrainingMetrics as getMockLifetimeTrainingMetrics,
@@ -216,6 +214,41 @@ function formatGoalRate(rateKgPerWeek: number, unitPreference: UnitPreference): 
   return `${formatWeightValue(rateKgPerWeek, unitPreference, 1)} ${getWeightUnitLabel(unitPreference)} / week`;
 }
 
+function getTargetStatus(goal: WeightGoal | null, estimatedGoalDate: string) {
+  if (!goal || goal.goalType === "maintain") {
+    return {
+      label: "Maintaining",
+      tone: "info" as const,
+    };
+  }
+
+  if (estimatedGoalDate === "Goal reached") {
+    return {
+      label: "Goal Reached",
+      tone: "success" as const,
+    };
+  }
+
+  if (estimatedGoalDate === "Trend off target") {
+    return {
+      label: "Off Track",
+      tone: "warning" as const,
+    };
+  }
+
+  if (estimatedGoalDate === "No trend yet") {
+    return {
+      label: "No Trend Yet",
+      tone: "info" as const,
+    };
+  }
+
+  return {
+    label: "On Track",
+    tone: "success" as const,
+  };
+}
+
 function getGoalFieldLabel(field: Exclude<GoalField, null>) {
   switch (field) {
     case "startWeight":
@@ -307,6 +340,12 @@ export default function PerformanceScreen() {
     () => getGoalStartDelta(weightGoal, weightEntries),
     [weightEntries, weightGoal]
   );
+  const latestWeight = useMemo(() => getLatestWeight(weightEntries), [weightEntries]);
+  const targetStatus = useMemo(
+    () => getTargetStatus(weightGoal, estimatedGoalDate),
+    [estimatedGoalDate, weightGoal]
+  );
+  const volumeUnitLabel = unitPreference === "imperial" ? "lbs" : getWeightUnitLabel(unitPreference);
 
   const resolvedWeightGoal = useMemo<WeightGoal>(() => {
     if (weightGoal) {
@@ -603,133 +642,71 @@ export default function PerformanceScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.screen}>
-        <Text style={styles.title}>Performance & Goals</Text>
-
-        {isLoading ? (
-          <View style={styles.statusRow}>
-            <ActivityIndicator size="small" color="#BDBDBD" />
-            <Text style={styles.statusText}>Syncing performance</Text>
-          </View>
-        ) : null}
-        {loadError ? <Text style={styles.statusText}>{loadError}</Text> : null}
-
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Weight Trend</Text>
-              <View style={styles.summaryCardContent}>
-                <Text style={styles.weightTrendValue}>{formatTrendValue(weightTrend.changeKg, unitPreference)}</Text>
-                <Text style={styles.summaryFooterText}>in the last week</Text>
-              </View>
-              <Text style={styles.summaryBottomText}>
-                {goalStartDeltaKg === null
-                  ? "No active goal baseline"
-                  : `${formatTrendValue(goalStartDeltaKg, unitPreference)} total`}
-              </Text>
-            </View>
-
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Projected Goal Date</Text>
-              <View style={styles.summaryCardContent}>
-                <Text style={styles.summaryGoalDate}>{estimatedGoalDate}</Text>
-              </View>
-              <Text style={styles.summaryBottomText}>based on current rate</Text>
-            </View>
-          </View>
-
-          <Text style={styles.sectionHeading}>Bodyweight Goal</Text>
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Current Goal</Text>
-              <Pressable style={styles.sectionButton} onPress={openGoalModal}>
-                <Text style={styles.sectionButtonText}>Edit Goal</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.metricRowTop}>
-              <View style={styles.metricBlockTop}>
-                <Text style={styles.metricLabel}>Start Weight</Text>
-                <Text style={styles.metricValue}>{formatWeight(resolvedWeightGoal.startWeightKg, unitPreference)}</Text>
-              </View>
-              <View style={styles.metricBlockTop}>
-                <Text style={styles.metricLabel}>Goal Weight</Text>
-                <Text style={styles.metricValue}>{formatWeight(resolvedWeightGoal.targetWeightKg, unitPreference)}</Text>
-              </View>
-              <View style={styles.metricBlockTop}>
-                <Text style={styles.metricLabel}>Rate / Week</Text>
-                <Text style={styles.metricValue}>{formatGoalRate(resolvedWeightGoal.targetRateKgPerWeek, unitPreference)}</Text>
-              </View>
-            </View>
-          </View>
-
-          <Text style={styles.sectionHeading}>Calorie & Macro Goals</Text>
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Current Targets</Text>
-              <Pressable style={styles.sectionButton} onPress={openTargetsModal}>
-                <Text style={styles.sectionButtonText}>Edit Targets</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.metricRow}>
-              <View style={styles.metricBlock}>
-                <Text style={styles.metricLabel}>Calories</Text>
-                <Text style={styles.metricValue}>{nutritionGoal.calorieGoal}</Text>
-              </View>
-              <View style={styles.metricBlock}>
-                <Text style={styles.metricLabel}>Protein</Text>
-                <Text style={styles.metricValue}>{`${formatCompactNumber(nutritionGoal.proteinGoal)} g`}</Text>
-              </View>
-            </View>
-
-            <View style={styles.metricRow}>
-              <View style={styles.metricBlock}>
-                <Text style={styles.metricLabel}>Carbs</Text>
-                <Text style={styles.metricValue}>{`${formatCompactNumber(nutritionGoal.carbsGoal)} g`}</Text>
-              </View>
-              <View style={styles.metricBlock}>
-                <Text style={styles.metricLabel}>Fat</Text>
-                <Text style={styles.metricValue}>{`${formatCompactNumber(nutritionGoal.fatGoal)} g`}</Text>
-              </View>
-            </View>
-          </View>
-
-          <Text style={styles.sectionHeading}>Lifetime Training Metrics</Text>
-          <View style={styles.trainingCard}>
-
-            <View style={styles.metricRowTop}>
-              <View style={styles.trainingMetricBlockTop}>
-                <Text style={styles.metricLabel}>Set Count</Text>
-                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalSets, "")}</Text>
-              </View>
-              <View style={styles.trainingMetricBlockTop}>
-                <Text style={styles.metricLabel}>Rep Count</Text>
-                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalReps, "")}</Text>
-              </View>
-              <View style={styles.trainingMetricBlockTop}>
-                <Text style={styles.metricLabel}>Workouts</Text>
-                <Text style={styles.metricValue}>{formatMetricCount(lifetimeTrainingMetrics.totalWorkouts, "")}</Text>
-              </View>
-            </View>
-
-            <View style={styles.metricRow}>
-              <View style={styles.trainingMetricBlock}>
-                <Text style={styles.metricLabel}>Activity Duration</Text>
-                <Text style={styles.metricValue}>{formatDurationTotal(lifetimeTrainingMetrics.totalDurationMins)}</Text>
-              </View>
-              <View style={styles.trainingMetricBlock}>
-                <Text style={styles.metricLabel}>Total Volume</Text>
-                <Text style={styles.metricValue}>
-                  {`${formatCompactNumber(
-                    Math.round(convertWeightKgToUnit(lifetimeTrainingMetrics.totalVolume, unitPreference))
-                  )} ${getWeightUnitLabel(unitPreference)}`}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
+    <>
+      <RedesignPerformanceScreen
+        pageTitle="Stats"
+        statusMessage={isLoading ? "Syncing performance" : loadError ?? undefined}
+        isLoading={isLoading}
+        targetCompletionLabel="Target Completion Date"
+        targetCompletionDate={estimatedGoalDate}
+        targetStatusLabel={targetStatus.label}
+        targetStatusTone={targetStatus.tone}
+        primaryAction={{ label: "Update Weight Goal", onPress: openGoalModal }}
+        secondaryAction={{ label: "Edit Nutrition Targets", onPress: openTargetsModal }}
+        trendTitle={`Weight Trend (${getWeightUnitLabel(unitPreference)})`}
+        trendValue={formatTrendValue(weightTrend.changeKg, unitPreference)}
+        trendSupportingText="In the last week"
+        currentWeight={latestWeight === null ? "No Info" : formatWeight(latestWeight, unitPreference)}
+        currentWeightSupportingText={
+          goalStartDeltaKg === null
+            ? "No goal baseline"
+            : `${formatTrendValue(goalStartDeltaKg, unitPreference)} from start`
+        }
+        kpis={[
+          {
+            id: "total-reps",
+            label: "Reps",
+            value: formatMetricCount(lifetimeTrainingMetrics.totalReps, ""),
+          },
+          {
+            id: "total-volume",
+            label: "Volume",
+            value: `${formatCompactNumber(
+              Math.round(convertWeightKgToUnit(lifetimeTrainingMetrics.totalVolume, unitPreference))
+            )} ${volumeUnitLabel}`,
+          },
+          {
+            id: "workouts",
+            label: "Workouts",
+            value: formatMetricCount(lifetimeTrainingMetrics.totalWorkouts, ""),
+          },
+          {
+            id: "hours",
+            label: "Time",
+            value: formatDurationTotal(lifetimeTrainingMetrics.totalDurationMins),
+          },
+        ]}
+        nutritionPlan={{
+          title: "Nutrition Plan",
+          phase: nutritionGoal.programMode === "guided" ? "Guided Program" : "Manual Targets",
+          items: [
+            {
+              label: "Calories",
+              value: `${nutritionGoal.calorieGoal} kcal`,
+            },
+            {
+              label: "Protein",
+              value: `${formatCompactNumber(nutritionGoal.proteinGoal)} g`,
+            },
+            {
+              label: "Carbs / Fats",
+              value: `${formatCompactNumber(nutritionGoal.carbsGoal)} g / ${formatCompactNumber(nutritionGoal.fatGoal)} g`,
+            },
+          ],
+          actionLabel: "Edit Nutrition Plan",
+          onPressAction: openTargetsModal,
+        }}
+      />
 
         <Modal
           animationType="slide"
@@ -809,7 +786,8 @@ export default function PerformanceScreen() {
                         mode="decimal"
                         value={goalForm[activeGoalField]}
                         onChange={(value) => setGoalForm((current) => ({ ...current, [activeGoalField]: value }))}
-                        onDone={() => setActiveGoalField(null)}
+                        showClearKey={false}
+                        showDoneKey={false}
                       />
                     </View>
                   ) : null}
@@ -929,7 +907,8 @@ export default function PerformanceScreen() {
                         mode="decimal"
                         value={targetsForm[activeTargetsField]}
                         onChange={(value) => setTargetsForm((current) => ({ ...current, [activeTargetsField]: value }))}
-                        onDone={() => setActiveTargetsField(null)}
+                        showClearKey={false}
+                        showDoneKey={false}
                       />
                     </View>
                   ) : null}
@@ -951,8 +930,7 @@ export default function PerformanceScreen() {
             </View>
           </TouchableWithoutFeedback>
         </Modal>
-      </View>
-    </SafeAreaView>
+    </>
   );
 }
 

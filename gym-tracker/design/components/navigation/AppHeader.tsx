@@ -16,7 +16,7 @@ function renderTrailingAction(
   borderColor: string
 ) {
   if (!action) {
-    return <View style={{ width: avatarSize, height: avatarSize }} />;
+    return null;
   }
 
   if (action.type === "avatar") {
@@ -66,12 +66,13 @@ export default function AppHeader({
   variant = "default",
 }: AppHeaderProps) {
   const { theme } = useAppTheme();
+  const isCompact = variant === "compact";
   const styles = createThemedStyles(theme, (currentTheme) => ({
     container: {
-      minHeight: variant === "compact" ? currentTheme.components.header.height - 8 : currentTheme.components.header.height,
+      minHeight: isCompact ? currentTheme.components.header.height - 12 : currentTheme.components.header.height,
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
+      justifyContent: "flex-start",
       gap: currentTheme.spacing.md,
     },
     leading: {
@@ -83,9 +84,15 @@ export default function AppHeader({
     },
     title: {
       color: currentTheme.colors.textPrimary,
-      fontSize: currentTheme.typography.title.fontSize,
-      lineHeight: currentTheme.typography.title.lineHeight,
-      fontWeight: currentTheme.typography.title.fontWeight,
+      fontSize: isCompact
+        ? currentTheme.typography.section.fontSize + 2
+        : currentTheme.typography.title.fontSize,
+      lineHeight: isCompact
+        ? currentTheme.typography.section.lineHeight + 2
+        : currentTheme.typography.title.lineHeight,
+      fontWeight: isCompact
+        ? currentTheme.typography.section.fontWeight
+        : currentTheme.typography.title.fontWeight,
       flex: 1,
     },
   }));
@@ -103,9 +110,7 @@ export default function AppHeader({
             color={theme.colors.iconPrimary}
           />
         </Pressable>
-      ) : (
-        <View style={styles.leading} />
-      )}
+      ) : null}
 
       <Text style={styles.title}>{title}</Text>
 

@@ -13,18 +13,15 @@ import ProfileBadgeRail from "@/design/components/profile/ProfileBadgeRail";
 import type { RedesignProfileScreenProps } from "@/design/components/profile/types";
 
 export default function RedesignProfileScreen({
-  appTitle = "Fitness Tracker",
+  appTitle = "Profile",
   displayName,
   username,
-  avatarUri,
   verified,
   stats,
   badges,
   settingsItems,
   statusMessage,
   isLoading = false,
-  onPressMenu,
-  onPressAvatar,
   onPressViewAllBadges,
   onPressBadge,
 }: RedesignProfileScreenProps) {
@@ -52,11 +49,7 @@ export default function RedesignProfileScreen({
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <AppHeader
-          title={appTitle}
-          leftAction={onPressMenu ? { icon: "menu", onPress: onPressMenu, accessibilityLabel: "Open menu" } : undefined}
-          rightAction={onPressAvatar ? { type: "avatar", avatarUri, onPress: onPressAvatar, accessibilityLabel: "Open profile menu" } : undefined}
-        />
+        <AppHeader title={appTitle} variant="compact" />
 
         {statusMessage ? (
           <StatusBanner tone="info" message={statusMessage} loading={isLoading} />
@@ -65,7 +58,6 @@ export default function RedesignProfileScreen({
         <AvatarHero
           displayName={displayName}
           username={username}
-          avatarUri={avatarUri}
           verified={verified}
           stats={stats}
         />

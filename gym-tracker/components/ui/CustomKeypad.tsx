@@ -14,6 +14,8 @@ type CustomKeypadProps = {
   value: string;
   onChange: (value: string) => void;
   onDone?: () => void;
+  showClearKey?: boolean;
+  showDoneKey?: boolean;
 };
 
 function splitTimeValue(value: string) {
@@ -95,7 +97,11 @@ function applyTimeKey(value: string, key: string) {
   return `${body}${key}${suffix}`;
 }
 
-function getRows(mode: CustomKeypadMode): KeyDescriptor[][] {
+function getRows(
+  mode: CustomKeypadMode,
+  showClearKey: boolean,
+  showDoneKey: boolean
+): KeyDescriptor[][] {
   const baseRows: KeyDescriptor[][] = [
     [
       { key: "1", label: "1" },
@@ -115,7 +121,7 @@ function getRows(mode: CustomKeypadMode): KeyDescriptor[][] {
   ];
 
   if (mode === "time") {
-    return [
+    const timeRows: KeyDescriptor[][] = [
       ...baseRows,
       [
         { key: ":", label: ":" },
@@ -125,30 +131,68 @@ function getRows(mode: CustomKeypadMode): KeyDescriptor[][] {
       [
         { key: "am", label: "AM", variant: "secondary" },
         { key: "pm", label: "PM", variant: "secondary" },
-        { key: "clear", label: "Clear", variant: "secondary" },
+        ...(showClearKey ? [{ key: "clear", label: "Clear", variant: "secondary" as const }] : []),
       ],
-      [{ key: "done", label: "Done", flex: 3, variant: "primary" }],
     ];
+
+    if (!showClearKey) {
+      timeRows[timeRows.length - 1].push({ key: "backspace", label: "⌫", variant: "secondary" });
+    }
+
+    if (showDoneKey) {
+      timeRows.push([{ key: "done", label: "Done", flex: 3, variant: "primary" }]);
+    }
+
+    return timeRows;
   }
 
-  return [
+  const numericRows: KeyDescriptor[][] = [
     ...baseRows,
     [
-      { key: mode === "decimal" ? "." : "clear", label: mode === "decimal" ? "." : "Clear", variant: "secondary" },
+      {
+        key: mode === "decimal" ? "." : showClearKey ? "clear" : "0",
+        label: mode === "decimal" ? "." : showClearKey ? "Clear" : "0",
+        variant: "secondary",
+      },
       { key: "0", label: "0" },
       { key: "backspace", label: "⌫", variant: "secondary" },
     ],
-    mode === "decimal"
-      ? [
-          { key: "clear", label: "Clear", variant: "secondary" },
-          { key: "done", label: "Done", flex: 2, variant: "primary" },
-        ]
-      : [{ key: "done", label: "Done", flex: 3, variant: "primary" }],
   ];
+
+  if (mode === "decimal") {
+    if (showClearKey || showDoneKey) {
+      const finalRow: KeyDescriptor[] = [];
+
+      if (showClearKey) {
+        finalRow.push({ key: "clear", label: "Clear", variant: "secondary" });
+      }
+
+      if (showDoneKey) {
+        finalRow.push({ key: "done", label: "Done", flex: showClearKey ? 2 : 3, variant: "primary" });
+      }
+
+      numericRows.push(finalRow);
+    }
+
+    return numericRows;
+  }
+
+  if (showDoneKey) {
+    numericRows.push([{ key: "done", label: "Done", flex: 3, variant: "primary" }]);
+  }
+
+  return numericRows;
 }
 
-export default function CustomKeypad({ mode, value, onChange, onDone }: CustomKeypadProps) {
-  const rows = getRows(mode);
+export default function CustomKeypad({
+  mode,
+  value,
+  onChange,
+  onDone,
+  showClearKey = true,
+  showDoneKey = true,
+}: CustomKeypadProps) {
+  const rows = getRows(mode, showClearKey, showDoneKey);
 
   const handleKeyPress = (key: string) => {
     if (key === "done") {
