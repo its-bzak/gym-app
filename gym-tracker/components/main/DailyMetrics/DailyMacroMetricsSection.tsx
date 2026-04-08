@@ -1,4 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { useAppTheme } from "@/design/hooks/use-app-theme";
+import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import { MacroBarProps, calculateMacroBar } from "@/utils/calculateMacroBar";
 
 const defaultDailyMacroMetrics: MacroBarProps = {
@@ -12,6 +14,7 @@ const defaultDailyMacroMetrics: MacroBarProps = {
 };
 
 export default function DailyMacroMetricsSection(props: MacroBarProps = defaultDailyMacroMetrics) {
+    const { theme } = useAppTheme();
     const {
         protein,
         proteinGoal,
@@ -30,6 +33,64 @@ export default function DailyMacroMetricsSection(props: MacroBarProps = defaultD
         totalCaloriesConsumed,
         isOverflow,
     } = calculateMacroBar(props);
+
+    const styles = createThemedStyles(theme, (currentTheme) => ({
+        metricsContainer: {
+            width: "100%",
+            borderRadius: currentTheme.radii.md,
+            paddingTop: 5,
+            marginBottom: 5,
+        },
+        macroTextContainer: {
+            flexDirection: "row" as const,
+            justifyContent: "space-between" as const,
+            alignItems: "center" as const,
+            marginBottom: 5,
+        },
+        leftMacroTextGroup: {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            gap: 14,
+            flexShrink: 1,
+        },
+        macroText: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize - 1,
+            lineHeight: currentTheme.typography.caption.lineHeight - 1,
+            fontWeight: currentTheme.typography.label.fontWeight,
+        },
+        calorieText: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize - 1,
+            lineHeight: currentTheme.typography.caption.lineHeight - 1,
+            fontWeight: currentTheme.typography.label.fontWeight,
+            marginLeft: 12,
+        },
+        macroBarContainer: {
+            width: "100%",
+            height: 15,
+            flexDirection: "row" as const,
+            overflow: "hidden" as const,
+            borderRadius: currentTheme.radii.md,
+            marginBottom: 5,
+            backgroundColor: currentTheme.colors.macroCaloriesTrack,
+        },
+        macroSegment: {
+            height: "100%",
+        },
+        proteinSegment: {
+            backgroundColor: currentTheme.colors.macroProtein,
+        },
+        fatSegment: {
+            backgroundColor: currentTheme.colors.macroFat,
+        },
+        carbSegment: {
+            backgroundColor: currentTheme.colors.macroCarbs,
+        },
+        remainingSegment: {
+            backgroundColor: currentTheme.colors.border,
+        },
+    }));
 
     return (
         <View style={styles.metricsContainer}>
@@ -86,59 +147,3 @@ export default function DailyMacroMetricsSection(props: MacroBarProps = defaultD
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    metricsContainer: {
-        width: "100%",
-        borderRadius: 10,
-        paddingTop: 5,
-        marginBottom: 5,
-    },
-    macroTextContainer: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 5,
-    },
-    leftMacroTextGroup: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 14,
-        flexShrink: 1,
-    },
-    macroText: {
-        color: "hsl(0, 0%, 60%)",
-        fontSize: 10,
-        fontWeight: "500",
-    },
-    calorieText: {
-        color: "hsl(0, 0%, 60%)",
-        fontSize: 10,
-        fontWeight: "500",
-        marginLeft: 12,
-    },
-    macroBarContainer: {
-        width: "100%",
-        height: 15,
-        flexDirection: "row",
-        overflow: "hidden",
-        borderRadius: 8,
-        marginBottom: 5,
-        backgroundColor: "hsl(0, 0%, 17%)",
-    },
-    macroSegment: {
-        height: "100%",
-    },
-    proteinSegment: {
-        backgroundColor: "#E8B5B8",
-    },
-    fatSegment: {
-        backgroundColor: "#E6E0AE",
-    },
-    carbSegment: {
-        backgroundColor: "#6EC1DF",
-    },
-    remainingSegment: {
-        backgroundColor: "#B5B5B5",
-    },
-});

@@ -1,5 +1,7 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
+import { useAppTheme } from "@/design/hooks/use-app-theme";
+import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import type { DailyExerciseMetrics } from "@/types/dashboard";
 import {
     convertWeightKgToUnit,
@@ -54,11 +56,76 @@ export default function DailyExerciseMetricsSection({
     metrics = defaultDailyExerciseMetrics,
     unitPreference,
 }: DailyExerciseMetricsSectionProps) {
+    const { theme } = useAppTheme();
+    const styles = createThemedStyles(theme, (currentTheme) => ({
+        container: {
+            flexDirection: "row" as const,
+            width: "100%",
+        },
+        volumeContainer: {
+            flexDirection: "row" as const,
+            flex: 1,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+        },
+        durationContainer: {
+            flexDirection: "row" as const,
+            flex: 1,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+        },
+        volumeIcon: {
+            width: "15%",
+            height: 24,
+            justifyContent: "center" as const,
+            alignItems: "center" as const,
+            borderRadius: 12,
+        },
+        durationIcon: {
+            width: "15%",
+            height: 24,
+            justifyContent: "center" as const,
+            alignItems: "center" as const,
+            borderRadius: 12,
+        },
+        metricText: {
+            fontSize: currentTheme.typography.caption.fontSize + 1,
+            lineHeight: currentTheme.typography.caption.lineHeight + 1,
+            color: currentTheme.colors.textSecondary,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+            alignSelf: "center" as const,
+        },
+        volumeText: {
+            height: 20,
+            width: "70%",
+            backgroundColor: currentTheme.colors.surface,
+            borderRadius: currentTheme.radii.md,
+            marginLeft: 10,
+            justifyContent: "center" as const,
+            marginRight: 12,
+            alignSelf: "center" as const,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        durationText: {
+            height: 20,
+            width: "70%",
+            backgroundColor: currentTheme.colors.surface,
+            borderRadius: currentTheme.radii.md,
+            marginLeft: 10,
+            justifyContent: "center" as const,
+            marginRight: 12,
+            alignSelf: "center" as const,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+    }));
+
     return (
         <View style={styles.container}>
             <View style={styles.volumeContainer}>
                 <View style={styles.volumeIcon}>
-                    <Ionicons name="barbell" size={20} color="#FFFFFF" />
+                    <Ionicons name="barbell" size={20} color={theme.colors.iconPrimary} />
                 </View>
                 <View style={styles.volumeText}>
                     <Text style={styles.metricText}>{formatVolume(metrics.volume, unitPreference)}</Text>
@@ -66,7 +133,7 @@ export default function DailyExerciseMetricsSection({
             </View>
             <View style={styles.durationContainer}>
                 <View style={styles.durationIcon}>
-                    <Ionicons name="time-outline" size={20} color="#FFFFFF" />
+                    <Ionicons name="time-outline" size={20} color={theme.colors.iconPrimary} />
                 </View>
                 <View style={styles.durationText}>
                     <Text style={styles.metricText}>{formatDuration(metrics.durationMins)}</Text>
@@ -75,68 +142,3 @@ export default function DailyExerciseMetricsSection({
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        display: "flex",
-        flexDirection: "row",
-        width: "100%",
-    },
-    volumeContainer: {
-        display: "flex",
-        flexDirection: "row",
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    durationContainer: {
-        display: "flex",
-        flexDirection: "row",
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    volumeIcon: {
-        width: "15%",
-        height: 24,
-        justifyContent: "center",
-        alignItems: "center",
-        borderRadius: 12,
-    },
-    durationIcon: {
-        width: "15%",
-        height: 24,
-        justifyContent: "center",
-        alignItems: "center",
-        borderRadius: 12,
-    },
-    metricText: {
-        fontSize: 12,
-        color: "hsl(0, 0%, 60%)",
-        alignSelf: "center",
-    },
-    volumeText: {
-        fontSize: 12,
-        height: 20,
-        width: "70%",
-        backgroundColor: "hsl(0, 0%, 17%)",
-        borderRadius: 8,
-        marginLeft: 10,
-        justifyContent: "center",
-        marginRight: 12,
-        color: "hsl(0, 0%, 60%)",
-        alignSelf: "center",
-    },
-    durationText: {
-        fontSize: 12,
-        height: 20,
-        width: "70%",
-        backgroundColor: "hsl(0, 0%, 17%)",
-        borderRadius: 8,
-        marginLeft: 10,
-        justifyContent: "center",
-        marginRight: 12,
-        color: "hsl(0, 0%, 60%)",
-        alignSelf: "center",
-    },
-});

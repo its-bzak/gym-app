@@ -1,5 +1,7 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
+import { useAppTheme } from "@/design/hooks/use-app-theme";
+import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import type { WeightEntry } from "@/types/dashboard";
 import { getWeightTrend } from "@/utils/weightProgress";
 import { formatWeight, type UnitPreference } from "@/utils/unitSystem";
@@ -13,7 +15,39 @@ export default function WeightTrendSection({
     entries,
     unitPreference,
 }: WeightTrendSectionProps) {
+    const { theme } = useAppTheme();
     const { changeKg } = getWeightTrend(entries);
+    const styles = createThemedStyles(theme, (currentTheme) => ({
+        container: {
+            width: "100%",
+            height: 85,
+            backgroundColor: currentTheme.colors.surface,
+            borderRadius: currentTheme.radii.md,
+            padding: 10,
+            marginBottom: 10,
+            justifyContent: "center" as const,
+        },
+        title: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.body.fontSize - 1,
+            lineHeight: currentTheme.typography.body.lineHeight - 1,
+            fontWeight: currentTheme.typography.label.fontWeight,
+            marginBottom: 6,
+        },
+        weightText: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.title.fontSize + 2,
+            lineHeight: currentTheme.typography.title.lineHeight + 2,
+            fontWeight: currentTheme.typography.title.fontWeight,
+        },
+        changeText: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+            marginTop: 4,
+        },
+    }));
 
     const arrow = changeKg > 0.05 ? "↑" : changeKg < -0.05 ? "↓" : "→";
 
@@ -29,41 +63,3 @@ export default function WeightTrendSection({
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        width: "100%",
-        height: 85,
-        backgroundColor: "#1E1E1E",
-        borderRadius: 10,
-        padding: 10,
-        marginBottom: 10,
-    },
-    title: {
-        color: "#BDBDBD",
-        fontSize: 14,
-        fontWeight: "500",
-        marginBottom: 6,
-    },
-    weightText: {
-        color: "#FFFFFF",
-        fontSize: 22,
-        fontWeight: "700",
-    },
-    changeText: {
-        color: "#7C7C7C",
-        fontSize: 12,
-        marginTop: 4,
-        marginBottom: 12,
-    },
-    chartPlaceholder: {
-        height: 120,
-        borderRadius: 8,
-        backgroundColor: "#2A2A2A",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    placeholderText: {
-        color: "#7C7C7C",
-    },
-});

@@ -1,6 +1,9 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
+import { useAppTheme } from "@/design/hooks/use-app-theme";
+import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import type { WeightEntry, WeightGoal } from "@/types/dashboard";
+import ProgressBar from "@/design/components/primitives/ProgressBar";
 import { getGoalProgress } from "@/utils/weightProgress";
 import { formatWeight, type UnitPreference } from "@/utils/unitSystem";
 
@@ -15,11 +18,41 @@ export default function GoalProgressSection({
     goal,
     unitPreference,
 }: GoalProgressSectionProps) {
+    const { theme } = useAppTheme();
+    const styles = createThemedStyles(theme, (currentTheme) => ({
+        container: {
+            width: "100%",
+            height: 85,
+            backgroundColor: currentTheme.colors.surface,
+            borderRadius: currentTheme.radii.md,
+            padding: 10,
+            marginBottom: 20,
+        },
+        title: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.body.fontSize - 1,
+            lineHeight: currentTheme.typography.body.lineHeight - 1,
+            fontWeight: currentTheme.typography.label.fontWeight,
+            marginBottom: 8,
+        },
+        progressWrap: {
+            marginBottom: 8,
+        },
+        subText: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+        },
+    }));
+
     if (!goal) {
         return (
             <View style={styles.container}>
                 <Text style={styles.title}>Goal Progress</Text>
-                <View style={styles.progressTrack} />
+                <View style={styles.progressWrap}>
+                    <ProgressBar value={0} max={1} tone="accent" />
+                </View>
                 <Text style={styles.subText}>No active goal yet</Text>
             </View>
         );
@@ -32,13 +65,8 @@ export default function GoalProgressSection({
         <View style={styles.container}>
             <Text style={styles.title}>Goal Progress</Text>
 
-            <View style={styles.progressTrack}>
-                <View
-                    style={[
-                        styles.progressFill,
-                        { width: `${progressPercent}%` },
-                    ]}
-                />
+            <View style={styles.progressWrap}>
+                <ProgressBar value={progressPercent} max={100} tone="accent" />
             </View>
 
             <Text style={styles.subText}>
@@ -49,43 +77,3 @@ export default function GoalProgressSection({
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        width: "100%",
-        height: 85,
-        backgroundColor: "#1E1E1E",
-        borderRadius: 10,
-        padding: 10,
-        marginBottom: 20,
-    },
-    title: {
-        color: "#BDBDBD",
-        fontSize: 14,
-        fontWeight: "500",
-        marginBottom: 8,
-    },
-    mainText: {
-        color: "#FFFFFF",
-        fontSize: 16,
-        fontWeight: "700",
-        marginBottom: 16,
-    },
-    progressTrack: {
-        width: "100%",
-        height: 12,
-        backgroundColor: "#2A2A2A",
-        borderRadius: 999,
-        overflow: "hidden",
-        marginBottom: 8,
-    },
-    progressFill: {
-        height: "100%",
-        backgroundColor: "#6EC1DF",
-        borderRadius: 999,
-    },
-    subText: {
-        color: "#7C7C7C",
-        fontSize: 13,
-    },
-});

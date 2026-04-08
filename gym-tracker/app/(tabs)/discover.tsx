@@ -8,7 +8,6 @@ import {
     Platform,
     Pressable,
     ScrollView,
-    StyleSheet,
     Text,
     TextInput,
     TouchableWithoutFeedback,
@@ -19,6 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import CustomKeypad, { type CustomKeypadMode } from "@/components/ui/CustomKeypad";
+import { useAppTheme } from "@/design/hooks/use-app-theme";
+import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import {
     appendFoodLogEntry,
     deleteFoodLogEntry,
@@ -281,11 +282,19 @@ function buildDateSummaryMap(summaries: Array<{ date: string; summary: FoodLogDa
 }
 
 function DayCircleProgressFill({ progress, isComplete, size }: { progress: number; isComplete: boolean; size: number }) {
+    const { theme } = useAppTheme();
+    const styles = createThemedStyles(theme, () => ({
+        dateCircleRing: {
+            position: "absolute" as const,
+            top: 0,
+            left: 0,
+        },
+    }));
     const clampedProgress = Math.max(0, Math.min(progress, 1));
     const center = size / 2;
     const radius = center - DATE_CIRCLE_STROKE;
     const fillRadius = radius * Math.sqrt(clampedProgress);
-    const ringColor = isComplete ? "#9ED0FF" : "#343434";
+    const ringColor = isComplete ? theme.colors.accent : theme.colors.border;
 
     return (
         <Svg
@@ -293,9 +302,9 @@ function DayCircleProgressFill({ progress, isComplete, size }: { progress: numbe
             height={size}
             style={styles.dateCircleRing}
             pointerEvents="none">
-            <Circle cx={center} cy={center} r={radius} fill="#1A1A1A" />
+            <Circle cx={center} cy={center} r={radius} fill={theme.colors.surface} />
             {fillRadius > 0 ? (
-                <Circle cx={center} cy={center} r={fillRadius} fill="#6EA8FF" fillOpacity={0.28} />
+                <Circle cx={center} cy={center} r={fillRadius} fill={theme.colors.accent} fillOpacity={0.28} />
             ) : null}
             <Circle cx={center} cy={center} r={radius} fill="none" stroke={ringColor} strokeWidth={DATE_CIRCLE_STROKE} />
         </Svg>
@@ -303,17 +312,28 @@ function DayCircleProgressFill({ progress, isComplete, size }: { progress: numbe
 }
 
 function TimePickerFadeMask() {
+    const { theme } = useAppTheme();
+    const styles = createThemedStyles(theme, () => ({
+        timePickerFadeOverlay: {
+            position: "absolute" as const,
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+        },
+    }));
+
     return (
         <View pointerEvents="none" style={styles.timePickerFadeOverlay}>
             <Svg width="100%" height="100%">
                 <Defs>
                     <LinearGradient id="time-picker-fade-top" x1="0" y1="0" x2="0" y2="1">
-                        <Stop offset="0" stopColor="#161616" />
-                        <Stop offset="60%" stopColor="#161616" stopOpacity="0" />
+                        <Stop offset="0" stopColor={theme.colors.surfaceElevated} />
+                        <Stop offset="60%" stopColor={theme.colors.surfaceElevated} stopOpacity="0" />
                     </LinearGradient>
                     <LinearGradient id="time-picker-fade-bottom" x1="0" y1="0" x2="0" y2="1">
-                        <Stop offset="0" stopColor="#161616" stopOpacity="0" />
-                        <Stop offset="60%" stopColor="#161616" />
+                        <Stop offset="0" stopColor={theme.colors.surfaceElevated} stopOpacity="0" />
+                        <Stop offset="60%" stopColor={theme.colors.surfaceElevated} />
                     </LinearGradient>
                 </Defs>
                 <Rect x="0" y="0" width="100%" height="55%" fill="url(#time-picker-fade-top)" />
@@ -324,6 +344,7 @@ function TimePickerFadeMask() {
 }
 
 export default function DiscoverScreen() {
+    const { theme } = useAppTheme();
     const { width: windowWidth } = useWindowDimensions();
     const quickAddParams = useLocalSearchParams<{
         quickAdd?: string;
@@ -355,6 +376,531 @@ export default function DiscoverScreen() {
         fat: "",
         carbs: "",
     });
+    const styles = createThemedStyles(theme, (currentTheme) => ({
+        safeArea: {
+            flex: 1,
+            backgroundColor: currentTheme.colors.background,
+        },
+        screen: {
+            flex: 1,
+            backgroundColor: currentTheme.colors.background,
+            paddingHorizontal: 18,
+            paddingTop: 12,
+        },
+        headerRow: {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            justifyContent: "space-between" as const,
+            marginBottom: 2,
+        },
+        headerIconButton: {
+            width: 42,
+            height: 42,
+            borderRadius: 21,
+            backgroundColor: currentTheme.colors.surface,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        headerTitle: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.title.fontSize,
+            lineHeight: currentTheme.typography.title.lineHeight,
+            fontWeight: currentTheme.typography.title.fontWeight,
+        },
+        dateStrip: {
+            flexDirection: "row" as const,
+            justifyContent: "space-between" as const,
+            width: "100%",
+            paddingVertical: 2,
+            paddingBottom: 4,
+            alignItems: "flex-start" as const,
+        },
+        dateCircleItem: {
+            alignItems: "center" as const,
+            flex: 1,
+        },
+        dateCircle: {
+            backgroundColor: currentTheme.colors.surface,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            position: "relative" as const,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        dateCircleContent: {
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+        },
+        dateCircleDay: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize - 1,
+            lineHeight: currentTheme.typography.caption.lineHeight - 2,
+            textTransform: "uppercase" as const,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+        },
+        dateCircleNumber: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.section.fontSize + 2,
+            lineHeight: currentTheme.typography.section.lineHeight + 2,
+            fontWeight: currentTheme.typography.section.fontWeight,
+            marginTop: 2,
+        },
+        dateCircleTextSelected: {
+            color: currentTheme.colors.textPrimary,
+        },
+        dateCircleIndicatorSlot: {
+            height: 10,
+            marginTop: 4,
+            alignItems: "center" as const,
+            justifyContent: "flex-end" as const,
+        },
+        dateCircleIndicatorDot: {
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: currentTheme.colors.textPrimary,
+        },
+        statusRow: {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            gap: 8,
+        },
+        statusText: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+            textAlign: "center" as const,
+            marginTop: 2,
+            marginBottom: 0,
+        },
+        summaryRow: {
+            flexDirection: "row" as const,
+            flexWrap: "wrap" as const,
+            gap: 10,
+            marginTop: 2,
+            marginBottom: 2,
+        },
+        summaryMetricCard: {
+            flex: 1,
+            maxWidth: "33.3%",
+            width: "33.3%",
+            borderRadius: currentTheme.radii.xl,
+            padding: 14,
+            backgroundColor: currentTheme.colors.surface,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        summaryMetricTextRow: {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            justifyContent: "space-between" as const,
+            marginBottom: 2,
+        },
+        summaryMetricLabel: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.caption.fontSize + 1,
+            lineHeight: currentTheme.typography.caption.lineHeight + 1,
+            fontWeight: currentTheme.typography.label.fontWeight,
+        },
+        summaryMetricValue: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.label.fontWeight,
+            textAlign: "right" as const,
+        },
+        summaryProgressTrack: {
+            height: 6,
+            borderRadius: currentTheme.radii.pill,
+            backgroundColor: currentTheme.colors.macroCaloriesTrack,
+            overflow: "hidden" as const,
+        },
+        summaryProgressFill: {
+            height: "100%",
+            borderRadius: currentTheme.radii.pill,
+        },
+        proteinFill: {
+            backgroundColor: currentTheme.colors.macroProtein,
+        },
+        fatFill: {
+            backgroundColor: currentTheme.colors.macroFat,
+        },
+        carbFill: {
+            backgroundColor: currentTheme.colors.macroCarbs,
+        },
+        timeline: {
+            flex: 1,
+        },
+        timelineContent: {
+            paddingBottom: 300,
+        },
+        timelineHourBlock: {
+            minHeight: TIMELINE_HOUR_HEIGHT,
+            marginBottom: 2,
+        },
+        timelineHourBlockExpanded: {
+            marginBottom: 8,
+        },
+        timelineHourHeaderRow: {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            minHeight: TIMELINE_HOUR_HEIGHT,
+        },
+        timeSlotLabel: {
+            width: TIMELINE_LEFT_GUTTER,
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+        },
+        timelineHourHeaderContent: {
+            flex: 1,
+            minHeight: TIMELINE_HOUR_HEIGHT,
+            justifyContent: "flex-start" as const,
+            paddingTop: 12,
+        },
+        timelineHourRule: {
+            height: 1,
+            backgroundColor: currentTheme.colors.divider,
+            marginLeft: 12,
+        },
+        timelineHourTotals: {
+            color: currentTheme.colors.textMuted,
+            alignSelf: "flex-end" as const,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.label.fontWeight,
+            marginTop: 8,
+            marginLeft: 12,
+        },
+        timelineEmptyState: {
+            paddingTop: 48,
+            paddingLeft: TIMELINE_LEFT_GUTTER + 24,
+            paddingBottom: 24,
+            alignItems: "flex-start" as const,
+        },
+        timelineHourEntries: {
+            paddingTop: 2,
+        },
+        timelineEntryRow: {
+            height: TIMELINE_ENTRY_HEIGHT,
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            marginBottom: TIMELINE_ENTRY_GAP,
+        },
+        entryTimeLabel: {
+            width: TIMELINE_LEFT_GUTTER,
+            color: currentTheme.colors.textMuted,
+            fontSize: currentTheme.typography.caption.fontSize - 1,
+            lineHeight: currentTheme.typography.caption.lineHeight - 1,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+        },
+        timelineEntryCard: {
+            flex: 1,
+            minHeight: TIMELINE_ENTRY_HEIGHT,
+            borderRadius: currentTheme.radii.lg,
+            backgroundColor: currentTheme.colors.surface,
+            marginLeft: 12,
+            paddingHorizontal: 12,
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            justifyContent: "space-between" as const,
+            gap: 10,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        timelineEntryCardSelected: {
+            borderWidth: 1,
+            borderColor: currentTheme.colors.accent,
+        },
+        timelineEntryName: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.body.fontSize - 1,
+            lineHeight: currentTheme.typography.body.lineHeight - 1,
+            fontWeight: currentTheme.typography.label.fontWeight,
+            flex: 1,
+        },
+        timelineEntryMeta: {
+            color: currentTheme.colors.textMuted,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            flexShrink: 0,
+        },
+        emptySlotText: {
+            color: currentTheme.colors.textMuted,
+            fontSize: currentTheme.typography.body.fontSize - 1,
+            lineHeight: currentTheme.typography.body.lineHeight - 1,
+            fontWeight: currentTheme.typography.body.fontWeight,
+        },
+        actionButton: {
+            width: "22.75%",
+            minHeight: 58,
+            borderRadius: 28,
+            backgroundColor: currentTheme.colors.surface,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            paddingHorizontal: 8,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        actionButtonText: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.body.fontSize,
+            lineHeight: currentTheme.typography.body.lineHeight,
+            fontWeight: currentTheme.typography.label.fontWeight,
+        },
+        modalOverlay: {
+            flex: 1,
+            backgroundColor: currentTheme.colors.surfaceOverlay,
+            justifyContent: "flex-end" as const,
+        },
+        modalSheet: {
+            backgroundColor: currentTheme.colors.surfaceElevated,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            paddingHorizontal: 18,
+            paddingTop: 12,
+            paddingBottom: 28,
+            borderTopWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        modalHandle: {
+            alignSelf: "center" as const,
+            width: 46,
+            height: 5,
+            borderRadius: currentTheme.radii.pill,
+            backgroundColor: currentTheme.colors.border,
+            marginBottom: 16,
+        },
+        modalBottomRow: {
+            flexDirection: "row" as const,
+            gap: 10,
+            marginTop: 12,
+        },
+        modalTitle: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.title.fontSize,
+            lineHeight: currentTheme.typography.title.lineHeight,
+            fontWeight: currentTheme.typography.title.fontWeight,
+        },
+        modalSubtitle: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.body.fontSize,
+            lineHeight: currentTheme.typography.body.lineHeight,
+            fontWeight: currentTheme.typography.body.fontWeight,
+            marginTop: 6,
+            marginBottom: 16,
+        },
+        modalInput: {
+            minHeight: 50,
+            borderRadius: currentTheme.radii.lg,
+            backgroundColor: currentTheme.colors.inputBackground,
+            color: currentTheme.colors.textPrimary,
+            paddingHorizontal: 16,
+            fontSize: currentTheme.typography.body.fontSize,
+            lineHeight: currentTheme.typography.body.lineHeight,
+            fontWeight: currentTheme.typography.body.fontWeight,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.inputBorder,
+        },
+        modalInputFocused: {
+            borderColor: currentTheme.colors.accent,
+        },
+        modalGrid: {
+            flexDirection: "row" as const,
+            flexWrap: "wrap" as const,
+            gap: 10,
+        },
+        modalInputHalf: {
+            width: "48.25%",
+            minHeight: 50,
+            borderRadius: currentTheme.radii.lg,
+            backgroundColor: currentTheme.colors.inputBackground,
+            color: currentTheme.colors.textPrimary,
+            paddingHorizontal: 16,
+            fontSize: currentTheme.typography.body.fontSize,
+            lineHeight: currentTheme.typography.body.lineHeight,
+            fontWeight: currentTheme.typography.body.fontWeight,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.inputBorder,
+        },
+        modalInputThirds: {
+            width: "31.25%",
+            minHeight: 50,
+            borderRadius: currentTheme.radii.lg,
+            backgroundColor: currentTheme.colors.inputBackground,
+            color: currentTheme.colors.textPrimary,
+            paddingHorizontal: 16,
+            fontSize: currentTheme.typography.body.fontSize,
+            lineHeight: currentTheme.typography.body.lineHeight,
+            fontWeight: currentTheme.typography.body.fontWeight,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.inputBorder,
+        },
+        modalPressableField: {
+            justifyContent: "center" as const,
+        },
+        modalPressableFieldText: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.body.fontSize,
+            lineHeight: currentTheme.typography.body.lineHeight,
+            fontWeight: currentTheme.typography.body.fontWeight,
+        },
+        modalPlaceholderText: {
+            color: currentTheme.colors.inputPlaceholder,
+        },
+        timePickerColumns: {
+            flexDirection: "row" as const,
+            gap: 10,
+            marginTop: 12,
+        },
+        timePickerColumn: {
+            flex: 1,
+        },
+        timePickerPeriodColumn: {
+            width: 88,
+        },
+        timePickerLabel: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+            marginBottom: 10,
+        },
+        timePickerScroll: {
+            height: TIME_PICKER_VISIBLE_HEIGHT,
+            maxHeight: TIME_PICKER_VISIBLE_HEIGHT,
+        },
+        timePickerScrollContent: {
+            paddingVertical: TIME_PICKER_VERTICAL_INSET,
+        },
+        timePickerScrollContainer: {
+            position: "relative" as const,
+            height: TIME_PICKER_VISIBLE_HEIGHT,
+            justifyContent: "center" as const,
+        },
+        timePickerCenterHighlight: {
+            position: "absolute" as const,
+            top: TIME_PICKER_VERTICAL_INSET,
+            left: 0,
+            right: 0,
+            height: TIME_PICKER_ITEM_HEIGHT,
+            borderRadius: currentTheme.radii.lg,
+            backgroundColor: currentTheme.colors.accentSoft,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.accent,
+        },
+        timePickerOption: {
+            height: TIME_PICKER_ITEM_HEIGHT,
+            borderRadius: currentTheme.radii.lg,
+            backgroundColor: "transparent",
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            paddingHorizontal: 10,
+        },
+        timePickerOptionSelected: {
+            transform: [{ scale: 1.08 }],
+        },
+        timePickerOptionText: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.body.fontSize - 1,
+            lineHeight: currentTheme.typography.body.lineHeight - 1,
+            fontWeight: currentTheme.typography.body.fontWeight,
+        },
+        timePickerOptionTextSelected: {
+            color: currentTheme.colors.textPrimary,
+            fontWeight: currentTheme.typography.title.fontWeight,
+            fontSize: currentTheme.typography.body.fontSize + 1,
+        },
+        bottomActionBar: {
+            position: "absolute" as const,
+            left: 18,
+            right: 18,
+            bottom: 50,
+            flexDirection: "row" as const,
+            justifyContent: "flex-end" as const,
+            gap: 10,
+        },
+        searchPlaceholder: {
+            flex: 1,
+            minHeight: 58,
+            borderRadius: 28,
+            backgroundColor: currentTheme.colors.surface,
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            paddingHorizontal: 18,
+            gap: 10,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        searchPlaceholderText: {
+            color: currentTheme.colors.textMuted,
+            fontSize: currentTheme.typography.section.fontSize,
+            lineHeight: currentTheme.typography.section.lineHeight,
+            fontWeight: currentTheme.typography.body.fontWeight,
+        },
+        quickAddButton: {
+            minWidth: 126,
+            minHeight: 58,
+            borderRadius: 28,
+            backgroundColor: currentTheme.colors.accent,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+        },
+        quickAddButtonText: {
+            color: currentTheme.colors.onAccent,
+            fontSize: currentTheme.typography.section.fontSize,
+            lineHeight: currentTheme.typography.section.lineHeight,
+            fontWeight: currentTheme.typography.label.fontWeight,
+        },
+        quickAddError: {
+            color: currentTheme.colors.danger,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+            marginTop: 12,
+        },
+        modalButtonRow: {
+            flexDirection: "row" as const,
+            gap: 10,
+            marginTop: 18,
+        },
+        modalSecondaryButton: {
+            flex: 1,
+            minHeight: 48,
+            borderRadius: currentTheme.radii.lg,
+            backgroundColor: currentTheme.colors.surface,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        modalPrimaryButton: {
+            flex: 1,
+            minHeight: 48,
+            borderRadius: currentTheme.radii.lg,
+            backgroundColor: currentTheme.colors.accent,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+        },
+        modalSecondaryButtonText: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.label.fontSize,
+            lineHeight: currentTheme.typography.label.lineHeight,
+            fontWeight: currentTheme.typography.label.fontWeight,
+        },
+        modalPrimaryButtonText: {
+            color: currentTheme.colors.onAccent,
+            fontSize: currentTheme.typography.label.fontSize,
+            lineHeight: currentTheme.typography.label.lineHeight,
+            fontWeight: currentTheme.typography.title.fontWeight,
+        },
+    }));
 
     const dateStrip = useMemo(() => buildDateStrip(selectedDate), [selectedDate]);
     const dateCircleSize = useMemo(() => {
@@ -862,7 +1408,7 @@ export default function DiscoverScreen() {
                             nextDate.setDate(selectedDate.getDate() - 1);
                             setSelectedDate(nextDate);
                         }}>
-                        <Ionicons name="chevron-back" size={22} color="#F4F4F4" />
+                        <Ionicons name="chevron-back" size={22} color={theme.colors.iconPrimary} />
                     </Pressable>
 
                     <Text style={styles.headerTitle}>{formatHeaderTitle(selectedDate)}</Text>
@@ -874,7 +1420,7 @@ export default function DiscoverScreen() {
                             nextDate.setDate(selectedDate.getDate() + 1);
                             setSelectedDate(nextDate);
                         }}>
-                        <Ionicons name="chevron-forward" size={22} color="#F4F4F4" />
+                        <Ionicons name="chevron-forward" size={22} color={theme.colors.iconPrimary} />
                     </Pressable>
                 </View>
 
@@ -916,7 +1462,7 @@ export default function DiscoverScreen() {
 
                 {isLoadingFoodLog ? (
                     <View style={styles.statusRow}>
-                        <ActivityIndicator size="small" color="#BFBFBF" />
+                        <ActivityIndicator size="small" color={theme.colors.iconSecondary} />
                         <Text style={styles.statusText}>Syncing food log</Text>
                     </View>
                 ) : null}
@@ -1311,6 +1857,8 @@ export default function DiscoverScreen() {
                                         value={quickAddForm[activeQuickAddField]}
                                         onChange={(value) => handleQuickAddFieldChange(activeQuickAddField, value)}
                                         onDone={() => setActiveQuickAddField(null)}
+                                        showClearKey={false}
+                                        showDoneKey={false}
                                     />
                                 ) : null}
 
@@ -1322,7 +1870,7 @@ export default function DiscoverScreen() {
                                     </Pressable>
                                     <Pressable style={styles.modalPrimaryButton} onPress={handleSaveQuickAdd}>
                                         {isSavingEntry ? (
-                                            <ActivityIndicator size="small" color="#F4F4F4" />
+                                            <ActivityIndicator size="small" color={theme.colors.onAccent} />
                                         ) : (
                                             <Text style={styles.modalPrimaryButtonText}>
                                                 {quickAddModalMode === "create" ? "Confirm" : "Save"}
@@ -1339,492 +1887,3 @@ export default function DiscoverScreen() {
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: "#151515",
-    },
-    screen: {
-        flex: 1,
-        backgroundColor: "#151515",
-        paddingHorizontal: 18,
-        paddingTop: 12,
-    },
-    headerRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: 2,
-    },
-    headerIconButton: {
-        width: 42,
-        height: 42,
-        borderRadius: 21,
-        backgroundColor: "#1F1F1F",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    headerTitle: {
-        color: "#F4F4F4",
-        fontSize: 24,
-        fontWeight: "600",
-    },
-    dateStrip: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        width: "100%",
-        paddingVertical: 2,
-        paddingBottom: 4,
-        alignItems: "flex-start",
-    },
-    dateCircleItem: {
-        alignItems: "center",
-        flex: 1,
-    },
-    dateCircle: {
-        backgroundColor: "#1A1A1A",
-        alignItems: "center",
-        justifyContent: "center",
-        position: "relative",
-    },
-    dateCircleRing: {
-        position: "absolute",
-        top: 0,
-        left: 0,
-    },
-    dateCircleContent: {
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    dateCircleDay: {
-        color: "#9E9E9E",
-        fontSize: 11,
-        lineHeight: 12,
-        textTransform: "uppercase",
-    },
-    dateCircleNumber: {
-        color: "#F4F4F4",
-        fontSize: 18,
-        fontWeight: "600",
-        lineHeight: 20,
-        marginTop: 2,
-    },
-    dateCircleTextSelected: {
-        color: "#F4F4F4",
-    },
-    dateCircleIndicatorSlot: {
-        height: 10,
-        marginTop: 4,
-        alignItems: "center",
-        justifyContent: "flex-end",
-    },
-    dateCircleIndicatorDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: "#D9D9D9",
-    },
-    statusRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-    },
-    statusText: {
-        color: "#7C7C7C",
-        fontSize: 13,
-        textAlign: "center",
-        marginTop: 2,
-        marginBottom: 0,
-    },
-    summaryRow: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 10,
-        marginTop: 2,
-        marginBottom: 2,
-    },
-    summaryMetricCard: {
-        flex: 1,
-        maxWidth: "33.3%",
-        width: "33.3%",
-        borderRadius: 20,
-        padding: 14,
-    },
-    summaryMetricTextRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: 2,
-    },
-    summaryMetricLabel: {
-        color: "#FFFFFF",
-        fontSize: 13,
-    },
-    summaryMetricValue: {
-        color: "#FFFFFF",
-        fontSize: 12,
-        fontWeight: "600",
-        textAlign: "right",
-    },
-    summaryProgressTrack: {
-        height: 6,
-        borderRadius: 999,
-        backgroundColor: "#2A2A2A",
-        overflow: "hidden",
-    },
-    summaryProgressFill: {
-        height: "100%",
-        borderRadius: 999,
-    },
-    calorieFill: {
-        backgroundColor: "#6EA8FF",
-    },
-    proteinFill: {
-        backgroundColor: "#E8B5B8",
-    },
-    fatFill: {
-        
-        backgroundColor: "#E6E0AE",
-    },
-    carbFill: {
-        backgroundColor: "#6EC1DF",
-    },
-    timeline: {
-        flex: 1,
-    },
-    timelineContent: {
-        paddingBottom: 300,
-    },
-    timelineHourBlock: {
-        minHeight: TIMELINE_HOUR_HEIGHT,
-        marginBottom: 2,
-    },
-    timelineHourBlockExpanded: {
-        marginBottom: 8,
-    },
-    timelineHourHeaderRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        minHeight: TIMELINE_HOUR_HEIGHT,
-    },
-    timeSlotLabel: {
-        width: TIMELINE_LEFT_GUTTER,
-        color: "#B0B0B0",
-        fontSize: 12,
-        lineHeight: 14,
-    },
-    timelineHourHeaderContent: {
-        flex: 1,
-        minHeight: TIMELINE_HOUR_HEIGHT,
-        justifyContent: "flex-start",
-        paddingTop: 12,
-    },
-    timelineHourRule: {
-        height: 1,
-        backgroundColor: "#242424",
-        marginLeft: 12,
-    },
-    timelineHourTotals: {
-        color: "#5E5E5E",
-        alignSelf: "flex-end",
-        fontSize: 12,
-        fontWeight: "500",
-        marginTop: 8,
-        marginLeft: 12,
-    },
-    timelineEmptyState: {
-        paddingTop: 48,
-        paddingLeft: TIMELINE_LEFT_GUTTER + 24,
-        paddingBottom: 24,
-        alignItems: "flex-start",
-    },
-    timelineHourEntries: {
-        paddingTop: 2,
-    },
-    timelineEntryRow: {
-        height: TIMELINE_ENTRY_HEIGHT,
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: TIMELINE_ENTRY_GAP,
-    },
-    entryTimeLabel: {
-        width: TIMELINE_LEFT_GUTTER,
-        color: "#666666",
-        fontSize: 11,
-    },
-    timelineEntryCard: {
-        flex: 1,
-        minHeight: TIMELINE_ENTRY_HEIGHT,
-        borderRadius: 14,
-        backgroundColor: "#1F1F1F",
-        marginLeft: 12,
-        paddingHorizontal: 12,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 10,
-    },
-    timelineEntryCardSelected: {
-        borderWidth: 1,
-        borderColor: "#7E7E7E",
-    },
-    timelineEntryName: {
-        color: "#F4F4F4",
-        fontSize: 13,
-        fontWeight: "600",
-        flex: 1,
-    },
-    timelineEntryMeta: {
-        color: "#6E6E6E",
-        fontSize: 12,
-        flexShrink: 0,
-    },
-    emptySlotText: {
-        color: "#666666",
-        fontSize: 13,
-    },
-    actionButton: {
-        width: "22.75%",
-        minHeight: 58,
-        borderRadius: 28,
-        backgroundColor: "#2A2A2A",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 8,
-    },
-    actionButtonText: {
-        color: "#F4F4F4",
-        fontSize: 14,
-        fontWeight: "600",
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.45)",
-        justifyContent: "flex-end",
-    },
-    modalSheet: {
-        backgroundColor: "#161616",
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
-        paddingHorizontal: 18,
-        paddingTop: 12,
-        paddingBottom: 28,
-    },
-    modalHandle: {
-        alignSelf: "center",
-        width: 46,
-        height: 5,
-        borderRadius: 999,
-        backgroundColor: "#3A3A3A",
-        marginBottom: 16,
-    },
-    modalBottomRow: {
-        flexDirection: "row",
-        gap: 10,
-        marginTop: 12,
-    },
-    modalTitle: {
-        color: "#F4F4F4",
-        fontSize: 24,
-        fontWeight: "600",
-    },
-    modalSubtitle: {
-        color: "#8E8E8E",
-        fontSize: 14,
-        lineHeight: 20,
-        marginTop: 6,
-        marginBottom: 16,
-    },
-    modalInput: {
-        minHeight: 50,
-        borderRadius: 16,
-        backgroundColor: "#202020",
-        color: "#F4F4F4",
-        paddingHorizontal: 16,
-        fontSize: 16,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: "#202020",
-    },
-    modalInputFocused: {
-        borderColor: "#5E8BFF",
-    },
-    modalGrid: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 10,
-    },
-    modalInputHalf: {
-        width: "48.25%",
-        minHeight: 50,
-        borderRadius: 16,
-        backgroundColor: "#202020",
-        color: "#F4F4F4",
-        paddingHorizontal: 16,
-        fontSize: 16,
-        borderWidth: 1,
-        borderColor: "#202020",
-    },
-    modalInputThirds: {
-        width: "31.25%",
-        minHeight: 50,
-        borderRadius: 16,
-        backgroundColor: "#202020",
-        color: "#F4F4F4",
-        paddingHorizontal: 16,
-        fontSize: 16,
-        borderWidth: 1,
-        borderColor: "#202020",
-    },
-    modalPressableField: {
-        justifyContent: "center",
-    },
-    modalPressableFieldText: {
-        color: "#F4F4F4",
-        fontSize: 16,
-    },
-    modalPlaceholderText: {
-        color: "#6F6F6F",
-    },
-    timePickerColumns: {
-        flexDirection: "row",
-        gap: 10,
-        marginTop: 12,
-    },
-    timePickerColumn: {
-        flex: 1,
-    },
-    timePickerPeriodColumn: {
-        width: 88,
-    },
-    timePickerLabel: {
-        color: "#8B8B8B",
-        fontSize: 13,
-        marginBottom: 10,
-    },
-    timePickerScroll: {
-        height: TIME_PICKER_VISIBLE_HEIGHT,
-        maxHeight: TIME_PICKER_VISIBLE_HEIGHT,
-    },
-    timePickerScrollContent: {
-        paddingVertical: TIME_PICKER_VERTICAL_INSET,
-    },
-    timePickerScrollContainer: {
-        position: "relative",
-        height: TIME_PICKER_VISIBLE_HEIGHT,
-        justifyContent: "center",
-    },
-    timePickerCenterHighlight: {
-        position: "absolute",
-        top: TIME_PICKER_VERTICAL_INSET,
-        left: 0,
-        right: 0,
-        height: TIME_PICKER_ITEM_HEIGHT,
-        borderRadius: 14,
-        backgroundColor: "#20273A",
-        borderWidth: 1,
-        borderColor: "rgba(94, 139, 255, 0.45)",
-    },
-    timePickerOption: {
-        height: TIME_PICKER_ITEM_HEIGHT,
-        borderRadius: 14,
-        backgroundColor: "transparent",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 10,
-    },
-    timePickerOptionSelected: {
-        transform: [{ scale: 1.08 }],
-    },
-    timePickerOptionText: {
-        color: "#C7C7C7",
-        fontSize: 15,
-        fontWeight: "500",
-    },
-    timePickerOptionTextSelected: {
-        color: "#F4F4F4",
-        fontWeight: "700",
-        fontSize: 17,
-    },
-    timePickerFadeOverlay: {
-        position: "absolute",
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0,
-    },
-    bottomActionBar: {
-        position: "absolute",
-        left: 18,
-        right: 18,
-        bottom: 50,
-        flexDirection: "row",
-        justifyContent: "flex-end",
-        gap: 10,
-    },
-    searchPlaceholder: {
-        flex: 1,
-        minHeight: 58,
-        borderRadius: 28,
-        backgroundColor: "#2A2A2A",
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 18,
-        gap: 10,
-    },
-    searchPlaceholderText: {
-        color: "#8C8C8C",
-        fontSize: 18,
-    },
-    quickAddButton: {
-        minWidth: 126,
-        minHeight: 58,
-        borderRadius: 28,
-        backgroundColor: "#F4F4F4",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    quickAddButtonText: {
-        color: "#151515",
-        fontSize: 18,
-        fontWeight: "600",
-    },
-    quickAddError: {
-        color: "#F28B82",
-        fontSize: 13,
-        marginTop: 12,
-    },
-    modalButtonRow: {
-        flexDirection: "row",
-        gap: 10,
-        marginTop: 18,
-    },
-    modalSecondaryButton: {
-        flex: 1,
-        minHeight: 48,
-        borderRadius: 16,
-        backgroundColor: "#202020",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    modalPrimaryButton: {
-        flex: 1,
-        minHeight: 48,
-        borderRadius: 16,
-        backgroundColor: "#F4F4F4",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    modalSecondaryButtonText: {
-        color: "#B0B0B0",
-        fontSize: 15,
-        fontWeight: "600",
-    },
-    modalPrimaryButtonText: {
-        color: "#111111",
-        fontSize: 15,
-        fontWeight: "700",
-    },
-});

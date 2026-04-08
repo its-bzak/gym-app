@@ -4,7 +4,6 @@ import {
   Keyboard,
   Modal,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   TouchableWithoutFeedback,
@@ -27,6 +26,8 @@ import WeightTrendSection from "@/components/main/WeightTrend";
 import GoalProgressSection from "@/components/main/GoalProgress";
 import CustomKeypad from "@/components/ui/CustomKeypad";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
+import { useAppTheme } from "@/design/hooks/use-app-theme";
+import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import { useDisplayUnitPreference } from "@/hooks/use-display-unit-preference";
 import { Ionicons } from "@expo/vector-icons";
 import type { WeightEntry, WeightGoal } from "@/types/dashboard";
@@ -59,6 +60,7 @@ const EMPTY_EXERCISE_METRICS = {
 type QuickActionModal = "weight" | "library" | null;
 
 export default function WorkoutScreen() {
+  const { theme } = useAppTheme();
   const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
   const [dailyMacroMetrics, setDailyMacroMetrics] = useState<MacroBarProps>(() =>
     getDailyMacroMetrics(selectedDate)
@@ -77,6 +79,246 @@ export default function WorkoutScreen() {
   const [weightInput, setWeightInput] = useState("");
   const { startWorkout } = useActiveWorkout();
   const { unitPreference } = useDisplayUnitPreference();
+  const styles = createThemedStyles(theme, (currentTheme) => ({
+    safeArea: {
+      flex: 1,
+      backgroundColor: currentTheme.colors.background,
+    },
+    screen: {
+      flex: 1,
+      flexDirection: "column" as const,
+      backgroundColor: currentTheme.colors.background,
+      paddingHorizontal: 18,
+      paddingTop: 9,
+    },
+    dataContainers: {
+      flexDirection: "row" as const,
+      marginTop: 18,
+    },
+    statusRow: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+      gap: 8,
+      marginTop: 8,
+      marginBottom: 8,
+    },
+    statusText: {
+      color: currentTheme.colors.textSecondary,
+      fontSize: currentTheme.typography.caption.fontSize,
+      lineHeight: currentTheme.typography.caption.lineHeight,
+      fontWeight: currentTheme.typography.caption.fontWeight,
+      textAlign: "center" as const,
+      marginTop: 4,
+      marginBottom: 4,
+    },
+    weightTrendContainer: {
+      flex: 1,
+      height: 80,
+      borderRadius: currentTheme.radii.xl,
+      backgroundColor: currentTheme.colors.surface,
+      marginRight: 5,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    goalProgressContainer: {
+      flex: 1,
+      height: 80,
+      borderRadius: currentTheme.radii.xl,
+      backgroundColor: currentTheme.colors.surface,
+      marginLeft: 5,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    bodyMapContainer: {
+      marginTop: 20,
+      height: 360,
+      borderRadius: currentTheme.radii.xl,
+      backgroundColor: currentTheme.colors.surface,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    startButton: {
+      marginBottom: 45,
+      height: 50,
+      borderRadius: currentTheme.components.button.radius,
+      backgroundColor: currentTheme.colors.accent,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+    },
+    startButtonText: {
+      color: currentTheme.colors.onAccent,
+      fontSize: currentTheme.typography.label.fontSize + 2,
+      lineHeight: currentTheme.typography.label.lineHeight + 2,
+      fontWeight: currentTheme.typography.label.fontWeight,
+    },
+    secondaryButtonContainer: {
+      flexDirection: "row" as const,
+      justifyContent: "space-between" as const,
+      marginBottom: 12,
+    },
+    logFoodButton: {
+      flex: 1,
+      height: 40,
+      backgroundColor: currentTheme.colors.surface,
+      borderRadius: currentTheme.radii.lg,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    logWeightButton: {
+      flex: 1,
+      height: 40,
+      backgroundColor: currentTheme.colors.surface,
+      borderRadius: currentTheme.radii.lg,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+      marginLeft: 6,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    routinesAndExercisesButton: {
+      flex: 2,
+      height: 40,
+      backgroundColor: currentTheme.colors.surface,
+      borderRadius: currentTheme.radii.lg,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+      marginLeft: 6,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    secondaryButtonText: {
+      color: currentTheme.colors.textSecondary,
+      fontSize: currentTheme.typography.body.fontSize,
+      lineHeight: currentTheme.typography.body.lineHeight,
+      fontWeight: currentTheme.typography.body.fontWeight,
+    },
+    mainButtonContainer: {
+      flex: 1,
+      flexDirection: "column" as const,
+      justifyContent: "flex-end" as const,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: currentTheme.colors.surfaceOverlay,
+      justifyContent: "flex-end" as const,
+    },
+    modalSheet: {
+      backgroundColor: currentTheme.colors.surfaceElevated,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 18,
+      paddingTop: 12,
+      paddingBottom: 28,
+      borderTopWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    modalHandle: {
+      alignSelf: "center" as const,
+      width: 46,
+      height: 5,
+      borderRadius: currentTheme.radii.pill,
+      backgroundColor: currentTheme.colors.border,
+      marginBottom: 16,
+    },
+    modalTitle: {
+      color: currentTheme.colors.textPrimary,
+      fontSize: currentTheme.typography.title.fontSize,
+      lineHeight: currentTheme.typography.title.lineHeight,
+      fontWeight: currentTheme.typography.title.fontWeight,
+      marginBottom: 8,
+    },
+    modalSubtitle: {
+      color: currentTheme.colors.textSecondary,
+      fontSize: currentTheme.typography.body.fontSize,
+      lineHeight: currentTheme.typography.body.lineHeight,
+      fontWeight: currentTheme.typography.body.fontWeight,
+      marginTop: 6,
+      marginBottom: 16,
+    },
+    fullWidthField: {
+      marginTop: 10,
+    },
+    metricLabel: {
+      color: currentTheme.colors.textSecondary,
+      fontSize: currentTheme.typography.caption.fontSize,
+      lineHeight: currentTheme.typography.caption.lineHeight,
+      fontWeight: currentTheme.typography.caption.fontWeight,
+      marginBottom: 6,
+    },
+    metricInput: {
+      minHeight: 46,
+      borderRadius: currentTheme.components.input.radius,
+      backgroundColor: currentTheme.colors.inputBackground,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.inputBorder,
+      color: currentTheme.colors.textPrimary,
+      paddingHorizontal: 14,
+      fontSize: currentTheme.typography.body.fontSize,
+      lineHeight: currentTheme.typography.body.lineHeight,
+      fontWeight: currentTheme.typography.body.fontWeight,
+    },
+    libraryActionButton: {
+      minHeight: 50,
+      borderRadius: currentTheme.radii.lg,
+      backgroundColor: currentTheme.colors.surface,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    libraryActionButtonText: {
+      color: currentTheme.colors.textPrimary,
+      fontSize: currentTheme.typography.label.fontSize,
+      lineHeight: currentTheme.typography.label.lineHeight,
+      fontWeight: currentTheme.typography.label.fontWeight,
+    },
+    quickActionError: {
+      color: currentTheme.colors.danger,
+      fontSize: currentTheme.typography.caption.fontSize,
+      lineHeight: currentTheme.typography.caption.lineHeight,
+      fontWeight: currentTheme.typography.caption.fontWeight,
+      marginTop: 12,
+    },
+    modalButtonRow: {
+      flexDirection: "row" as const,
+      gap: 10,
+      marginTop: 18,
+    },
+    modalSecondaryButton: {
+      flex: 1,
+      minHeight: 48,
+      borderRadius: currentTheme.radii.lg,
+      backgroundColor: currentTheme.colors.surface,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+    },
+    modalPrimaryButton: {
+      flex: 1,
+      minHeight: 48,
+      borderRadius: currentTheme.radii.lg,
+      backgroundColor: currentTheme.colors.accent,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+    },
+    modalSecondaryButtonText: {
+      color: currentTheme.colors.textSecondary,
+      fontSize: currentTheme.typography.label.fontSize,
+      lineHeight: currentTheme.typography.label.lineHeight,
+      fontWeight: currentTheme.typography.label.fontWeight,
+    },
+    modalPrimaryButtonText: {
+      color: currentTheme.colors.onAccent,
+      fontSize: currentTheme.typography.label.fontSize,
+      lineHeight: currentTheme.typography.label.lineHeight,
+      fontWeight: currentTheme.typography.label.fontWeight,
+    },
+  }));
 
   const resetQuickActionForms = () => {
     setWeightInput("");
@@ -229,7 +471,7 @@ export default function WorkoutScreen() {
         <DateCarousel selectedDate={selectedDate} onChangeDate={setSelectedDate} />
         {isLoadingDashboard ? (
           <View style={styles.statusRow}>
-            <ActivityIndicator size="small" color="#8B8B8B" />
+            <ActivityIndicator size="small" color={theme.colors.iconSecondary} />
             <Text style={styles.statusText}>Syncing dashboard</Text>
           </View>
         ) : null}
@@ -280,11 +522,11 @@ export default function WorkoutScreen() {
                   },
                 })
               }>
-                <Ionicons name="fast-food-outline" size={20} color="#7C7C7C" />
+                <Ionicons name="fast-food-outline" size={20} color={theme.colors.iconSecondary} />
             </Pressable>
 
             <Pressable style={styles.logWeightButton} onPress={() => openQuickActionModal("weight")}>
-                <Ionicons name="scale-outline" size={20} color="#7C7C7C" />
+                <Ionicons name="scale-outline" size={20} color={theme.colors.iconSecondary} />
             </Pressable>
 
             <Pressable
@@ -341,6 +583,8 @@ export default function WorkoutScreen() {
                       mode="decimal"
                       value={weightInput}
                       onChange={setWeightInput}
+                      showClearKey={false}
+                      showDoneKey={false}
                     />
                   </>
                 ) : null}
@@ -379,7 +623,7 @@ export default function WorkoutScreen() {
                   {activeQuickActionModal === "weight" ? (
                     <Pressable style={styles.modalPrimaryButton} onPress={handleSaveWeight}>
                       {isSavingQuickAction ? (
-                        <ActivityIndicator size="small" color="#F4F4F4" />
+                        <ActivityIndicator size="small" color={theme.colors.onAccent} />
                       ) : (
                         <Text style={styles.modalPrimaryButtonText}>Save Weight</Text>
                       )}
@@ -394,233 +638,3 @@ export default function WorkoutScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#151515",
-  },
-  screen: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    backgroundColor: "#151515",
-    paddingHorizontal: 18,
-    paddingTop: 9,
-  },
-  datePill: {
-    height: 42,
-    borderRadius: 22,
-    backgroundColor: "#1A1A1A",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 10,
-  },
-  dateText: {
-    color: "#7C7C7C",
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  dataContainers: {
-    flexDirection: "row",
-    marginTop: 18,
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  statusText: {
-    color: "#7C7C7C",
-    fontSize: 13,
-    textAlign: "center",
-    marginTop: 4,
-    marginBottom: 4,
-  },
-  weightTrendContainer: {
-    flex: 1,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: "#1A1A1A",
-    marginRight: 5,
-  },
-  goalProgressContainer: {
-    flex: 1,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: "#1A1A1A",
-    marginLeft: 5,
-  },
-  bodyMapContainer: {
-    marginTop: 20,
-    height: 360,
-    borderRadius: 20,
-    backgroundColor: "#1A1A1A",
-  },
-  startButton: {
-    marginBottom: 45,
-    height: 50,
-    borderRadius: 18,
-    backgroundColor: "#333333",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  startButtonText: {
-    color: "#7C7C7C",
-    fontSize: 18,
-  },
-    secondaryButtonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  logFoodButton: {
-    flex: 1,
-    height: 40,
-    backgroundColor: "#1A1A1A",
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  logWeightButton: {
-    flex: 1,
-    height: 40,
-    backgroundColor: "#1A1A1A",
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 6,
-  },
-  routinesAndExercisesButton: {
-    flex: 2,
-    height: 40,
-    backgroundColor: "#1A1A1A",
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 6,
-  },
-
-  secondaryButtonText: {
-    color: "#7C7C7C",
-    fontSize: 16,
-  },
-  mainButtonContainer: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "flex-end",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    backgroundColor: "#161616",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 28,
-  },
-  modalHandle: {
-    alignSelf: "center",
-    width: 46,
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: "#3A3A3A",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    color: "#F4F4F4",
-    fontSize: 22,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  modalSubtitle: {
-    color: "#8E8E8E",
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 6,
-    marginBottom: 16,
-  },
-  metricGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  metricField: {
-    flex: 1,
-  },
-  fullWidthField: {
-    marginTop: 10,
-  },
-  metricLabel: {
-    color: "#B5B5B5",
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  metricInput: {
-    minHeight: 46,
-    borderRadius: 14,
-    backgroundColor: "#202020",
-    color: "#F4F4F4",
-    paddingHorizontal: 14,
-    fontSize: 15,
-  },
-  libraryActionButton: {
-    minHeight: 50,
-    borderRadius: 16,
-    backgroundColor: "#202020",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-  libraryActionButtonText: {
-    color: "#F4F4F4",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  quickActionError: {
-    color: "#F28B82",
-    fontSize: 13,
-    marginTop: 12,
-  },
-  modalButtonRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 18,
-  },
-  modalSecondaryButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 16,
-    backgroundColor: "#202020",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalPrimaryButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 16,
-    backgroundColor: "#313131",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalSecondaryButtonText: {
-    color: "#B0B0B0",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  modalPrimaryButtonText: {
-    color: "#F4F4F4",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-});
