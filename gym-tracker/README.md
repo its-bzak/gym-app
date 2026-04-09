@@ -1,50 +1,64 @@
-# Welcome to your Expo app 👋
+# Gym Tracker
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Gym Tracker is an Expo Router application for tracking training, nutrition, and bodyweight progress. It combines workout flows, progress analytics, and goal-setting tools in a mobile-first React Native app.
 
-## Get started
+## Features
 
-1. Install dependencies
+- dashboard and tab-based navigation for workout, nutrition, performance, and profile flows
+- active workout state with routine and exercise support
+- bodyweight goal planning with pace controls and projected completion dates
+- performance analytics including weekly average weight trends and lifetime training metrics
+- nutrition target editing for calories, protein, carbs, and fats
+- light and dark theme support through a shared design token system
+- Supabase-backed data access with mock fallback data for development and offline-style testing
 
-   ```bash
-   npm install
-   ```
+## Stack
 
-2. Start the app
+- Expo 54
+- Expo Router
+- React Native 0.81
+- React 19
+- TypeScript
+- NativeWind
+- Supabase
+- react-native-svg
+- Jest
 
-   ```bash
-   npx expo start
-   ```
+## App Structure
 
-In the output, you'll find options to open the app in a
+- [app](app): route-based screens and navigation layouts
+- [components](components): reusable UI and feature components
+- [design](design): tokens, themes, primitives, and redesigned dashboard surfaces
+- [context](context): active workout and shared library state
+- [services](services): data-fetching and persistence logic
+- [mock](mock): local fallback data and tests
+- [utils](utils): formatting, unit conversion, and progress helpers
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Development
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Install dependencies:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Start the app:
 
-## Learn more
+```bash
+npm start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Additional scripts:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- `npm run android`
+- `npm run ios`
+- `npm run web`
+- `npm run lint`
+- `npm test`
 
-## Join the community
+## Current Notes
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- The app uses file-based routing through Expo Router.
+- Supabase is configured for Expo with AsyncStorage-backed session persistence.
+- Mock data remains available so core flows can be exercised without a fully connected backend.
+- The redesigned performance and dashboard experience is built on the shared `design/` system.
