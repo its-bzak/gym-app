@@ -8,6 +8,7 @@ import {
   insertUserExercise,
 } from "@/db/sqlite";
 import { syncSeededExerciseReferenceData } from "@/services/referenceDataBootstrap";
+import { syncPendingLocalChanges } from "@/services/localSyncService";
 import { getAuthenticatedUserId } from "@/services/profileService";
 import { Exercise } from "@/types/exercise";
 import { Routine } from "@/types/routine";
@@ -76,6 +77,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         setLastReferenceExerciseSyncAt(syncStatus.lastSyncedAt);
 
         await syncSeededExerciseReferenceData();
+        await syncPendingLocalChanges();
 
         if (!isMounted) {
           return;
@@ -150,6 +152,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     insertUserExercise(nextOwnerId, newExercise);
     setCustomExercises((prev) => [...prev, newExercise]);
     setRoutines((prev) => getCachedRoutines(nextOwnerId, [...seededExercises, ...customExercises, newExercise]));
+    void syncPendingLocalChanges();
 
     return newExercise;
   };
@@ -175,6 +178,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     );
 
     setRoutines((prev) => [...prev, newRoutine]);
+    void syncPendingLocalChanges();
 
     return newRoutine;
   };

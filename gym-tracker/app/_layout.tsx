@@ -12,7 +12,7 @@ import { supabase } from "@/lib/supabase";
 
 import { initDB } from '@/db/sqlite';
 import { syncPendingLocalChanges } from '@/services/localSyncService';
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, StyleSheet, View } from "react-native";
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -96,6 +96,25 @@ export default function RootLayout() {
   useEffect(() => {
     initDB(); //init on app load
     void syncPendingLocalChanges();
+
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void syncPendingLocalChanges();
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        void syncPendingLocalChanges({ force: true });
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (

@@ -5,6 +5,7 @@ import {
   getPersistedCurrentWorkout,
   saveCurrentWorkout,
 } from "@/db/sqlite";
+import { syncPendingLocalChanges } from "@/services/localSyncService";
 import { getAuthenticatedUserId } from "@/services/profileService";
 import { Exercise } from "@/types/exercise";
 import { Routine } from "@/types/routine";
@@ -296,6 +297,7 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
     finalizePersistedWorkout(ownerId, sessionId);
     setSessionId(null);
     setWorkout(EMPTY_WORKOUT);
+    void syncPendingLocalChanges();
   };
 
   return (

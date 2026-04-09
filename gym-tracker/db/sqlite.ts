@@ -107,6 +107,53 @@ type SyncOutboxRow = {
   updated_at: string;
 };
 
+type FailedSyncOutboxRow = {
+  entity_type: string;
+  entity_id: string;
+  last_error: string | null;
+  updated_at: string;
+};
+
+type SyncedUserExerciseRow = UserExerciseRow & {
+  normalized_name: string;
+};
+
+type SyncedUserExerciseMuscleRow = UserExerciseMuscleRow & {
+  id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type SyncedRoutineRow = RoutineRow & {
+  normalized_name: string;
+};
+
+type SyncedRoutineExerciseRow = RoutineExerciseRow & {
+  created_at: string;
+  updated_at: string;
+};
+
+type SyncedRoutineExerciseSetRow = RoutineExerciseSetRow & {
+  id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type SyncedWorkoutSessionRow = WorkoutSessionRow & {
+  created_at: string;
+  updated_at: string;
+};
+
+type SyncedWorkoutSessionExerciseRow = WorkoutSessionExerciseRow & {
+  created_at: string;
+  updated_at: string;
+};
+
+type SyncedWorkoutSessionSetRow = WorkoutSessionSetRow & {
+  created_at: string;
+  updated_at: string;
+};
+
 type UserExerciseMuscleRow = {
   user_exercise_id: string;
   muscle_name: string;
@@ -309,6 +356,19 @@ function setSyncStateSuccess(entityType: string) {
       ON CONFLICT(entity_type) DO UPDATE SET last_success_at = excluded.last_success_at
     `,
     [entityType, now]
+  );
+}
+
+function setSyncPullStateSuccess(entityType: string, pulledAt: string) {
+  db.runSync(
+    `
+      INSERT INTO sync_state (entity_type, last_pulled_at, last_cursor, last_success_at)
+      VALUES (?, ?, NULL, ?)
+      ON CONFLICT(entity_type) DO UPDATE SET
+        last_pulled_at = excluded.last_pulled_at,
+        last_success_at = excluded.last_success_at
+    `,
+    [entityType, pulledAt, pulledAt]
   );
 }
 
@@ -608,7 +668,33 @@ export function finalizePersistedWorkout(userId: string, sessionId: string | nul
   }
 }
 
-export function getPendingSyncOutboxEntries(limit = 25) {
+export function getPendingSyncOutboxEntries(limit = 25, includeDeferredFailed = false) {
+  const now = new Date().toISOString();
+
+  if (includeDeferredFailed) {
+    return db.getAllSync<SyncOutboxRow>(
+      `
+        SELECT
+          id,
+          entity_type,
+          entity_id,
+          operation,
+          payload_json,
+          status,
+          attempt_count,
+          next_retry_at,
+          last_error,
+          created_at,
+          updated_at
+        FROM sync_outbox
+        WHERE status IN ('pending', 'failed')
+        ORDER BY created_at ASC
+        LIMIT ?
+      `,
+      [limit]
+    );
+  }
+
   return db.getAllSync<SyncOutboxRow>(
     `
       SELECT
@@ -624,11 +710,18 @@ export function getPendingSyncOutboxEntries(limit = 25) {
         created_at,
         updated_at
       FROM sync_outbox
-      WHERE status IN ('pending', 'failed')
+      WHERE status = 'pending'
+         OR (
+           status = 'failed'
+           AND (
+             next_retry_at IS NULL
+             OR next_retry_at <= ?
+           )
+         )
       ORDER BY created_at ASC
       LIMIT ?
     `,
-    [limit]
+    [now, limit]
   );
 }
 
@@ -643,21 +736,48 @@ export function markSyncOutboxEntryProcessing(id: string) {
   );
 }
 
-export function markSyncOutboxEntryFailed(id: string, errorMessage: string) {
-  const now = new Date().toISOString();
+export function resetStaleProcessingOutboxEntries(staleMinutes = 3) {
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - staleMinutes * 60 * 1000).toISOString();
+  const retryAt = now.toISOString();
 
   db.runSync(
     `
       UPDATE sync_outbox
       SET
         status = 'failed',
-        attempt_count = attempt_count + 1,
+        last_error = COALESCE(last_error, 'Previous sync attempt was interrupted.'),
+        next_retry_at = ?,
+        updated_at = ?
+      WHERE status = 'processing'
+        AND updated_at <= ?
+    `,
+    [retryAt, retryAt, staleBefore]
+  );
+}
+
+export function markSyncOutboxEntryFailed(id: string, errorMessage: string) {
+  const now = new Date().toISOString();
+  const currentEntry = db.getFirstSync<{ attempt_count: number }>(
+    "SELECT attempt_count FROM sync_outbox WHERE id = ? LIMIT 1",
+    [id]
+  );
+  const nextAttemptCount = (currentEntry?.attempt_count ?? 0) + 1;
+  const retryDelayMinutes = Math.min(2 ** Math.max(nextAttemptCount - 1, 0), 30);
+  const nextRetryAt = new Date(Date.now() + retryDelayMinutes * 60 * 1000).toISOString();
+
+  db.runSync(
+    `
+      UPDATE sync_outbox
+      SET
+        status = 'failed',
+        attempt_count = ?,
         last_error = ?,
         next_retry_at = ?,
         updated_at = ?
       WHERE id = ?
     `,
-    [errorMessage, now, now, id]
+    [nextAttemptCount, errorMessage, nextRetryAt, now, id]
   );
 }
 
@@ -672,6 +792,10 @@ export function markSyncOutboxEntryCompleted(id: string, entityType: string) {
     db.execSync("ROLLBACK;");
     throw error;
   }
+}
+
+export function markSyncPullCompleted(entityType: string, pulledAt = new Date().toISOString()) {
+  setSyncPullStateSuccess(entityType, pulledAt);
 }
 
 export function getUserExerciseSyncPayload(exerciseId: string) {
@@ -968,6 +1092,384 @@ export function getSyncDiagnostics() {
       "SELECT MAX(last_success_at) as value FROM sync_state"
     )?.value ?? null,
   };
+}
+
+export function getFailedSyncOutboxEntries(limit = 5) {
+  return db.getAllSync<FailedSyncOutboxRow>(
+    `
+      SELECT entity_type, entity_id, last_error, updated_at
+      FROM sync_outbox
+      WHERE status = 'failed'
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `,
+    [limit]
+  );
+}
+
+export function upsertPulledUserExercises(
+  userId: string,
+  exercises: SyncedUserExerciseRow[],
+  muscles: SyncedUserExerciseMuscleRow[]
+) {
+  db.execSync("BEGIN TRANSACTION;");
+
+  try {
+    const musclesByExerciseId = new Map<string, SyncedUserExerciseMuscleRow[]>();
+
+    for (const muscle of muscles) {
+      const existing = musclesByExerciseId.get(muscle.user_exercise_id) ?? [];
+      existing.push(muscle);
+      musclesByExerciseId.set(muscle.user_exercise_id, existing);
+    }
+
+    for (const exercise of exercises) {
+      db.runSync(
+        `
+          INSERT INTO user_exercises (
+            id,
+            user_id,
+            name,
+            normalized_name,
+            category,
+            muscle_group,
+            is_unilateral,
+            is_time_based,
+            created_at,
+            updated_at,
+            deleted_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            user_id = excluded.user_id,
+            name = excluded.name,
+            normalized_name = excluded.normalized_name,
+            category = excluded.category,
+            muscle_group = excluded.muscle_group,
+            is_unilateral = excluded.is_unilateral,
+            is_time_based = excluded.is_time_based,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at,
+            deleted_at = excluded.deleted_at
+        `,
+        [
+          exercise.id,
+          userId,
+          exercise.name,
+          exercise.normalized_name,
+          exercise.category,
+          exercise.muscle_group,
+          exercise.is_unilateral,
+          exercise.is_time_based,
+          exercise.created_at,
+          exercise.updated_at,
+          exercise.deleted_at,
+        ]
+      );
+
+      db.runSync("DELETE FROM user_exercise_muscles WHERE user_exercise_id = ?", [exercise.id]);
+
+      for (const muscle of musclesByExerciseId.get(exercise.id) ?? []) {
+        db.runSync(
+          `
+            INSERT INTO user_exercise_muscles (
+              id,
+              user_exercise_id,
+              muscle_name,
+              role,
+              created_at,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              user_exercise_id = excluded.user_exercise_id,
+              muscle_name = excluded.muscle_name,
+              role = excluded.role,
+              created_at = excluded.created_at,
+              updated_at = excluded.updated_at
+          `,
+          [
+            muscle.id,
+            muscle.user_exercise_id,
+            muscle.muscle_name,
+            muscle.role,
+            muscle.created_at,
+            muscle.updated_at,
+          ]
+        );
+      }
+    }
+
+    db.execSync("COMMIT;");
+  } catch (error) {
+    db.execSync("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function upsertPulledRoutines(
+  userId: string,
+  routines: SyncedRoutineRow[],
+  routineExercises: SyncedRoutineExerciseRow[],
+  routineExerciseSets: SyncedRoutineExerciseSetRow[]
+) {
+  db.execSync("BEGIN TRANSACTION;");
+
+  try {
+    const exercisesByRoutineId = new Map<string, SyncedRoutineExerciseRow[]>();
+    const setsByRoutineExerciseId = new Map<string, SyncedRoutineExerciseSetRow[]>();
+
+    for (const routineExercise of routineExercises) {
+      const existing = exercisesByRoutineId.get(routineExercise.routine_id) ?? [];
+      existing.push(routineExercise);
+      exercisesByRoutineId.set(routineExercise.routine_id, existing);
+    }
+
+    for (const routineExerciseSet of routineExerciseSets) {
+      const existing = setsByRoutineExerciseId.get(routineExerciseSet.routine_exercise_id) ?? [];
+      existing.push(routineExerciseSet);
+      setsByRoutineExerciseId.set(routineExerciseSet.routine_exercise_id, existing);
+    }
+
+    for (const routine of routines) {
+      db.runSync(
+        `
+          INSERT INTO routines (
+            id,
+            user_id,
+            name,
+            normalized_name,
+            gym_id,
+            created_at,
+            updated_at,
+            deleted_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            user_id = excluded.user_id,
+            name = excluded.name,
+            normalized_name = excluded.normalized_name,
+            gym_id = excluded.gym_id,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at,
+            deleted_at = excluded.deleted_at
+        `,
+        [
+          routine.id,
+          userId,
+          routine.name,
+          routine.normalized_name,
+          routine.gym_id,
+          routine.created_at,
+          routine.updated_at,
+          routine.deleted_at,
+        ]
+      );
+
+      db.runSync("DELETE FROM routine_exercises WHERE routine_id = ?", [routine.id]);
+
+      for (const routineExercise of exercisesByRoutineId.get(routine.id) ?? []) {
+        db.runSync(
+          `
+            INSERT INTO routine_exercises (
+              id,
+              routine_id,
+              exercise_source,
+              exercise_id,
+              sort_order,
+              created_at,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              routine_id = excluded.routine_id,
+              exercise_source = excluded.exercise_source,
+              exercise_id = excluded.exercise_id,
+              sort_order = excluded.sort_order,
+              created_at = excluded.created_at,
+              updated_at = excluded.updated_at
+          `,
+          [
+            routineExercise.id,
+            routineExercise.routine_id,
+            routineExercise.exercise_source,
+            routineExercise.exercise_id,
+            routineExercise.sort_order,
+            routineExercise.created_at,
+            routineExercise.updated_at,
+          ]
+        );
+
+        for (const routineExerciseSet of setsByRoutineExerciseId.get(routineExercise.id) ?? []) {
+          db.runSync(
+            `
+              INSERT INTO routine_exercise_sets (
+                id,
+                routine_exercise_id,
+                sort_order,
+                target_reps,
+                target_weight,
+                created_at,
+                updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                routine_exercise_id = excluded.routine_exercise_id,
+                sort_order = excluded.sort_order,
+                target_reps = excluded.target_reps,
+                target_weight = excluded.target_weight,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at
+            `,
+            [
+              routineExerciseSet.id,
+              routineExerciseSet.routine_exercise_id,
+              routineExerciseSet.sort_order,
+              routineExerciseSet.target_reps,
+              routineExerciseSet.target_weight,
+              routineExerciseSet.created_at,
+              routineExerciseSet.updated_at,
+            ]
+          );
+        }
+      }
+    }
+
+    db.execSync("COMMIT;");
+  } catch (error) {
+    db.execSync("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function upsertPulledWorkoutSessions(
+  userId: string,
+  sessions: SyncedWorkoutSessionRow[],
+  exercises: SyncedWorkoutSessionExerciseRow[],
+  sets: SyncedWorkoutSessionSetRow[]
+) {
+  db.execSync("BEGIN TRANSACTION;");
+
+  try {
+    const exercisesBySessionId = new Map<string, SyncedWorkoutSessionExerciseRow[]>();
+    const setsByWorkoutExerciseId = new Map<string, SyncedWorkoutSessionSetRow[]>();
+
+    for (const workoutExercise of exercises) {
+      const existing = exercisesBySessionId.get(workoutExercise.workout_session_id) ?? [];
+      existing.push(workoutExercise);
+      exercisesBySessionId.set(workoutExercise.workout_session_id, existing);
+    }
+
+    for (const workoutSet of sets) {
+      const existing = setsByWorkoutExerciseId.get(workoutSet.workout_session_exercise_id) ?? [];
+      existing.push(workoutSet);
+      setsByWorkoutExerciseId.set(workoutSet.workout_session_exercise_id, existing);
+    }
+
+    for (const session of sessions) {
+      db.runSync(
+        `
+          INSERT INTO workout_sessions (
+            id,
+            user_id,
+            status,
+            started_at,
+            ended_at,
+            completed_at,
+            selected_exercise_id,
+            created_at,
+            updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            user_id = excluded.user_id,
+            status = excluded.status,
+            started_at = excluded.started_at,
+            ended_at = excluded.ended_at,
+            completed_at = excluded.completed_at,
+            updated_at = excluded.updated_at
+        `,
+        [
+          session.id,
+          userId,
+          session.status,
+          session.started_at,
+          session.ended_at,
+          session.completed_at,
+          session.created_at,
+          session.updated_at,
+        ]
+      );
+
+      db.runSync("DELETE FROM workout_session_exercises WHERE workout_session_id = ?", [session.id]);
+
+      for (const workoutExercise of exercisesBySessionId.get(session.id) ?? []) {
+        db.runSync(
+          `
+            INSERT INTO workout_session_exercises (
+              id,
+              workout_session_id,
+              exercise_source,
+              exercise_id,
+              display_name_snapshot,
+              sort_order,
+              created_at,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              workout_session_id = excluded.workout_session_id,
+              exercise_source = excluded.exercise_source,
+              exercise_id = excluded.exercise_id,
+              display_name_snapshot = excluded.display_name_snapshot,
+              sort_order = excluded.sort_order,
+              created_at = excluded.created_at,
+              updated_at = excluded.updated_at
+          `,
+          [
+            workoutExercise.id,
+            workoutExercise.workout_session_id,
+            workoutExercise.exercise_source,
+            workoutExercise.exercise_id,
+            workoutExercise.display_name_snapshot,
+            workoutExercise.sort_order,
+            workoutExercise.created_at,
+            workoutExercise.updated_at,
+          ]
+        );
+
+        for (const workoutSet of setsByWorkoutExerciseId.get(workoutExercise.id) ?? []) {
+          db.runSync(
+            `
+              INSERT INTO workout_session_sets (
+                id,
+                workout_session_exercise_id,
+                sort_order,
+                reps,
+                weight,
+                created_at,
+                updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                workout_session_exercise_id = excluded.workout_session_exercise_id,
+                sort_order = excluded.sort_order,
+                reps = excluded.reps,
+                weight = excluded.weight,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at
+            `,
+            [
+              workoutSet.id,
+              workoutSet.workout_session_exercise_id,
+              workoutSet.sort_order,
+              workoutSet.reps,
+              workoutSet.weight,
+              workoutSet.created_at,
+              workoutSet.updated_at,
+            ]
+          );
+        }
+      }
+    }
+
+    db.execSync("COMMIT;");
+  } catch (error) {
+    db.execSync("ROLLBACK;");
+    throw error;
+  }
 }
 
 export function getCachedUserExercises(userId: string): Exercise[] {

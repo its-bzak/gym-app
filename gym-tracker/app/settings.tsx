@@ -5,7 +5,7 @@ import {
   updateUserProfile as updateMockUserProfile,
   type DisplayUnitPreference,
 } from "@/mock/mockDataService";
-import { getSyncDiagnostics } from "@/db/sqlite";
+import { getFailedSyncOutboxEntries, getSyncDiagnostics } from "@/db/sqlite";
 import { syncPendingLocalChanges } from "@/services/localSyncService";
 import {
   getAuthenticatedUserId,
@@ -128,6 +128,7 @@ export default function SettingsScreen() {
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
   const [syncDiagnostics, setSyncDiagnostics] = useState(() => getSyncDiagnostics());
+  const [failedSyncEntries, setFailedSyncEntries] = useState(() => getFailedSyncOutboxEntries());
   const monthPickerRef = useRef<ScrollView | null>(null);
   const dayPickerRef = useRef<ScrollView | null>(null);
   const yearPickerRef = useRef<ScrollView | null>(null);
@@ -195,6 +196,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     setSyncDiagnostics(getSyncDiagnostics());
+    setFailedSyncEntries(getFailedSyncOutboxEntries());
   }, []);
 
   const today = useMemo(() => new Date(), []);
@@ -378,22 +380,39 @@ export default function SettingsScreen() {
     setSyncStatusMessage(null);
 
     try {
-      const result = await syncPendingLocalChanges();
+      const result = await syncPendingLocalChanges({ force: true });
 
       setSyncDiagnostics(result.diagnostics);
+      setFailedSyncEntries(getFailedSyncOutboxEntries());
 
       if (result.skipped) {
         setSyncStatusMessage("Sign in to sync local changes to your account.");
         return;
       }
 
-      setSyncStatusMessage(
-        result.syncedCount > 0
-          ? `Synced ${result.syncedCount} local change${result.syncedCount === 1 ? "" : "s"}.`
-          : "No local changes were waiting to sync."
-      );
+      if (result.statusMessage) {
+        setSyncStatusMessage(result.statusMessage);
+        return;
+      }
+
+      if (result.syncedCount > 0 && result.pulledCount > 0) {
+        setSyncStatusMessage(
+          `Synced ${result.syncedCount} local change${result.syncedCount === 1 ? "" : "s"} and pulled ${result.pulledCount} cloud update${result.pulledCount === 1 ? "" : "s"}.`
+        );
+      } else if (result.syncedCount > 0) {
+        setSyncStatusMessage(
+          `Synced ${result.syncedCount} local change${result.syncedCount === 1 ? "" : "s"}.`
+        );
+      } else if (result.pulledCount > 0) {
+        setSyncStatusMessage(
+          `Pulled ${result.pulledCount} cloud update${result.pulledCount === 1 ? "" : "s"}.`
+        );
+      } else {
+        setSyncStatusMessage("No sync work was waiting right now.");
+      }
     } catch (error) {
       setSyncDiagnostics(getSyncDiagnostics());
+      setFailedSyncEntries(getFailedSyncOutboxEntries());
       setSyncStatusMessage(
         error instanceof Error ? error.message : "Could not sync local changes right now."
       );
@@ -712,6 +731,21 @@ export default function SettingsScreen() {
             </View>
           ) : null}
 
+          {failedSyncEntries.length > 0 ? (
+            <View style={styles.failedSyncList}>
+              {failedSyncEntries.map((entry) => (
+                <View key={`${entry.entity_type}-${entry.entity_id}`} style={styles.failedSyncCard}>
+                  <Text style={styles.failedSyncTitle}>
+                    {entry.entity_type} · {entry.entity_id}
+                  </Text>
+                  <Text style={styles.failedSyncText}>
+                    {entry.last_error ?? "Unknown sync error."}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <Pressable
             style={styles.secondaryActionButton}
             onPress={() => void handleSyncNow()}
@@ -917,6 +951,26 @@ const styles = StyleSheet.create({
     color: "#F4F4F4",
     fontSize: 14,
     fontWeight: "600",
+  },
+  failedSyncList: {
+    marginTop: 12,
+    gap: 10,
+  },
+  failedSyncCard: {
+    borderRadius: 16,
+    backgroundColor: "#241818",
+    padding: 12,
+  },
+  failedSyncTitle: {
+    color: "#F6D38A",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  failedSyncText: {
+    color: "#E3B6B6",
+    fontSize: 13,
+    lineHeight: 18,
   },
   unitOptionList: {
     gap: 10,
