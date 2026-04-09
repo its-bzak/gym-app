@@ -16,7 +16,7 @@ import {
   getExercisesForGym as getMockExercisesForGym,
   getUserGymOptions as getMockUserGymOptions,
 } from "@/mock/mockDataService";
-import { Exercise } from "@/mock/gymImplementation";
+import { Exercise } from "@/types/exercise";
 import {
   getExercisesForGym as getSupabaseExercisesForGym,
   getUserGymOptions as getSupabaseUserGymOptions,
@@ -46,7 +46,12 @@ function formatCategoryLabel(value: string) {
 
 export default function ExercisesScreen() {
   const { addExercise } = useActiveWorkout();
-  const { exercises } = useLibrary();
+  const {
+    exercises,
+    isHydratingExercises,
+    cachedExerciseCount,
+    lastReferenceExerciseSyncAt,
+  } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState("All");
   const [selectedGymId, setSelectedGymId] = useState("all");
@@ -250,6 +255,20 @@ export default function ExercisesScreen() {
         </View>
 
         <View style={styles.controlsContainer}>
+          {isHydratingExercises ? (
+            <View style={styles.statusBanner}>
+              <ActivityIndicator size="small" color="#BFBFBF" />
+              <Text style={styles.statusBannerText}>Refreshing local exercise library</Text>
+            </View>
+          ) : null}
+          {!isHydratingExercises ? (
+            <View style={styles.statusBanner}>
+              <Text style={styles.statusBannerText}>
+                Cached {cachedExerciseCount} reference exercise{cachedExerciseCount === 1 ? "" : "s"}
+                {lastReferenceExerciseSyncAt ? " locally" : ""}
+              </Text>
+            </View>
+          ) : null}
           {isSyncingGymData ? (
             <View style={styles.statusBanner}>
               <ActivityIndicator size="small" color="#BFBFBF" />

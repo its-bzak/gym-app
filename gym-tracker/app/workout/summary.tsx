@@ -14,7 +14,7 @@ import {
 } from "@/utils/statsHelper";
 
 export default function WorkoutSummaryScreen() {
-  const { workout, resumeWorkout, clearWorkout } = useActiveWorkout();
+  const { workout, resumeWorkout, saveWorkout } = useActiveWorkout();
 
   const durationSeconds = getWorkoutDurationSeconds(workout.startedAt, workout.endedAt);
   const durationLabel = formatWorkoutDuration(durationSeconds);
@@ -30,10 +30,7 @@ export default function WorkoutSummaryScreen() {
   };
 
   const handleSaveWorkout = () => {
-    // later:
-    // 1. save to workout history / database
-    // 2. update stored PR history
-    clearWorkout();
+    saveWorkout();
     router.push("/");
   };
 

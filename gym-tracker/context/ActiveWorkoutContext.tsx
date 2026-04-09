@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import {
+  clearPersistedCurrentWorkout,
+  finalizePersistedWorkout,
+  getPersistedCurrentWorkout,
+  saveCurrentWorkout,
+} from "@/db/sqlite";
+import { getAuthenticatedUserId } from "@/services/profileService";
 import { Exercise } from "@/types/exercise";
 import { Routine } from "@/types/routine";
 import { ActiveWorkout, ActiveWorkoutExercise, WorkoutSet } from "@/types/workout";
@@ -19,11 +26,20 @@ type ActiveWorkoutContextType = {
   removeSet: (exerciseId: string, setId: string) => void;
   removeExercise: (exerciseId: string) => void;
   clearWorkout: () => void;
+  saveWorkout: () => void;
   finishWorkout: () => void;
   resumeWorkout: () => void;
 };
 
 const ActiveWorkoutContext = createContext<ActiveWorkoutContextType | undefined>(undefined);
+
+const LOCAL_ANONYMOUS_USER_ID = "local-anonymous";
+const EMPTY_WORKOUT: ActiveWorkout = {
+  startedAt: null,
+  endedAt: null,
+  exercises: [],
+  selectedExerciseId: null,
+};
 
 function createWorkoutSet(): WorkoutSet {
   return {
@@ -62,30 +78,81 @@ function createActiveWorkoutExerciseFromRoutine(
 }
 
 export function ActiveWorkoutProvider({ children }: { children: React.ReactNode }) {
-  const [workout, setWorkout] = useState<ActiveWorkout>({
-    startedAt: null,
-    endedAt: null,
-    exercises: [],
-    selectedExerciseId: null,
-  });
+  const [workout, setWorkout] = useState<ActiveWorkout>(EMPTY_WORKOUT);
+  const [ownerId, setOwnerId] = useState(LOCAL_ANONYMOUS_USER_ID);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateWorkout = async () => {
+      try {
+        const authenticatedUserId = await getAuthenticatedUserId();
+        const nextOwnerId = authenticatedUserId ?? LOCAL_ANONYMOUS_USER_ID;
+
+        if (!isMounted) {
+          return;
+        }
+
+        const persistedWorkout = getPersistedCurrentWorkout(nextOwnerId);
+
+        setOwnerId(nextOwnerId);
+        setSessionId(persistedWorkout.sessionId);
+        setWorkout(persistedWorkout.workout);
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        const persistedWorkout = getPersistedCurrentWorkout(LOCAL_ANONYMOUS_USER_ID);
+
+        setOwnerId(LOCAL_ANONYMOUS_USER_ID);
+        setSessionId(persistedWorkout.sessionId);
+        setWorkout(persistedWorkout.workout);
+      }
+    };
+
+    void hydrateWorkout();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const persistWorkout = (nextWorkout: ActiveWorkout, nextSessionId: string | null) => {
+    if (!nextSessionId) {
+      setWorkout(nextWorkout);
+      return;
+    }
+
+    saveCurrentWorkout(ownerId, nextSessionId, nextWorkout);
+    setSessionId(nextSessionId);
+    setWorkout(nextWorkout);
+  };
 
   const startWorkout = () => {
-    setWorkout({
+    const nextSessionId = `workout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const nextWorkout = {
       startedAt: new Date().toISOString(),
       endedAt: null,
       exercises: [],
       selectedExerciseId: null,
-    });
+    };
+
+    persistWorkout(nextWorkout, nextSessionId);
   };
 
   const addExercise = (exercise: Exercise) => {
     const newExercise = createActiveWorkoutExercise(exercise);
-
-    setWorkout((prev) => ({
-      ...prev,
-      exercises: [...prev.exercises, newExercise],
+    const nextSessionId = sessionId ?? `workout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const nextWorkout = {
+      startedAt: workout.startedAt ?? new Date().toISOString(),
+      endedAt: workout.endedAt,
+      exercises: [...workout.exercises, newExercise],
       selectedExerciseId: newExercise.id,
-    }));
+    };
+
+    persistWorkout(nextWorkout, nextSessionId);
   };
 
   const addRoutine = (routine: Routine) => {
@@ -97,36 +164,46 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
       return;
     }
 
-    setWorkout((prev) => ({
-      ...prev,
-      exercises: [...prev.exercises, ...routineExercises],
+    const nextSessionId = sessionId ?? `workout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const nextWorkout = {
+      startedAt: workout.startedAt ?? new Date().toISOString(),
+      endedAt: workout.endedAt,
+      exercises: [...workout.exercises, ...routineExercises],
       selectedExerciseId: routineExercises[0].id,
-    }));
+    };
+
+    persistWorkout(nextWorkout, nextSessionId);
   };
 
   const selectExercise = (exerciseId: string) => {
-    setWorkout((prev) => ({
-      ...prev,
-      selectedExerciseId: exerciseId,
-    }));
+    persistWorkout(
+      {
+        ...workout,
+        selectedExerciseId: exerciseId,
+      },
+      sessionId
+    );
   };
 
   const addSetToSelectedExercise = () => {
-    setWorkout((prev) => {
-      if (!prev.selectedExerciseId) return prev;
+    if (!workout.selectedExerciseId) {
+      return;
+    }
 
-      return {
-        ...prev,
-        exercises: prev.exercises.map((exercise) =>
-          exercise.id === prev.selectedExerciseId
+    persistWorkout(
+      {
+        ...workout,
+        exercises: workout.exercises.map((exercise) =>
+          exercise.id === workout.selectedExerciseId
             ? {
                 ...exercise,
                 sets: [...exercise.sets, createWorkoutSet()],
               }
             : exercise
         ),
-      };
-    });
+      },
+      sessionId
+    );
   };
 
   const updateSet = (
@@ -135,74 +212,90 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
     field: "weight" | "reps",
     value: string
   ) => {
-    setWorkout((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((exercise) =>
-        exercise.id === exerciseId
-          ? {
-              ...exercise,
-              sets: exercise.sets.map((set) =>
-                set.id === setId ? { ...set, [field]: value } : set
-              ),
-            }
-          : exercise
-      ),
-    }));
+    persistWorkout(
+      {
+        ...workout,
+        exercises: workout.exercises.map((exercise) =>
+          exercise.id === exerciseId
+            ? {
+                ...exercise,
+                sets: exercise.sets.map((set) =>
+                  set.id === setId ? { ...set, [field]: value } : set
+                ),
+              }
+            : exercise
+        ),
+      },
+      sessionId
+    );
   };
 
   const removeSet = (exerciseId: string, setId: string) => {
-    setWorkout((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((exercise) =>
-        exercise.id === exerciseId
-          ? {
-              ...exercise,
-              sets: exercise.sets.filter((set) => set.id !== setId),
-            }
-          : exercise
-      ),
-    }));
+    persistWorkout(
+      {
+        ...workout,
+        exercises: workout.exercises.map((exercise) =>
+          exercise.id === exerciseId
+            ? {
+                ...exercise,
+                sets: exercise.sets.filter((set) => set.id !== setId),
+              }
+            : exercise
+        ),
+      },
+      sessionId
+    );
   };
 
   const removeExercise = (exerciseId: string) => {
-    setWorkout((prev) => {
-      const nextExercises = prev.exercises.filter((exercise) => exercise.id !== exerciseId);
+    const nextExercises = workout.exercises.filter((exercise) => exercise.id !== exerciseId);
+    const nextSelectedExerciseId =
+      workout.selectedExerciseId === exerciseId
+        ? nextExercises.length > 0
+          ? nextExercises[0].id
+          : null
+        : workout.selectedExerciseId;
 
-      let nextSelectedExerciseId = prev.selectedExerciseId;
-
-      if (prev.selectedExerciseId === exerciseId) {
-        nextSelectedExerciseId = nextExercises.length > 0 ? nextExercises[0].id : null;
-      }
-
-      return {
-        ...prev,
+    persistWorkout(
+      {
+        ...workout,
         exercises: nextExercises,
         selectedExerciseId: nextSelectedExerciseId,
-      };
-    });
+      },
+      sessionId
+    );
   };
 
   const finishWorkout = () => {
-    setWorkout((prev) => ({
-      ...prev,
-      endedAt: new Date().toISOString(),
-    }));
+    persistWorkout(
+      {
+        ...workout,
+        endedAt: new Date().toISOString(),
+      },
+      sessionId
+    );
   };
 
   const resumeWorkout = () => {
-    setWorkout((prev) => ({
-      ...prev,
-      endedAt: null,
-    }));
+    persistWorkout(
+      {
+        ...workout,
+        endedAt: null,
+      },
+      sessionId
+    );
   };
 
   const clearWorkout = () => {
-    setWorkout({
-      startedAt: null,
-      endedAt: null,
-      exercises: [],
-      selectedExerciseId: null,
-    });
+    clearPersistedCurrentWorkout(ownerId, sessionId);
+    setSessionId(null);
+    setWorkout(EMPTY_WORKOUT);
+  };
+
+  const saveWorkout = () => {
+    finalizePersistedWorkout(ownerId, sessionId);
+    setSessionId(null);
+    setWorkout(EMPTY_WORKOUT);
   };
 
   return (
@@ -217,6 +310,7 @@ export function ActiveWorkoutProvider({ children }: { children: React.ReactNode 
         updateSet,
         removeSet,
         removeExercise,
+        saveWorkout,
         finishWorkout,
         resumeWorkout,
         clearWorkout,
