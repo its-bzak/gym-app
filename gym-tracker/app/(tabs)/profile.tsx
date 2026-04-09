@@ -163,6 +163,13 @@ export default function ProfileScreen() {
           onPress: () => router.push("/settings"),
         },
         {
+          id: "history",
+          iconName: "time-outline",
+          label: "History",
+          value: "Local workouts",
+          onPress: () => router.push("/history"),
+        },
+        {
           id: "notifications",
           iconName: "notifications-outline",
           label: "Notifications",

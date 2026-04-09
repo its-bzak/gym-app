@@ -11,6 +11,7 @@ import { createNavigationTheme } from '@/design/themes/navigation-theme';
 import { supabase } from "@/lib/supabase";
 
 import { initDB } from '@/db/sqlite';
+import { syncPendingLocalChanges } from '@/services/localSyncService';
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 export const unstable_settings = {
@@ -94,6 +95,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     initDB(); //init on app load
+    void syncPendingLocalChanges();
   }, []);
 
   return (
@@ -113,6 +115,7 @@ export default function RootLayout() {
             <Stack.Screen name="workout/routines" options={{ headerShown: false }} />
             <Stack.Screen name="workout/new-routine" options={{ headerShown: false }} />
             <Stack.Screen name="gyms" options={{ headerShown: false }} />
+            <Stack.Screen name="history" options={{ headerShown: false }} />
             <Stack.Screen name="settings" options={{ headerShown: false }} />
             <Stack.Screen name="badges" options={{ headerShown: false }} />
           </Stack>

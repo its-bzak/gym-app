@@ -94,7 +94,23 @@ type WorkoutSessionSetRow = {
 };
 
 type SyncOutboxRow = {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  operation: "create" | "update" | "delete";
+  payload_json: string;
   status: "pending" | "processing" | "failed";
+  attempt_count: number;
+  next_retry_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type UserExerciseMuscleRow = {
+  user_exercise_id: string;
+  muscle_name: string;
+  role: "primary" | "secondary";
 };
 
 const EMPTY_ACTIVE_WORKOUT: ActiveWorkout = {
@@ -171,6 +187,17 @@ export function initDB() {
       updated_at TEXT NOT NULL,
       deleted_at TEXT,
       UNIQUE (user_id, normalized_name)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_exercise_muscles (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_exercise_id TEXT NOT NULL,
+      muscle_name TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('primary', 'secondary')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_exercise_id) REFERENCES user_exercises(id) ON DELETE CASCADE,
+      UNIQUE (user_exercise_id, muscle_name, role)
     );
 
     CREATE TABLE IF NOT EXISTS routines (
@@ -251,6 +278,7 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_exercise_muscles_role ON exercise_muscles(role);
     CREATE INDEX IF NOT EXISTS idx_user_exercises_user_id ON user_exercises(user_id);
     CREATE INDEX IF NOT EXISTS idx_user_exercises_updated_at ON user_exercises(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_user_exercise_muscles_user_exercise_id ON user_exercise_muscles(user_exercise_id);
     CREATE INDEX IF NOT EXISTS idx_routines_user_id ON routines(user_id);
     CREATE INDEX IF NOT EXISTS idx_routine_exercises_routine_id ON routine_exercises(routine_id);
     CREATE INDEX IF NOT EXISTS idx_routine_exercise_sets_routine_exercise_id ON routine_exercise_sets(routine_exercise_id);
@@ -269,6 +297,19 @@ function getCurrentWorkoutSessionStateKey(userId: string) {
 
 function deleteAppState(key: string) {
   db.runSync("DELETE FROM app_state WHERE key = ?", [key]);
+}
+
+function setSyncStateSuccess(entityType: string) {
+  const now = new Date().toISOString();
+
+  db.runSync(
+    `
+      INSERT INTO sync_state (entity_type, last_pulled_at, last_cursor, last_success_at)
+      VALUES (?, NULL, NULL, ?)
+      ON CONFLICT(entity_type) DO UPDATE SET last_success_at = excluded.last_success_at
+    `,
+    [entityType, now]
+  );
 }
 
 function enqueueSyncOperation(
@@ -567,6 +608,242 @@ export function finalizePersistedWorkout(userId: string, sessionId: string | nul
   }
 }
 
+export function getPendingSyncOutboxEntries(limit = 25) {
+  return db.getAllSync<SyncOutboxRow>(
+    `
+      SELECT
+        id,
+        entity_type,
+        entity_id,
+        operation,
+        payload_json,
+        status,
+        attempt_count,
+        next_retry_at,
+        last_error,
+        created_at,
+        updated_at
+      FROM sync_outbox
+      WHERE status IN ('pending', 'failed')
+      ORDER BY created_at ASC
+      LIMIT ?
+    `,
+    [limit]
+  );
+}
+
+export function markSyncOutboxEntryProcessing(id: string) {
+  db.runSync(
+    `
+      UPDATE sync_outbox
+      SET status = 'processing', updated_at = ?
+      WHERE id = ?
+    `,
+    [new Date().toISOString(), id]
+  );
+}
+
+export function markSyncOutboxEntryFailed(id: string, errorMessage: string) {
+  const now = new Date().toISOString();
+
+  db.runSync(
+    `
+      UPDATE sync_outbox
+      SET
+        status = 'failed',
+        attempt_count = attempt_count + 1,
+        last_error = ?,
+        next_retry_at = ?,
+        updated_at = ?
+      WHERE id = ?
+    `,
+    [errorMessage, now, now, id]
+  );
+}
+
+export function markSyncOutboxEntryCompleted(id: string, entityType: string) {
+  db.execSync("BEGIN TRANSACTION;");
+
+  try {
+    db.runSync("DELETE FROM sync_outbox WHERE id = ?", [id]);
+    setSyncStateSuccess(entityType);
+    db.execSync("COMMIT;");
+  } catch (error) {
+    db.execSync("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function getUserExerciseSyncPayload(exerciseId: string) {
+  const exercise = db.getFirstSync<
+    UserExerciseRow & { normalized_name: string }
+  >(
+    `
+      SELECT
+        id,
+        user_id,
+        name,
+        normalized_name,
+        category,
+        muscle_group,
+        is_unilateral,
+        is_time_based,
+        created_at,
+        updated_at,
+        deleted_at
+      FROM user_exercises
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [exerciseId]
+  );
+
+  if (!exercise) {
+    return null;
+  }
+
+  const muscles = db.getAllSync<UserExerciseMuscleRow>(
+    `
+      SELECT user_exercise_id, muscle_name, role
+      FROM user_exercise_muscles
+      WHERE user_exercise_id = ?
+      ORDER BY role ASC, muscle_name ASC
+    `,
+    [exerciseId]
+  );
+
+  return {
+    exercise,
+    muscles,
+  };
+}
+
+export function getRoutineSyncPayload(routineId: string) {
+  const routine = db.getFirstSync<RoutineRow & { normalized_name: string }>(
+    `
+      SELECT id, user_id, name, normalized_name, gym_id, created_at, updated_at, deleted_at
+      FROM routines
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [routineId]
+  );
+
+  if (!routine) {
+    return null;
+  }
+
+  const routineExercises = db.getAllSync<RoutineExerciseRow & { created_at: string; updated_at: string }>(
+    `
+      SELECT id, routine_id, exercise_source, exercise_id, sort_order, created_at, updated_at
+      FROM routine_exercises
+      WHERE routine_id = ?
+      ORDER BY sort_order ASC
+    `,
+    [routineId]
+  );
+
+  const routineExerciseSets = db.getAllSync<RoutineExerciseSetRow & { id: string; created_at: string; updated_at: string }>(
+    `
+      SELECT id, routine_exercise_id, sort_order, target_reps, target_weight, created_at, updated_at
+      FROM routine_exercise_sets
+      WHERE routine_exercise_id IN (
+        SELECT id FROM routine_exercises WHERE routine_id = ?
+      )
+      ORDER BY routine_exercise_id ASC, sort_order ASC
+    `,
+    [routineId]
+  );
+
+  return {
+    routine,
+    routineExercises,
+    routineExerciseSets,
+  };
+}
+
+export function getCompletedWorkoutSyncPayload(sessionId: string) {
+  const session = db.getFirstSync<WorkoutSessionRow & { created_at: string; updated_at: string }>(
+    `
+      SELECT id, user_id, status, started_at, ended_at, completed_at, selected_exercise_id, created_at, updated_at
+      FROM workout_sessions
+      WHERE id = ?
+        AND status = 'completed'
+      LIMIT 1
+    `,
+    [sessionId]
+  );
+
+  if (!session) {
+    return null;
+  }
+
+  const exercises = db.getAllSync<WorkoutSessionExerciseRow & { created_at: string; updated_at: string }>(
+    `
+      SELECT id, workout_session_id, exercise_source, exercise_id, display_name_snapshot, sort_order, created_at, updated_at
+      FROM workout_session_exercises
+      WHERE workout_session_id = ?
+      ORDER BY sort_order ASC
+    `,
+    [sessionId]
+  );
+
+  const sets = db.getAllSync<WorkoutSessionSetRow & { created_at: string; updated_at: string }>(
+    `
+      SELECT id, workout_session_exercise_id, sort_order, reps, weight, created_at, updated_at
+      FROM workout_session_sets
+      WHERE workout_session_exercise_id IN (
+        SELECT id FROM workout_session_exercises WHERE workout_session_id = ?
+      )
+      ORDER BY workout_session_exercise_id ASC, sort_order ASC
+    `,
+    [sessionId]
+  );
+
+  return {
+    session,
+    exercises,
+    sets,
+  };
+}
+
+export function getCompletedWorkoutHistory(userId: string) {
+  return db.getAllSync<
+    WorkoutSessionRow & {
+      exercise_count: number;
+      set_count: number;
+      pending_sync: number;
+    }
+  >(
+    `
+      SELECT
+        ws.id,
+        ws.user_id,
+        ws.status,
+        ws.started_at,
+        ws.ended_at,
+        ws.completed_at,
+        ws.selected_exercise_id,
+        COUNT(DISTINCT wse.id) as exercise_count,
+        COUNT(wss.id) as set_count,
+        EXISTS(
+          SELECT 1
+          FROM sync_outbox so
+          WHERE so.entity_type = 'workout_session'
+            AND so.entity_id = ws.id
+        ) as pending_sync
+      FROM workout_sessions ws
+      LEFT JOIN workout_session_exercises wse ON wse.workout_session_id = ws.id
+      LEFT JOIN workout_session_sets wss ON wss.workout_session_exercise_id = wse.id
+      WHERE ws.user_id = ?
+        AND ws.status = 'completed'
+      GROUP BY ws.id
+      ORDER BY ws.completed_at DESC, ws.started_at DESC
+    `,
+    [userId]
+  );
+}
+
 export function upsertReferenceExercises(exercises: ReferenceExerciseRow[]) {
   db.execSync("BEGIN TRANSACTION;");
 
@@ -687,6 +964,9 @@ export function getSyncDiagnostics() {
   return {
     pendingCount: pendingCountRow?.count ?? 0,
     failedCount: failedCountRow?.count ?? 0,
+    lastSuccessAt: db.getFirstSync<{ value: string }>(
+      "SELECT MAX(last_success_at) as value FROM sync_state"
+    )?.value ?? null,
   };
 }
 
@@ -712,6 +992,37 @@ export function getCachedUserExercises(userId: string): Exercise[] {
     [userId]
   );
 
+  const muscles = db.getAllSync<UserExerciseMuscleRow>(
+    `
+      SELECT user_exercise_id, muscle_name, role
+      FROM user_exercise_muscles
+      WHERE user_exercise_id IN (
+        SELECT id FROM user_exercises WHERE user_id = ? AND deleted_at IS NULL
+      )
+    `,
+    [userId]
+  );
+
+  const musclesByExerciseId = new Map<
+    string,
+    { primaryMuscles: string[]; secondaryMuscles: string[] }
+  >();
+
+  for (const muscle of muscles) {
+    const existing = musclesByExerciseId.get(muscle.user_exercise_id) ?? {
+      primaryMuscles: [],
+      secondaryMuscles: [],
+    };
+
+    if (muscle.role === "primary") {
+      existing.primaryMuscles.push(muscle.muscle_name);
+    } else {
+      existing.secondaryMuscles.push(muscle.muscle_name);
+    }
+
+    musclesByExerciseId.set(muscle.user_exercise_id, existing);
+  }
+
   return rows.map((exercise) => ({
     id: exercise.id,
     name: exercise.name,
@@ -719,6 +1030,8 @@ export function getCachedUserExercises(userId: string): Exercise[] {
     muscleGroup: exercise.muscle_group,
     isUnilateral: Boolean(exercise.is_unilateral),
     isTimeBased: Boolean(exercise.is_time_based),
+    primaryMuscles: musclesByExerciseId.get(exercise.id)?.primaryMuscles,
+    secondaryMuscles: musclesByExerciseId.get(exercise.id)?.secondaryMuscles,
     createdAt: exercise.created_at,
     updatedAt: exercise.updated_at,
   }));
@@ -757,6 +1070,50 @@ export function insertUserExercise(userId: string, exercise: Exercise) {
         exercise.updatedAt,
       ]
     );
+
+    (exercise.primaryMuscles ?? []).forEach((muscle, index) => {
+      db.runSync(
+        `
+          INSERT INTO user_exercise_muscles (
+            id,
+            user_exercise_id,
+            muscle_name,
+            role,
+            created_at,
+            updated_at
+          ) VALUES (?, ?, ?, 'primary', ?, ?)
+        `,
+        [
+          `${exercise.id}-primary-${index + 1}`,
+          exercise.id,
+          muscle,
+          exercise.createdAt,
+          exercise.updatedAt,
+        ]
+      );
+    });
+
+    (exercise.secondaryMuscles ?? []).forEach((muscle, index) => {
+      db.runSync(
+        `
+          INSERT INTO user_exercise_muscles (
+            id,
+            user_exercise_id,
+            muscle_name,
+            role,
+            created_at,
+            updated_at
+          ) VALUES (?, ?, ?, 'secondary', ?, ?)
+        `,
+        [
+          `${exercise.id}-secondary-${index + 1}`,
+          exercise.id,
+          muscle,
+          exercise.createdAt,
+          exercise.updatedAt,
+        ]
+      );
+    });
 
     enqueueSyncOperation("user_exercise", exercise.id, "create", {
       userId,

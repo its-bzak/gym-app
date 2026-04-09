@@ -5,6 +5,8 @@ import {
   updateUserProfile as updateMockUserProfile,
   type DisplayUnitPreference,
 } from "@/mock/mockDataService";
+import { getSyncDiagnostics } from "@/db/sqlite";
+import { syncPendingLocalChanges } from "@/services/localSyncService";
 import {
   getAuthenticatedUserId,
   getDisplayUnitPreference as getSupabaseDisplayUnitPreference,
@@ -121,8 +123,11 @@ export default function SettingsScreen() {
   const [nameError, setNameError] = useState(false);
   const [usernameError, setUsernameError] = useState(false);
   const [isSyncingProfile, setIsSyncingProfile] = useState(true);
+  const [isSyncingLocalChanges, setIsSyncingLocalChanges] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
+  const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
+  const [syncDiagnostics, setSyncDiagnostics] = useState(() => getSyncDiagnostics());
   const monthPickerRef = useRef<ScrollView | null>(null);
   const dayPickerRef = useRef<ScrollView | null>(null);
   const yearPickerRef = useRef<ScrollView | null>(null);
@@ -186,6 +191,10 @@ export default function SettingsScreen() {
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    setSyncDiagnostics(getSyncDiagnostics());
   }, []);
 
   const today = useMemo(() => new Date(), []);
@@ -361,6 +370,35 @@ export default function SettingsScreen() {
       await Linking.openURL(emailUrl);
     } catch {
       Alert.alert("Contact unavailable", `Email us at ${CONTACT_EMAIL}.`);
+    }
+  };
+
+  const handleSyncNow = async () => {
+    setIsSyncingLocalChanges(true);
+    setSyncStatusMessage(null);
+
+    try {
+      const result = await syncPendingLocalChanges();
+
+      setSyncDiagnostics(result.diagnostics);
+
+      if (result.skipped) {
+        setSyncStatusMessage("Sign in to sync local changes to your account.");
+        return;
+      }
+
+      setSyncStatusMessage(
+        result.syncedCount > 0
+          ? `Synced ${result.syncedCount} local change${result.syncedCount === 1 ? "" : "s"}.`
+          : "No local changes were waiting to sync."
+      );
+    } catch (error) {
+      setSyncDiagnostics(getSyncDiagnostics());
+      setSyncStatusMessage(
+        error instanceof Error ? error.message : "Could not sync local changes right now."
+      );
+    } finally {
+      setIsSyncingLocalChanges(false);
     }
   };
 
@@ -648,6 +686,46 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Sync</Text>
+          <Text style={styles.sectionSubtitle}>Local-first changes queue here before uploading to Supabase.</Text>
+
+          <View style={styles.syncStatRow}>
+            <Text style={styles.syncStatLabel}>Pending changes</Text>
+            <Text style={styles.syncStatValue}>{syncDiagnostics.pendingCount}</Text>
+          </View>
+
+          <View style={styles.syncStatRow}>
+            <Text style={styles.syncStatLabel}>Failed changes</Text>
+            <Text style={styles.syncStatValue}>{syncDiagnostics.failedCount}</Text>
+          </View>
+
+          <View style={styles.syncStatRow}>
+            <Text style={styles.syncStatLabel}>Last successful sync</Text>
+            <Text style={styles.syncStatValue}>
+              {syncDiagnostics.lastSuccessAt ? formatDate(syncDiagnostics.lastSuccessAt) : "Never"}
+            </Text>
+          </View>
+
+          {syncStatusMessage ? (
+            <View style={styles.statusBanner}>
+              <Text style={styles.statusBannerText}>{syncStatusMessage}</Text>
+            </View>
+          ) : null}
+
+          <Pressable
+            style={styles.secondaryActionButton}
+            onPress={() => void handleSyncNow()}
+            disabled={isSyncingLocalChanges}>
+            {isSyncingLocalChanges ? (
+              <ActivityIndicator color="#F4F4F4" size="small" />
+            ) : (
+              <Ionicons name="sync-outline" size={18} color="#F4F4F4" />
+            )}
+            <Text style={styles.secondaryActionButtonText}>Sync now</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Contact</Text>
           <Text style={styles.sectionSubtitle}>Need help or want to report an issue?</Text>
 
@@ -821,6 +899,23 @@ const styles = StyleSheet.create({
   birthDateButtonText: {
     color: "#F4F4F4",
     fontSize: 16,
+    fontWeight: "600",
+  },
+  syncStatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#2A2A2A",
+  },
+  syncStatLabel: {
+    color: "#A8A8A8",
+    fontSize: 14,
+  },
+  syncStatValue: {
+    color: "#F4F4F4",
+    fontSize: 14,
     fontWeight: "600",
   },
   unitOptionList: {
