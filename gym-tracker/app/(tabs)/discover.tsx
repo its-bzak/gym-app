@@ -22,6 +22,7 @@ import { useAppTheme } from "@/design/hooks/use-app-theme";
 import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import {
     appendFoodLogEntry,
+    buildSavedFoodLogEntry,
     deleteFoodLogEntry,
     getDateKey,
     getFoodLogDays,
@@ -35,7 +36,7 @@ import {
     getFoodLogDay as getMockFoodLogDay,
     updateFoodLogEntryDetailed as updateMockFoodLogEntryDetailed,
 } from "@/mock/MainScreen/DailyMetricsSection";
-import type { FoodLogDaySummary, FoodLogEntry, FoodLogMealSlot } from "@/types/dashboard";
+import type { FoodLogDaySummary, FoodLogEntry, FoodLogMealSlot, FoodLogSourceType } from "@/types/dashboard";
 import { getCurrentDate } from "@/utils/dateFormat";
 
 type TimeSlot = {
@@ -50,7 +51,13 @@ type TimelineHourGroup = {
 };
 
 type QuickAddModalMode = "create" | "edit" | "time" | null;
-type QuickAddField = "time" | "energyKcal" | "protein" | "fat" | "carbs" | null;
+type QuickAddField = "time" | "massGrams" | "energyKcal" | "protein" | "fat" | "carbs" | null;
+
+type QuickAddSourceSelection = {
+    sourceType: Extract<FoodLogSourceType, "saved_food" | "recipe">;
+    sourceId: string;
+    label: string;
+};
 
 type DateStripSummaryMap = Record<string, FoodLogDaySummary>;
 
@@ -351,6 +358,9 @@ export default function DiscoverScreen() {
         date?: string;
         hour?: string;
         time?: string;
+        sourceType?: string;
+        sourceId?: string;
+        massGrams?: string;
     }>();
     const [selectedDate, setSelectedDate] = useState(() => new Date(getCurrentDate()));
     const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
@@ -366,12 +376,14 @@ export default function DiscoverScreen() {
     const [quickAddError, setQuickAddError] = useState<string | null>(null);
     const [activeQuickAddField, setActiveQuickAddField] = useState<QuickAddField>(null);
     const [isNameFocused, setIsNameFocused] = useState(false);
+    const [selectedQuickAddSource, setSelectedQuickAddSource] = useState<QuickAddSourceSelection | null>(null);
     const hourPickerRef = useRef<ScrollView | null>(null);
     const minutePickerRef = useRef<ScrollView | null>(null);
     const periodPickerRef = useRef<ScrollView | null>(null);
     const [quickAddForm, setQuickAddForm] = useState({
         name: "",
         time: formatNowTimeInput(),
+        massGrams: "",
         energyKcal: "",
         protein: "",
         fat: "",
@@ -694,6 +706,40 @@ export default function DiscoverScreen() {
             marginTop: 6,
             marginBottom: 16,
         },
+        sourceBadgeRow: {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            justifyContent: "space-between" as const,
+            marginBottom: 12,
+        },
+        sourceBadge: {
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: currentTheme.radii.pill,
+            backgroundColor: currentTheme.colors.accentSoft,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.accent,
+        },
+        sourceBadgeText: {
+            color: currentTheme.colors.textPrimary,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+        },
+        sourceClearButton: {
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: currentTheme.radii.pill,
+            backgroundColor: currentTheme.colors.surface,
+            borderWidth: 1,
+            borderColor: currentTheme.colors.borderMuted,
+        },
+        sourceClearButtonText: {
+            color: currentTheme.colors.textSecondary,
+            fontSize: currentTheme.typography.caption.fontSize,
+            lineHeight: currentTheme.typography.caption.lineHeight,
+            fontWeight: currentTheme.typography.caption.fontWeight,
+        },
         modalInput: {
             minHeight: 50,
             borderRadius: currentTheme.radii.lg,
@@ -965,13 +1011,70 @@ export default function DiscoverScreen() {
         }
 
         const requestedTime = Array.isArray(quickAddParams.time) ? quickAddParams.time[0] : quickAddParams.time;
+        const requestedSourceType = Array.isArray(quickAddParams.sourceType) ? quickAddParams.sourceType[0] : quickAddParams.sourceType;
+        const requestedSourceId = Array.isArray(quickAddParams.sourceId) ? quickAddParams.sourceId[0] : quickAddParams.sourceId;
+        const requestedMassGrams = Array.isArray(quickAddParams.massGrams) ? quickAddParams.massGrams[0] : quickAddParams.massGrams;
 
-        openQuickAdd({
-            timeSlot: requestedTime ? undefined : getQuickAddSlotFromHour(quickAddParams.hour),
-            timeInput: requestedTime,
-        });
-        router.setParams({ quickAdd: undefined, date: undefined, hour: undefined, time: undefined });
-    }, [quickAddParams.date, quickAddParams.hour, quickAddParams.quickAdd, quickAddParams.time, selectedDate]);
+        const openRequestedQuickAdd = async () => {
+            if (
+                authenticatedUserId
+                && (requestedSourceType === "saved_food" || requestedSourceType === "recipe")
+                && requestedSourceId
+            ) {
+                const defaultMassGrams = Number(requestedMassGrams ?? "0");
+                const result = await buildSavedFoodLogEntry(
+                    authenticatedUserId,
+                    requestedSourceType,
+                    requestedSourceId,
+                    Number.isFinite(defaultMassGrams) && defaultMassGrams > 0 ? defaultMassGrams : 1
+                );
+
+                if (result.success && result.data) {
+                    openQuickAdd({
+                        timeSlot: requestedTime ? undefined : getQuickAddSlotFromHour(quickAddParams.hour),
+                        timeInput: requestedTime,
+                        prefill: {
+                            name: result.data.name,
+                            massGrams: String(result.data.massGrams),
+                            energyKcal: String(Math.round(result.data.energyKcal)),
+                            protein: String(result.data.protein),
+                            fat: String(result.data.fat),
+                            carbs: String(result.data.carbs),
+                        },
+                    });
+                    setSelectedQuickAddSource({
+                        sourceType: requestedSourceType,
+                        sourceId: requestedSourceId,
+                        label: result.data.name,
+                    });
+                    setActiveQuickAddField("massGrams");
+                } else {
+                    openQuickAdd({
+                        timeSlot: requestedTime ? undefined : getQuickAddSlotFromHour(quickAddParams.hour),
+                        timeInput: requestedTime,
+                    });
+                    setQuickAddError(result.error ?? "Could not load that saved food item.");
+                }
+            } else {
+                openQuickAdd({
+                    timeSlot: requestedTime ? undefined : getQuickAddSlotFromHour(quickAddParams.hour),
+                    timeInput: requestedTime,
+                });
+            }
+
+            router.setParams({
+                quickAdd: undefined,
+                date: undefined,
+                hour: undefined,
+                time: undefined,
+                sourceType: undefined,
+                sourceId: undefined,
+                massGrams: undefined,
+            });
+        };
+
+        void openRequestedQuickAdd();
+    }, [authenticatedUserId, quickAddParams.date, quickAddParams.hour, quickAddParams.massGrams, quickAddParams.quickAdd, quickAddParams.sourceId, quickAddParams.sourceType, quickAddParams.time, selectedDate]);
 
     useEffect(() => {
         if (selectedEntryId && !entries.some((entry) => entry.id === selectedEntryId)) {
@@ -1026,6 +1129,42 @@ export default function DiscoverScreen() {
     );
     const selectedQuickAddTime = useMemo(() => parseTimeInput(quickAddForm.time), [quickAddForm.time]);
 
+    useEffect(() => {
+        if (!authenticatedUserId || !selectedQuickAddSource || activeQuickAddField === "time") {
+            return;
+        }
+
+        const nextMassGrams = Number(quickAddForm.massGrams || 0);
+
+        if (!Number.isFinite(nextMassGrams) || nextMassGrams <= 0) {
+            return;
+        }
+
+        const loadDerivedValues = async () => {
+            const result = await buildSavedFoodLogEntry(
+                authenticatedUserId,
+                selectedQuickAddSource.sourceType,
+                selectedQuickAddSource.sourceId,
+                nextMassGrams
+            );
+
+            if (!result.success || !result.data) {
+                return;
+            }
+
+            setQuickAddForm((current) => ({
+                ...current,
+                name: result.data.name,
+                energyKcal: String(Math.round(result.data.energyKcal)),
+                protein: String(result.data.protein),
+                fat: String(result.data.fat),
+                carbs: String(result.data.carbs),
+            }));
+        };
+
+        void loadDerivedValues();
+    }, [activeQuickAddField, authenticatedUserId, quickAddForm.massGrams, selectedQuickAddSource]);
+
     const timelineGroups = useMemo<TimelineHourGroup[]>(() => {
         return TIME_SLOTS.map((slot) => {
             const hourEntries = entries
@@ -1056,7 +1195,15 @@ export default function DiscoverScreen() {
         });
     }, [entries]);
 
-    const openQuickAdd = ({ timeSlot, timeInput }: { timeSlot?: TimeSlot; timeInput?: string } = {}) => {
+    const openQuickAdd = ({
+        timeSlot,
+        timeInput,
+        prefill,
+    }: {
+        timeSlot?: TimeSlot;
+        timeInput?: string;
+        prefill?: Partial<typeof quickAddForm>;
+    } = {}) => {
         const nextTime = timeInput
             ? timeInput
             : timeSlot
@@ -1065,13 +1212,16 @@ export default function DiscoverScreen() {
         setQuickAddForm({
             name: "",
             time: nextTime,
+            massGrams: "",
             energyKcal: "",
             protein: "",
             fat: "",
             carbs: "",
+            ...prefill,
         });
         setEditingEntryId(null);
         setSelectedEntryId(null);
+        setSelectedQuickAddSource(null);
         setQuickAddError(null);
         setActiveQuickAddField("energyKcal");
         setIsNameFocused(false);
@@ -1082,11 +1232,21 @@ export default function DiscoverScreen() {
         setQuickAddForm({
             name: entry.name,
             time: formatEntryTimeLabel(entry.loggedAt),
+            massGrams: entry.massGrams ? String(entry.massGrams) : "",
             energyKcal: String(Math.round(entry.energyKcal)),
             protein: String(entry.protein),
             fat: String(entry.fat),
             carbs: String(entry.carbs),
         });
+        setSelectedQuickAddSource(
+            entry.sourceType === "saved_food" || entry.sourceType === "recipe"
+                ? {
+                    sourceType: entry.sourceType,
+                    sourceId: entry.sourceId ?? "",
+                    label: entry.name,
+                }
+                : null
+        );
         setEditingEntryId(entry.id);
         setSelectedEntryId(null);
         setActiveQuickAddField("energyKcal");
@@ -1102,6 +1262,15 @@ export default function DiscoverScreen() {
         }));
         setEditingEntryId(entry.id);
         setSelectedEntryId(null);
+        setSelectedQuickAddSource(
+            entry.sourceType === "saved_food" || entry.sourceType === "recipe"
+                ? {
+                    sourceType: entry.sourceType,
+                    sourceId: entry.sourceId ?? "",
+                    label: entry.name,
+                }
+                : null
+        );
         setActiveQuickAddField("time");
         setIsNameFocused(false);
         setQuickAddModalMode("time");
@@ -1115,7 +1284,14 @@ export default function DiscoverScreen() {
 
         setQuickAddModalMode(null);
         setEditingEntryId(null);
+        setSelectedQuickAddSource(null);
         setQuickAddError(null);
+        setActiveQuickAddField(null);
+        setIsNameFocused(false);
+    };
+
+    const dismissQuickAddInputs = () => {
+        Keyboard.dismiss();
         setActiveQuickAddField(null);
         setIsNameFocused(false);
     };
@@ -1184,6 +1360,14 @@ export default function DiscoverScreen() {
             carbs: quickAddModalMode === "time" ? editingEntry?.carbs ?? 0 : Number(quickAddForm.carbs || 0),
             loggedAt,
             mealSlot: inferMealSlot(loggedAtDate.getHours()),
+            sourceType: quickAddModalMode === "time" ? editingEntry?.sourceType : selectedQuickAddSource?.sourceType,
+            sourceId: quickAddModalMode === "time" ? editingEntry?.sourceId : selectedQuickAddSource?.sourceId,
+            massGrams:
+                quickAddModalMode === "time"
+                    ? editingEntry?.massGrams ?? null
+                    : quickAddForm.massGrams
+                        ? Number(quickAddForm.massGrams)
+                        : null,
         };
 
         const hasInvalidValue = [
@@ -1206,6 +1390,11 @@ export default function DiscoverScreen() {
 
         if (!hasAnyPositiveValue) {
             setQuickAddError("Enter at least one food value greater than zero.");
+            return;
+        }
+
+        if (selectedQuickAddSource && (!Number.isFinite(entryInput.massGrams) || (entryInput.massGrams ?? 0) <= 0)) {
+            setQuickAddError("Enter a mass greater than zero.");
             return;
         }
 
@@ -1316,6 +1505,9 @@ export default function DiscoverScreen() {
             fat: selectedEntry.fat,
             carbs: selectedEntry.carbs,
             alcoholGrams: selectedEntry.alcoholGrams,
+            sourceType: selectedEntry.sourceType,
+            sourceId: selectedEntry.sourceId,
+            massGrams: selectedEntry.massGrams,
         };
 
         setIsSavingEntry(true);
@@ -1606,7 +1798,24 @@ export default function DiscoverScreen() {
                         </>
                     ) : (
                         <>
-                            {/**  Placeholder for future actions such as search bar */}
+                            <Pressable
+                                style={styles.actionButton}
+                                onPress={() => {
+                                    if (!authenticatedUserId) {
+                                        setQuickAddError("Sign in to use saved foods.");
+                                        return;
+                                    }
+
+                                    router.push({
+                                        pathname: "/food-library",
+                                        params: {
+                                            mode: "pick",
+                                            date: getDateKey(selectedDate),
+                                        },
+                                    });
+                                }}>
+                                <Text style={styles.actionButtonText}>Saved</Text>
+                            </Pressable>
 
                             <Pressable style={styles.quickAddButton} onPress={() => openQuickAdd()}>
                                 <Text style={styles.quickAddButtonText}>Quick Add</Text>
@@ -1621,9 +1830,9 @@ export default function DiscoverScreen() {
                 transparent
                 visible={quickAddModalMode !== null}
                 onRequestClose={closeQuickAdd}>
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                <TouchableWithoutFeedback onPress={dismissQuickAddInputs} accessible={false}>
                     <View style={styles.modalOverlay}>
-                        <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
+                        <TouchableWithoutFeedback onPress={dismissQuickAddInputs} accessible={false}>
                             <KeyboardAvoidingView
                                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                                 keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}>
@@ -1643,19 +1852,41 @@ export default function DiscoverScreen() {
                                 </Text>
 
                                 {quickAddModalMode !== "time" ? (
-                                    <TextInput
-                                        style={[styles.modalInput, isNameFocused && styles.modalInputFocused]}
-                                        value={quickAddForm.name}
-                                        onChangeText={(value) => setQuickAddForm((current) => ({ ...current, name: value }))}
-                                        placeholder="Name"
-                                        placeholderTextColor="#6F6F6F"
-                                        editable={!isSavingEntry}
-                                        onFocus={() => {
-                                            setIsNameFocused(true);
-                                            setActiveQuickAddField(null);
-                                        }}
-                                        onBlur={() => setIsNameFocused(false)}
-                                    />
+                                    <>
+                                        {selectedQuickAddSource ? (
+                                            <View style={styles.sourceBadgeRow}>
+                                                <View style={styles.sourceBadge}>
+                                                    <Text style={styles.sourceBadgeText}>
+                                                        {selectedQuickAddSource.sourceType === "saved_food" ? "Saved Food" : "Recipe"}
+                                                    </Text>
+                                                </View>
+                                                <Pressable
+                                                    style={styles.sourceClearButton}
+                                                    onPress={() => {
+                                                        setSelectedQuickAddSource(null);
+                                                        setQuickAddForm((current) => ({
+                                                            ...current,
+                                                            massGrams: "",
+                                                        }));
+                                                    }}>
+                                                    <Text style={styles.sourceClearButtonText}>Manual</Text>
+                                                </Pressable>
+                                            </View>
+                                        ) : null}
+                                        <TextInput
+                                            style={[styles.modalInput, isNameFocused && styles.modalInputFocused]}
+                                            value={quickAddForm.name}
+                                            onChangeText={(value) => setQuickAddForm((current) => ({ ...current, name: value }))}
+                                            placeholder="Name"
+                                            placeholderTextColor="#6F6F6F"
+                                            editable={!isSavingEntry && !selectedQuickAddSource}
+                                            onFocus={() => {
+                                                setIsNameFocused(true);
+                                                setActiveQuickAddField(null);
+                                            }}
+                                            onBlur={() => setIsNameFocused(false)}
+                                        />
+                                    </>
                                 ) : null}
 
                                 <View style={styles.modalGrid}>
@@ -1681,13 +1912,28 @@ export default function DiscoverScreen() {
                                     {quickAddModalMode !== "time" ? (
                                         <>
                                             <TextInput
+                                                style={[styles.modalInputHalf, activeQuickAddField === "massGrams" && styles.modalInputFocused]}
+                                                value={quickAddForm.massGrams}
+                                                onChangeText={(value) => setQuickAddForm((current) => ({ ...current, massGrams: value }))}
+                                                placeholder="Grams"
+                                                placeholderTextColor="#6F6F6F"
+                                                keyboardType="numeric"
+                                                editable={!isSavingEntry}
+                                                showSoftInputOnFocus={false}
+                                                onFocus={() => {
+                                                    Keyboard.dismiss();
+                                                    setIsNameFocused(false);
+                                                    setActiveQuickAddField("massGrams");
+                                                }}
+                                            />
+                                            <TextInput
                                                 style={[styles.modalInputHalf, activeQuickAddField === "energyKcal" && styles.modalInputFocused]}
                                                 value={quickAddForm.energyKcal}
                                                 onChangeText={(value) => setQuickAddForm((current) => ({ ...current, energyKcal: value }))}
                                                 placeholder="Calories"
                                                 placeholderTextColor="#6F6F6F"
                                                 keyboardType="numeric"
-                                                editable={!isSavingEntry}
+                                                editable={!isSavingEntry && !selectedQuickAddSource}
                                                 showSoftInputOnFocus={false}
                                                 onFocus={() => {
                                                     Keyboard.dismiss();
@@ -1703,7 +1949,7 @@ export default function DiscoverScreen() {
                                                     placeholder="Protein"
                                                     placeholderTextColor="#6F6F6F"
                                                     keyboardType="numeric"
-                                                    editable={!isSavingEntry}
+                                                    editable={!isSavingEntry && !selectedQuickAddSource}
                                                     showSoftInputOnFocus={false}
                                                     onFocus={() => {
                                                         Keyboard.dismiss();
@@ -1718,7 +1964,7 @@ export default function DiscoverScreen() {
                                                     placeholder="Fat"
                                                     placeholderTextColor="#6F6F6F"
                                                     keyboardType="numeric"
-                                                    editable={!isSavingEntry}
+                                                    editable={!isSavingEntry && !selectedQuickAddSource}
                                                     showSoftInputOnFocus={false}
                                                     onFocus={() => {
                                                         Keyboard.dismiss();
@@ -1733,7 +1979,7 @@ export default function DiscoverScreen() {
                                                     placeholder="Carbs"
                                                     placeholderTextColor="#6F6F6F"
                                                     keyboardType="numeric"
-                                                    editable={!isSavingEntry}
+                                                    editable={!isSavingEntry && !selectedQuickAddSource}
                                                     showSoftInputOnFocus={false}
                                                     onFocus={() => {
                                                         Keyboard.dismiss();

@@ -77,6 +77,7 @@ export default function WorkoutScreen() {
   const [isSavingQuickAction, setIsSavingQuickAction] = useState(false);
   const [quickActionError, setQuickActionError] = useState<string | null>(null);
   const [weightInput, setWeightInput] = useState("");
+  const [isWeightKeypadVisible, setIsWeightKeypadVisible] = useState(false);
   const { startWorkout } = useActiveWorkout();
   const { unitPreference } = useDisplayUnitPreference();
   const styles = createThemedStyles(theme, (currentTheme) => ({
@@ -314,6 +315,7 @@ export default function WorkoutScreen() {
 
   const resetQuickActionForms = () => {
     setWeightInput("");
+    setIsWeightKeypadVisible(false);
   };
 
   const closeQuickActionModal = () => {
@@ -330,6 +332,12 @@ export default function WorkoutScreen() {
     resetQuickActionForms();
     setQuickActionError(null);
     setActiveQuickActionModal(modal);
+    setIsWeightKeypadVisible(modal === "weight");
+  };
+
+  const dismissWeightKeypad = () => {
+    Keyboard.dismiss();
+    setIsWeightKeypadVisible(false);
   };
 
   const applyFallbackDashboardState = () => {
@@ -547,9 +555,9 @@ export default function WorkoutScreen() {
         transparent
         visible={activeQuickActionModal !== null}
         onRequestClose={closeQuickActionModal}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <TouchableWithoutFeedback onPress={dismissWeightKeypad} accessible={false}>
           <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}} accessible={false}>
+            <TouchableWithoutFeedback onPress={dismissWeightKeypad} accessible={false}>
               <View style={styles.modalSheet}>
                 <View style={styles.modalHandle} />
 
@@ -570,17 +578,23 @@ export default function WorkoutScreen() {
                         keyboardType="numeric"
                         editable={!isSavingQuickAction}
                         showSoftInputOnFocus={false}
-                        onFocus={Keyboard.dismiss}
+                        onFocus={() => {
+                          Keyboard.dismiss();
+                          setIsWeightKeypadVisible(true);
+                        }}
                       />
                     </View>
 
-                    <CustomKeypad
-                      mode="decimal"
-                      value={weightInput}
-                      onChange={setWeightInput}
-                      showClearKey={false}
-                      showDoneKey={false}
-                    />
+                    {isWeightKeypadVisible ? (
+                      <CustomKeypad
+                        mode="decimal"
+                        value={weightInput}
+                        onChange={setWeightInput}
+                        onDone={() => setIsWeightKeypadVisible(false)}
+                        showClearKey={false}
+                        showDoneKey={false}
+                      />
+                    ) : null}
                   </>
                 ) : null}
 

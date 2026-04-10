@@ -13,6 +13,14 @@ import {
   upsertPulledUserExercises,
   upsertPulledWorkoutSessions,
 } from "@/db/sqlite";
+import {
+  getFoodLogEntrySyncPayload as getNutritionFoodLogEntrySyncPayload,
+  getGoalPlanSyncPayload as getNutritionGoalPlanSyncPayload,
+  getWeightEntrySyncPayload as getNutritionWeightEntrySyncPayload,
+  upsertPulledFoodLogEntries as upsertPulledNutritionFoodLogEntries,
+  upsertPulledGoalPlan as upsertPulledNutritionGoalPlan,
+  upsertPulledWeightEntries as upsertPulledNutritionWeightEntries,
+} from "@/db/nutrition";
 import { supabase } from "@/lib/supabase";
 import { getAuthenticatedUserId } from "@/services/profileService";
 
@@ -112,6 +120,73 @@ type RemoteWorkoutSessionSetRow = {
   weight: number | null;
   created_at: string;
   updated_at: string;
+};
+
+type RemoteFoodLogEntryRow = {
+  id: string;
+  user_id: string;
+  entry_date: string;
+  logged_at: string;
+  meal_slot: string | null;
+  name: string | null;
+  energy_kcal: number | null;
+  protein_grams: number;
+  fat_grams: number;
+  carbs_grams: number;
+  alcohol_grams: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type RemoteBodyWeightEntryRow = {
+  id: string;
+  user_id: string;
+  entry_date: string;
+  weight_kg: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type RemoteBodyGoalRow = {
+  id: string;
+  user_id: string;
+  goal_type: "lose" | "gain" | "maintain";
+  status: "draft" | "active" | "completed" | "paused" | "cancelled";
+  start_weight_kg: number;
+  target_weight_kg: number;
+  target_rate_kg_per_week: number;
+  started_on: string;
+  completed_on: string | null;
+  paused_on: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RemoteNutritionProgramRow = {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  program_mode: "manual" | "guided";
+  is_active: boolean;
+  calorie_target: number;
+  protein_target_grams: number;
+  fat_target_grams: number;
+  carb_target_grams: number;
+  maintenance_calorie_estimate: number | null;
+  planned_daily_energy_delta: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RemoteNutritionProgramPreferencesRow = {
+  protein_preference: "standard" | "high";
+  carb_preference: "lower" | "balanced" | "higher";
+  fat_preference: "lower" | "balanced" | "higher";
+};
+
+type RemoteAdaptiveProgramSettingsRow = {
+  is_enabled: boolean;
 };
 
 let activeSyncPromise: Promise<SyncResult> | null = null;
@@ -333,6 +408,245 @@ async function syncWorkoutSession(entityId: string, userId: string) {
   }
 }
 
+async function syncFoodLogEntry(entityId: string, userId: string) {
+  const payload = getNutritionFoodLogEntrySyncPayload(entityId);
+
+  if (!payload) {
+    return;
+  }
+
+  if (payload.deleted_at) {
+    const { error } = await supabase
+      .from("food_log_entries")
+      .delete()
+      .eq("id", payload.id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return;
+  }
+
+  const { error } = await supabase.from("food_log_entries").upsert({
+    id: payload.id,
+    user_id: userId,
+    entry_date: payload.entry_date,
+    logged_at: payload.logged_at,
+    meal_slot: payload.meal_slot,
+    name: payload.name,
+    energy_kcal: payload.energy_kcal,
+    protein_grams: payload.protein_grams,
+    fat_grams: payload.fat_grams,
+    carbs_grams: payload.carbs_grams,
+    alcohol_grams: payload.alcohol_grams,
+    created_at: payload.created_at,
+    updated_at: payload.updated_at,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function syncWeightEntry(entityId: string, userId: string) {
+  const payload = getNutritionWeightEntrySyncPayload(entityId);
+
+  if (!payload) {
+    return;
+  }
+
+  if (payload.deleted_at) {
+    const { error } = await supabase
+      .from("body_weight_entries")
+      .delete()
+      .eq("user_id", userId)
+      .eq("entry_date", payload.entry_date);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return;
+  }
+
+  const { data: existingRow, error: existingRowError } = await supabase
+    .from("body_weight_entries")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("entry_date", payload.entry_date)
+    .maybeSingle<{ id: string }>();
+
+  if (existingRowError) {
+    throw new Error(existingRowError.message);
+  }
+
+  if (existingRow) {
+    const { error } = await supabase
+      .from("body_weight_entries")
+      .update({
+        weight_kg: payload.weight_kg,
+        updated_at: payload.updated_at,
+      })
+      .eq("id", existingRow.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return;
+  }
+
+  const { error } = await supabase.from("body_weight_entries").insert({
+    id: payload.id,
+    user_id: userId,
+    entry_date: payload.entry_date,
+    weight_kg: payload.weight_kg,
+    created_at: payload.created_at,
+    updated_at: payload.updated_at,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function syncGoalPlan(userId: string) {
+  const payload = getNutritionGoalPlanSyncPayload(userId);
+
+  if (!payload) {
+    return;
+  }
+
+  const { data: existingBodyGoal, error: existingBodyGoalError } = await supabase
+    .from("body_goals")
+    .select(
+      "id, user_id, goal_type, status, start_weight_kg, target_weight_kg, target_rate_kg_per_week, started_on, completed_on, paused_on, notes, created_at, updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle<RemoteBodyGoalRow>();
+
+  if (existingBodyGoalError) {
+    throw new Error(existingBodyGoalError.message);
+  }
+
+  const bodyGoalId = existingBodyGoal?.id ?? payload.bodyGoal.id;
+  const bodyGoalRecord = {
+    user_id: userId,
+    goal_type: payload.bodyGoal.goal_type,
+    status: "active",
+    start_weight_kg: payload.bodyGoal.start_weight_kg,
+    target_weight_kg: payload.bodyGoal.target_weight_kg,
+    target_rate_unit: "kg_per_week",
+    target_rate_value: Math.abs(payload.bodyGoal.target_rate_kg_per_week),
+    target_rate_kg_per_week: payload.bodyGoal.target_rate_kg_per_week,
+    started_on: existingBodyGoal?.started_on ?? payload.bodyGoal.started_on,
+    completed_on: null,
+    paused_on: null,
+    notes: payload.bodyGoal.notes,
+  };
+
+  if (existingBodyGoal) {
+    const { error } = await supabase
+      .from("body_goals")
+      .update(bodyGoalRecord)
+      .eq("id", existingBodyGoal.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } else {
+    const { error } = await supabase.from("body_goals").insert({
+      id: bodyGoalId,
+      ...bodyGoalRecord,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  const { data: existingNutritionProgram, error: existingNutritionProgramError } = await supabase
+    .from("nutrition_programs")
+    .select(
+      "id, user_id, goal_id, program_mode, is_active, calorie_target, protein_target_grams, fat_target_grams, carb_target_grams, maintenance_calorie_estimate, planned_daily_energy_delta, created_at, updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .maybeSingle<RemoteNutritionProgramRow>();
+
+  if (existingNutritionProgramError) {
+    throw new Error(existingNutritionProgramError.message);
+  }
+
+  const nutritionProgramId = existingNutritionProgram?.id ?? payload.nutritionGoal.id;
+  const nutritionProgramRecord = {
+    user_id: userId,
+    goal_id: bodyGoalId,
+    program_mode: payload.nutritionGoal.program_mode,
+    is_active: true,
+    calorie_target: payload.nutritionGoal.calorie_goal,
+    protein_target_grams: payload.nutritionGoal.protein_goal,
+    fat_target_grams: payload.nutritionGoal.fat_goal,
+    carb_target_grams: payload.nutritionGoal.carbs_goal,
+    maintenance_calorie_estimate: payload.nutritionGoal.maintenance_calories,
+    planned_daily_energy_delta: payload.nutritionGoal.planned_daily_energy_delta,
+    generated_summary: null,
+  };
+
+  if (existingNutritionProgram) {
+    const { error } = await supabase
+      .from("nutrition_programs")
+      .update(nutritionProgramRecord)
+      .eq("id", existingNutritionProgram.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } else {
+    const { error } = await supabase.from("nutrition_programs").insert({
+      id: nutritionProgramId,
+      ...nutritionProgramRecord,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  const { error: preferencesError } = await supabase
+    .from("nutrition_program_preferences")
+    .upsert(
+      {
+        program_id: nutritionProgramId,
+        protein_preference: payload.nutritionGoal.protein_preference,
+        carb_preference: payload.nutritionGoal.carb_preference,
+        fat_preference: payload.nutritionGoal.fat_preference,
+      },
+      { onConflict: "program_id" }
+    );
+
+  if (preferencesError) {
+    throw new Error(preferencesError.message);
+  }
+
+  const { error: adaptiveError } = await supabase
+    .from("adaptive_program_settings")
+    .upsert(
+      {
+        program_id: nutritionProgramId,
+        is_enabled: Boolean(payload.nutritionGoal.adaptive_enabled),
+      },
+      { onConflict: "program_id" }
+    );
+
+  if (adaptiveError) {
+    throw new Error(adaptiveError.message);
+  }
+}
+
 async function pullUserExercises(userId: string) {
   const { data: exercises, error: exercisesError } = await supabase
     .from("user_exercises")
@@ -482,14 +796,122 @@ async function pullCompletedWorkoutSessions(userId: string) {
   return sessions?.length ?? 0;
 }
 
+async function pullFoodLogEntries(userId: string) {
+  const { data, error } = await supabase
+    .from("food_log_entries")
+    .select(
+      "id, user_id, entry_date, logged_at, meal_slot, name, energy_kcal, protein_grams, fat_grams, carbs_grams, alcohol_grams, created_at, updated_at"
+    )
+    .eq("user_id", userId)
+    .returns<RemoteFoodLogEntryRow[]>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  upsertPulledNutritionFoodLogEntries(userId, data ?? []);
+  markSyncPullCompleted("food_log_entry");
+
+  return data?.length ?? 0;
+}
+
+async function pullWeightEntries(userId: string) {
+  const { data, error } = await supabase
+    .from("body_weight_entries")
+    .select("id, user_id, entry_date, weight_kg, created_at, updated_at")
+    .eq("user_id", userId)
+    .returns<RemoteBodyWeightEntryRow[]>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  upsertPulledNutritionWeightEntries(userId, data ?? []);
+  markSyncPullCompleted("weight_entry");
+
+  return data?.length ?? 0;
+}
+
+async function pullGoalPlan(userId: string) {
+  const { data: bodyGoal, error: bodyGoalError } = await supabase
+    .from("body_goals")
+    .select(
+      "id, user_id, goal_type, status, start_weight_kg, target_weight_kg, target_rate_kg_per_week, started_on, completed_on, paused_on, notes, created_at, updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle<RemoteBodyGoalRow>();
+
+  if (bodyGoalError) {
+    throw new Error(bodyGoalError.message);
+  }
+
+  const { data: nutritionProgram, error: nutritionProgramError } = await supabase
+    .from("nutrition_programs")
+    .select(
+      "id, user_id, goal_id, program_mode, is_active, calorie_target, protein_target_grams, fat_target_grams, carb_target_grams, maintenance_calorie_estimate, planned_daily_energy_delta, created_at, updated_at"
+    )
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .maybeSingle<RemoteNutritionProgramRow>();
+
+  if (nutritionProgramError) {
+    throw new Error(nutritionProgramError.message);
+  }
+
+  let preferences: RemoteNutritionProgramPreferencesRow | null = null;
+  let adaptiveSettings: RemoteAdaptiveProgramSettingsRow | null = null;
+
+  if (nutritionProgram) {
+    const { data: preferenceData, error: preferencesError } = await supabase
+      .from("nutrition_program_preferences")
+      .select("protein_preference, carb_preference, fat_preference")
+      .eq("program_id", nutritionProgram.id)
+      .maybeSingle<RemoteNutritionProgramPreferencesRow>();
+
+    if (preferencesError) {
+      throw new Error(preferencesError.message);
+    }
+
+    preferences = preferenceData;
+
+    const { data: adaptiveData, error: adaptiveError } = await supabase
+      .from("adaptive_program_settings")
+      .select("is_enabled")
+      .eq("program_id", nutritionProgram.id)
+      .maybeSingle<RemoteAdaptiveProgramSettingsRow>();
+
+    if (adaptiveError) {
+      throw new Error(adaptiveError.message);
+    }
+
+    adaptiveSettings = adaptiveData;
+  }
+
+  upsertPulledNutritionGoalPlan(userId, bodyGoal, nutritionProgram, preferences, adaptiveSettings);
+  markSyncPullCompleted("goal_plan");
+
+  return bodyGoal || nutritionProgram ? 1 : 0;
+}
+
 async function pullRemoteChanges(userId: string) {
-  const [pulledUserExercises, pulledRoutines, pulledWorkouts] = await Promise.all([
+  const [pulledUserExercises, pulledRoutines, pulledWorkouts, pulledFoodLogs, pulledWeightEntries, pulledGoalPlan] = await Promise.all([
     pullUserExercises(userId),
     pullRoutines(userId),
     pullCompletedWorkoutSessions(userId),
+    pullFoodLogEntries(userId),
+    pullWeightEntries(userId),
+    pullGoalPlan(userId),
   ]);
 
-  return pulledUserExercises + pulledRoutines + pulledWorkouts;
+  return (
+    pulledUserExercises +
+    pulledRoutines +
+    pulledWorkouts +
+    pulledFoodLogs +
+    pulledWeightEntries +
+    pulledGoalPlan
+  );
 }
 
 async function runSyncPendingLocalChanges(options: SyncOptions): Promise<SyncResult> {
@@ -535,6 +957,12 @@ async function runSyncPendingLocalChanges(options: SyncOptions): Promise<SyncRes
         await retryTransientNetworkError(() => syncRoutine(entry.entity_id, authenticatedUserId));
       } else if (entry.entity_type === "workout_session") {
         await retryTransientNetworkError(() => syncWorkoutSession(entry.entity_id, authenticatedUserId));
+      } else if (entry.entity_type === "food_log_entry") {
+        await retryTransientNetworkError(() => syncFoodLogEntry(entry.entity_id, authenticatedUserId));
+      } else if (entry.entity_type === "weight_entry") {
+        await retryTransientNetworkError(() => syncWeightEntry(entry.entity_id, authenticatedUserId));
+      } else if (entry.entity_type === "goal_plan") {
+        await retryTransientNetworkError(() => syncGoalPlan(entry.entity_id));
       }
 
       markSyncOutboxEntryCompleted(entry.id, entry.entity_type);

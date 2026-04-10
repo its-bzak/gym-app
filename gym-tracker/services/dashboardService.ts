@@ -1,15 +1,43 @@
-import { supabase } from "@/lib/supabase";
+import {
+  calculateSavedFoodNutrition,
+  calculateSavedRecipeNutrition,
+  createSavedFood,
+  createSavedRecipe,
+  deleteSavedFood,
+  deleteSavedRecipe,
+  deleteLocalFoodLogEntry,
+  getLocalActiveGoalPlan,
+  getLocalActiveNutritionGoal,
+  getLocalDailyExerciseMetrics,
+  getLocalDailyNutritionMetrics,
+  getLocalFoodLogDay,
+  getLocalFoodLogDays,
+  getLocalLifetimeTrainingMetrics,
+  getLocalWeightEntries,
+  getSavedFoodById,
+  getSavedFoods,
+  getSavedRecipeById,
+  getSavedRecipes,
+  insertLocalFoodLogEntry,
+  updateSavedFood,
+  updateSavedRecipe,
+  upsertLocalGoalPlan,
+  upsertLocalWeightEntry,
+  updateLocalFoodLogEntry,
+} from "@/db/nutrition";
 import type {
   DailyExerciseMetrics,
   FoodLogDaySummary,
   FoodLogEntry,
   FoodLogMealSlot,
+  FoodLogSourceType,
   GoalPlan,
   GoalType,
   LifetimeTrainingMetrics,
   NutritionGoal,
-  NutritionProgramRecommendation,
   ProgramMode,
+  SavedFood,
+  SavedRecipe,
   WeightEntry,
   WeightGoal,
 } from "@/types/dashboard";
@@ -20,138 +48,6 @@ export type DashboardWriteResult<T> = {
   error?: string;
   shouldFallback?: boolean;
   data?: T;
-};
-
-type DailyNutritionMetricsRow = {
-  id: string;
-  user_id: string;
-  metric_date: string;
-  protein_grams: number;
-  protein_goal_grams: number;
-  fat_grams: number;
-  fat_goal_grams: number;
-  carbs_grams: number;
-  carbs_goal_grams: number;
-  calorie_goal: number;
-  created_at: string;
-  updated_at: string;
-};
-
-type FoodLogEntryRow = {
-  id: string;
-  user_id: string;
-  entry_date: string;
-  logged_at: string;
-  meal_slot: string | null;
-  name: string | null;
-  energy_kcal: number | null;
-  protein_grams: number;
-  fat_grams: number;
-  carbs_grams: number;
-  alcohol_grams: number;
-  created_at: string;
-  updated_at: string;
-};
-
-type DailyExerciseMetricsRow = {
-  id: string;
-  user_id: string;
-  metric_date: string;
-  volume_kg: number;
-  duration_mins: number;
-  workout_type: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type BodyWeightEntryRow = {
-  id: string;
-  user_id: string;
-  entry_date: string;
-  weight_kg: number;
-  created_at: string;
-  updated_at: string;
-};
-
-type BodyGoalRow = {
-  id: string;
-  user_id: string;
-  goal_type: GoalType;
-  status: WeightGoal["status"];
-  start_weight_kg: number;
-  target_weight_kg: number;
-  target_rate_kg_per_week: number;
-  started_on: string;
-  completed_on: string | null;
-  paused_on: string | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type NutritionProgramRow = {
-  id: string;
-  user_id: string;
-  goal_id: string;
-  program_mode: ProgramMode;
-  is_active: boolean;
-  calorie_target: number;
-  protein_target_grams: number;
-  fat_target_grams: number;
-  carb_target_grams: number;
-  maintenance_calorie_estimate: number | null;
-  planned_daily_energy_delta: number | null;
-  generated_summary: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type NutritionProgramPreferencesRow = {
-  id: string;
-  program_id: string;
-  protein_preference: NutritionGoal["proteinPreference"];
-  carb_preference: NutritionGoal["carbPreference"];
-  fat_preference: NutritionGoal["fatPreference"];
-  meals_per_day: number | null;
-  training_days_per_week: number | null;
-  diet_notes: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type AdaptiveProgramSettingsRow = {
-  id: string;
-  program_id: string;
-  is_enabled: boolean;
-  check_in_window_days: number;
-  minimum_weight_entries: number;
-  target_tolerance_percent: number;
-  max_daily_calorie_adjustment: number;
-  min_days_between_recommendations: number;
-  last_evaluated_at: string | null;
-  next_evaluation_on: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-type NutritionProgramRecommendationRow = {
-  id: string;
-  user_id: string;
-  goal_id: string;
-  program_id: string;
-  status: NutritionProgramRecommendation["status"];
-  reason_code: NutritionProgramRecommendation["reasonCode"];
-  reason_summary: string;
-  previous_calorie_target: number;
-  recommended_calorie_target: number;
-  previous_protein_target_grams: number;
-  recommended_protein_target_grams: number;
-  previous_fat_target_grams: number;
-  recommended_fat_target_grams: number;
-  previous_carb_target_grams: number;
-  recommended_carb_target_grams: number;
-  reviewed_at: string | null;
-  created_at: string;
 };
 
 export type WorkoutDashboardSnapshot = {
@@ -196,6 +92,23 @@ export type FoodLogInput = {
   fat: number;
   carbs: number;
   alcoholGrams?: number;
+  sourceType?: FoodLogSourceType;
+  sourceId?: string | null;
+  massGrams?: number | null;
+};
+
+export type SavedFoodInput = {
+  name: string;
+  referenceMassGrams: number;
+  energyKcal: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+};
+
+export type SavedRecipeInput = {
+  name: string;
+  ingredients: Array<{ savedFoodId: string; massGrams: number }>;
 };
 
 export type FoodLogDaySnapshot = {
@@ -217,186 +130,7 @@ export function getDateKey(date: Date | string): string {
   return `${year}-${month}-${day}`;
 }
 
-function mapDailyNutritionMetricsRow(row: DailyNutritionMetricsRow): MacroBarProps {
-  return {
-    protein: row.protein_grams,
-    proteinGoal: row.protein_goal_grams,
-    fat: row.fat_grams,
-    fatGoal: row.fat_goal_grams,
-    carbs: row.carbs_grams,
-    carbsGoal: row.carbs_goal_grams,
-    calorieGoal: row.calorie_goal,
-  };
-}
-
-function mapDailyExerciseMetricsRow(
-  row: DailyExerciseMetricsRow
-): Omit<DailyExerciseMetrics, "date"> {
-  return {
-    volume: Number(row.volume_kg ?? 0),
-    durationMins: row.duration_mins,
-    workoutType: row.workout_type ?? "",
-  };
-}
-
-function mapBodyWeightEntryRow(row: BodyWeightEntryRow): WeightEntry {
-  return {
-    date: row.entry_date,
-    weightKg: Number(row.weight_kg),
-  };
-}
-
-function normalizeMealSlot(value?: string | null): FoodLogMealSlot {
-  if (value === "breakfast" || value === "lunch" || value === "dinner" || value === "snack") {
-    return value;
-  }
-
-  return "custom";
-}
-
-function calculateEntryCalories(entry: {
-  protein_grams: number;
-  fat_grams: number;
-  carbs_grams: number;
-  alcohol_grams?: number;
-  energy_kcal?: number | null;
-}): number {
-  if (entry.energy_kcal !== null && entry.energy_kcal !== undefined) {
-    return Number(entry.energy_kcal);
-  }
-
-  const proteinCalories = entry.protein_grams * 4;
-  const fatCalories = entry.fat_grams * 9;
-  const carbCalories = entry.carbs_grams * 4;
-  const alcoholCalories = (entry.alcohol_grams ?? 0) * 7;
-
-  return proteinCalories + fatCalories + carbCalories + alcoholCalories;
-}
-
-function mapFoodLogEntryRow(row: FoodLogEntryRow): FoodLogEntry {
-  return {
-    id: row.id,
-    entryDate: row.entry_date,
-    loggedAt: row.logged_at,
-    mealSlot: normalizeMealSlot(row.meal_slot),
-    name: row.name?.trim() || "Quick entry",
-    energyKcal: calculateEntryCalories(row),
-    protein: row.protein_grams,
-    fat: row.fat_grams,
-    carbs: row.carbs_grams,
-    alcoholGrams: row.alcohol_grams ?? 0,
-  };
-}
-
-function mapWeightGoalRow(row: BodyGoalRow): WeightGoal {
-  return {
-    id: row.id,
-    goalType: row.goal_type,
-    status: row.status,
-    startWeightKg: Number(row.start_weight_kg),
-    targetWeightKg: Number(row.target_weight_kg),
-    targetRateKgPerWeek: Math.abs(Number(row.target_rate_kg_per_week ?? 0)),
-    startedOn: row.started_on,
-  };
-}
-
-function mapNutritionProgramToGoal(
-  programRow: NutritionProgramRow,
-  preferencesRow: NutritionProgramPreferencesRow | null,
-  adaptiveSettingsRow: AdaptiveProgramSettingsRow | null
-): NutritionGoal {
-  return {
-    programMode: programRow.program_mode,
-    proteinGoal: programRow.protein_target_grams,
-    fatGoal: programRow.fat_target_grams,
-    carbsGoal: programRow.carb_target_grams,
-    calorieGoal: programRow.calorie_target,
-    maintenanceCalories: programRow.maintenance_calorie_estimate,
-    plannedDailyEnergyDelta: programRow.planned_daily_energy_delta,
-    proteinPreference: preferencesRow?.protein_preference ?? "standard",
-    carbPreference: preferencesRow?.carb_preference ?? "balanced",
-    fatPreference: preferencesRow?.fat_preference ?? "balanced",
-    adaptiveEnabled: adaptiveSettingsRow?.is_enabled ?? false,
-  };
-}
-
-function mapNutritionGoalToMacroTargets(goal: NutritionGoal | null): Pick<
-  MacroBarProps,
-  "proteinGoal" | "fatGoal" | "carbsGoal" | "calorieGoal"
-> {
-  return {
-    proteinGoal: goal?.proteinGoal ?? 0,
-    fatGoal: goal?.fatGoal ?? 0,
-    carbsGoal: goal?.carbsGoal ?? 0,
-    calorieGoal: goal?.calorieGoal ?? 0,
-  };
-}
-
-function mapRecommendationRow(
-  row: NutritionProgramRecommendationRow
-): NutritionProgramRecommendation {
-  return {
-    id: row.id,
-    status: row.status,
-    reasonCode: row.reason_code,
-    reasonSummary: row.reason_summary,
-    previousCalorieGoal: row.previous_calorie_target,
-    recommendedCalorieGoal: row.recommended_calorie_target,
-    previousProteinGoal: row.previous_protein_target_grams,
-    recommendedProteinGoal: row.recommended_protein_target_grams,
-    previousFatGoal: row.previous_fat_target_grams,
-    recommendedFatGoal: row.recommended_fat_target_grams,
-    previousCarbsGoal: row.previous_carb_target_grams,
-    recommendedCarbsGoal: row.recommended_carb_target_grams,
-    createdAt: row.created_at,
-    reviewedAt: row.reviewed_at,
-  };
-}
-
-function normalizeSignedRateKgPerWeek(goalType: GoalType, targetRateKgPerWeek: number): number {
-  if (goalType === "maintain") {
-    return 0;
-  }
-
-  const normalizedRate = Math.abs(targetRateKgPerWeek);
-
-  return goalType === "lose" ? -normalizedRate : normalizedRate;
-}
-
-function buildFoodLogDaySummary(
-  entries: FoodLogEntry[],
-  nutritionGoal: NutritionGoal | null
-): FoodLogDaySummary {
-  const consumed = entries.reduce(
-    (aggregate, entry) => {
-      aggregate.protein += entry.protein;
-      aggregate.fat += entry.fat;
-      aggregate.carbs += entry.carbs;
-      aggregate.consumedCalories += entry.energyKcal;
-
-      return aggregate;
-    },
-    {
-      protein: 0,
-      fat: 0,
-      carbs: 0,
-      consumedCalories: 0,
-    }
-  );
-
-  return {
-    protein: consumed.protein,
-    fat: consumed.fat,
-    carbs: consumed.carbs,
-    proteinGoal: nutritionGoal?.proteinGoal ?? 0,
-    fatGoal: nutritionGoal?.fatGoal ?? 0,
-    carbsGoal: nutritionGoal?.carbsGoal ?? 0,
-    calorieGoal: nutritionGoal?.calorieGoal ?? 0,
-    consumedCalories: consumed.consumedCalories,
-  };
-}
-
-function buildUnexpectedErrorMessage(prefix: string, error: unknown): string {
+function buildUnexpectedErrorMessage(prefix: string, error: unknown) {
   if (error instanceof Error && error.message) {
     return `${prefix} ${error.message}`;
   }
@@ -404,297 +138,416 @@ function buildUnexpectedErrorMessage(prefix: string, error: unknown): string {
   return prefix;
 }
 
+function validateFoodLogInput(entry: FoodLogInput) {
+  const values = [entry.energyKcal ?? 0, entry.protein, entry.fat, entry.carbs, entry.alcoholGrams ?? 0];
+  const hasNegativeValue = values.some((value) => !Number.isFinite(value) || value < 0);
+  const hasAnyPositiveValue = values.some((value) => value > 0);
+
+  if (hasNegativeValue) {
+    return "Food values cannot be negative.";
+  }
+
+  if (!hasAnyPositiveValue) {
+    return "Enter at least one food value greater than zero.";
+  }
+
+  return null;
+}
+
+function validateGoalPlan(goalPlan: GoalPlanInput) {
+  const goalValues = [
+    goalPlan.weightGoal.startWeightKg,
+    goalPlan.weightGoal.targetWeightKg,
+    goalPlan.weightGoal.targetRateKgPerWeek,
+  ];
+  const nutritionValues = [
+    goalPlan.nutritionGoal.calorieGoal,
+    goalPlan.nutritionGoal.proteinGoal,
+    goalPlan.nutritionGoal.fatGoal,
+    goalPlan.nutritionGoal.carbsGoal,
+  ];
+
+  if (goalValues.some((value) => !Number.isFinite(value) || value < 0)) {
+    return "Bodyweight goal values must be valid non-negative numbers.";
+  }
+
+  if (
+    goalPlan.weightGoal.startWeightKg <= 0 ||
+    goalPlan.weightGoal.targetWeightKg <= 0 ||
+    nutritionValues.some((value) => !Number.isFinite(value) || value < 0) ||
+    goalPlan.nutritionGoal.calorieGoal <= 0
+  ) {
+    return "Enter valid target values before saving the goal plan.";
+  }
+
+  return null;
+}
+
 export async function getDailyNutritionMetrics(
   userId: string,
   date: Date | string
 ): Promise<MacroBarProps | null> {
-  const daySnapshot = await getFoodLogDay(userId, date);
-
-  return daySnapshot.summary;
-}
-
-async function getActiveBodyGoalRow(userId: string): Promise<BodyGoalRow | null> {
-  const { data, error } = await supabase
-    .from("body_goals")
-    .select(
-      "id, user_id, goal_type, status, start_weight_kg, target_weight_kg, target_rate_kg_per_week, started_on, completed_on, paused_on, notes, created_at, updated_at"
-    )
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .maybeSingle<BodyGoalRow>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
-}
-
-async function getActiveNutritionProgramRow(userId: string): Promise<NutritionProgramRow | null> {
-  const { data, error } = await supabase
-    .from("nutrition_programs")
-    .select(
-      "id, user_id, goal_id, program_mode, is_active, calorie_target, protein_target_grams, fat_target_grams, carb_target_grams, maintenance_calorie_estimate, planned_daily_energy_delta, generated_summary, created_at, updated_at"
-    )
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .maybeSingle<NutritionProgramRow>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
-}
-
-async function getNutritionProgramPreferences(
-  programId: string
-): Promise<NutritionProgramPreferencesRow | null> {
-  const { data, error } = await supabase
-    .from("nutrition_program_preferences")
-    .select(
-      "id, program_id, protein_preference, carb_preference, fat_preference, meals_per_day, training_days_per_week, diet_notes, created_at, updated_at"
-    )
-    .eq("program_id", programId)
-    .maybeSingle<NutritionProgramPreferencesRow>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
-}
-
-async function getAdaptiveProgramSettings(
-  programId: string
-): Promise<AdaptiveProgramSettingsRow | null> {
-  const { data, error } = await supabase
-    .from("adaptive_program_settings")
-    .select(
-      "id, program_id, is_enabled, check_in_window_days, minimum_weight_entries, target_tolerance_percent, max_daily_calorie_adjustment, min_days_between_recommendations, last_evaluated_at, next_evaluation_on, created_at, updated_at"
-    )
-    .eq("program_id", programId)
-    .maybeSingle<AdaptiveProgramSettingsRow>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data;
-}
-
-async function getLatestNutritionProgramRecommendation(
-  userId: string,
-  programId: string
-): Promise<NutritionProgramRecommendation | null> {
-  const { data, error } = await supabase
-    .from("nutrition_program_recommendations")
-    .select(
-      "id, user_id, goal_id, program_id, status, reason_code, reason_summary, previous_calorie_target, recommended_calorie_target, previous_protein_target_grams, recommended_protein_target_grams, previous_fat_target_grams, recommended_fat_target_grams, previous_carb_target_grams, recommended_carb_target_grams, reviewed_at, created_at"
-    )
-    .eq("user_id", userId)
-    .eq("program_id", programId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<NutritionProgramRecommendationRow>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data ? mapRecommendationRow(data) : null;
+  return getLocalDailyNutritionMetrics(userId, date);
 }
 
 export async function getActiveGoalPlan(userId: string): Promise<GoalPlan | null> {
-  const [bodyGoalRow, nutritionProgramRow] = await Promise.all([
-    getActiveBodyGoalRow(userId),
-    getActiveNutritionProgramRow(userId),
-  ]);
-
-  if (!bodyGoalRow || !nutritionProgramRow) {
-    return null;
-  }
-
-  const [preferencesRow, adaptiveSettingsRow, latestRecommendation] = await Promise.all([
-    getNutritionProgramPreferences(nutritionProgramRow.id),
-    getAdaptiveProgramSettings(nutritionProgramRow.id),
-    getLatestNutritionProgramRecommendation(userId, nutritionProgramRow.id),
-  ]);
-
-  return {
-    bodyGoal: mapWeightGoalRow(bodyGoalRow),
-    nutritionGoal: mapNutritionProgramToGoal(
-      nutritionProgramRow,
-      preferencesRow,
-      adaptiveSettingsRow
-    ),
-    latestRecommendation,
-  };
+  return getLocalActiveGoalPlan(userId);
 }
 
 export async function getActiveNutritionGoal(userId: string): Promise<NutritionGoal | null> {
-  const goalPlan = await getActiveGoalPlan(userId);
-
-  return goalPlan?.nutritionGoal ?? null;
+  return getLocalActiveNutritionGoal(userId);
 }
 
 export async function getFoodLogEntriesForDate(
   userId: string,
   date: Date | string
 ): Promise<FoodLogEntry[]> {
-  const { data, error } = await supabase
-    .from("food_log_entries")
-    .select(
-      "id, user_id, entry_date, logged_at, meal_slot, name, energy_kcal, protein_grams, fat_grams, carbs_grams, alcohol_grams, created_at, updated_at"
-    )
-    .eq("user_id", userId)
-    .eq("entry_date", getDateKey(date))
-    .order("logged_at", { ascending: true })
-    .returns<FoodLogEntryRow[]>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data.map(mapFoodLogEntryRow);
+  return getLocalFoodLogDay(userId, date).entries;
 }
 
 export async function getFoodLogDay(
   userId: string,
   date: Date | string
 ): Promise<FoodLogDaySnapshot> {
-  const [nutritionGoal, entries] = await Promise.all([
-    getActiveNutritionGoal(userId),
-    getFoodLogEntriesForDate(userId, date),
-  ]);
-
-  return {
-    date: getDateKey(date),
-    summary: buildFoodLogDaySummary(entries, nutritionGoal),
-    entries,
-    nutritionGoal,
-  };
+  return getLocalFoodLogDay(userId, date);
 }
 
 export async function getFoodLogDays(
   userId: string,
   dates: Array<Date | string>
 ): Promise<FoodLogDaySnapshot[]> {
-  const dateKeys = Array.from(new Set(dates.map((date) => getDateKey(date))));
+  return getLocalFoodLogDays(userId, dates);
+}
 
-  if (dateKeys.length === 0) {
-    return [];
+export async function getSavedFoodLibrary(userId: string, searchTerm?: string): Promise<SavedFood[]> {
+  return getSavedFoods(userId, searchTerm);
+}
+
+export async function getSavedRecipeLibrary(userId: string, searchTerm?: string): Promise<SavedRecipe[]> {
+  return getSavedRecipes(userId, searchTerm);
+}
+
+export async function getSavedFood(userId: string, savedFoodId: string): Promise<SavedFood | null> {
+  return getSavedFoodById(userId, savedFoodId);
+}
+
+export async function getSavedRecipe(userId: string, recipeId: string): Promise<SavedRecipe | null> {
+  return getSavedRecipeById(userId, recipeId);
+}
+
+export async function createSavedFoodDefinition(
+  userId: string,
+  input: SavedFoodInput
+): Promise<DashboardWriteResult<SavedFood>> {
+  const trimmedName = input.name.trim();
+  const values = [input.referenceMassGrams, input.energyKcal, input.protein, input.fat, input.carbs];
+
+  if (!trimmedName) {
+    return {
+      success: false,
+      error: "Food name is required.",
+    };
   }
 
-  const [nutritionGoal, entriesResult] = await Promise.all([
-    getActiveNutritionGoal(userId),
-    supabase
-      .from("food_log_entries")
-      .select(
-        "id, user_id, entry_date, logged_at, meal_slot, name, energy_kcal, protein_grams, fat_grams, carbs_grams, alcohol_grams, created_at, updated_at"
-      )
-      .eq("user_id", userId)
-      .in("entry_date", dateKeys)
-      .order("logged_at", { ascending: true })
-      .returns<FoodLogEntryRow[]>(),
-  ]);
-
-  if (entriesResult.error) {
-    throw new Error(entriesResult.error.message);
+  if (values.some((value) => !Number.isFinite(value) || value < 0) || input.referenceMassGrams <= 0) {
+    return {
+      success: false,
+      error: "Enter valid non-negative nutrition values and a mass greater than zero.",
+    };
   }
 
-  const entriesByDate = new Map<string, FoodLogEntry[]>();
+  try {
+    return {
+      success: true,
+      data: createSavedFood(userId, {
+        ...input,
+        name: trimmedName,
+      }),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not save food.", error),
+      shouldFallback: false,
+    };
+  }
+}
 
-  dateKeys.forEach((dateKey) => {
-    entriesByDate.set(dateKey, []);
-  });
+export async function updateSavedFoodDefinition(
+  userId: string,
+  savedFoodId: string,
+  input: SavedFoodInput
+): Promise<DashboardWriteResult<SavedFood>> {
+  const trimmedName = input.name.trim();
+  const values = [input.referenceMassGrams, input.energyKcal, input.protein, input.fat, input.carbs];
 
-  entriesResult.data.map(mapFoodLogEntryRow).forEach((entry) => {
-    const existingEntries = entriesByDate.get(entry.entryDate) ?? [];
-    existingEntries.push(entry);
-    entriesByDate.set(entry.entryDate, existingEntries);
-  });
+  if (!trimmedName) {
+    return {
+      success: false,
+      error: "Food name is required.",
+    };
+  }
 
-  return dateKeys.map((dateKey) => {
-    const entries = entriesByDate.get(dateKey) ?? [];
+  if (values.some((value) => !Number.isFinite(value) || value < 0) || input.referenceMassGrams <= 0) {
+    return {
+      success: false,
+      error: "Enter valid non-negative nutrition values and a mass greater than zero.",
+    };
+  }
+
+  try {
+    const savedFood = updateSavedFood(userId, savedFoodId, {
+      ...input,
+      name: trimmedName,
+    });
 
     return {
-      date: dateKey,
-      summary: buildFoodLogDaySummary(entries, nutritionGoal),
-      entries,
-      nutritionGoal,
+      success: Boolean(savedFood),
+      data: savedFood ?? undefined,
+      error: savedFood ? undefined : "Could not update food.",
+      shouldFallback: false,
     };
-  });
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not update food.", error),
+      shouldFallback: false,
+    };
+  }
+}
+
+export async function deleteSavedFoodDefinition(
+  userId: string,
+  savedFoodId: string
+): Promise<DashboardWriteResult<null>> {
+  try {
+    const deleted = deleteSavedFood(userId, savedFoodId);
+
+    return {
+      success: deleted,
+      error: deleted ? undefined : "Could not delete food.",
+      shouldFallback: false,
+      data: null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not delete food.", error),
+      shouldFallback: false,
+    };
+  }
+}
+
+export async function createSavedRecipeDefinition(
+  userId: string,
+  input: SavedRecipeInput
+): Promise<DashboardWriteResult<SavedRecipe>> {
+  const trimmedName = input.name.trim();
+
+  if (!trimmedName) {
+    return {
+      success: false,
+      error: "Recipe name is required.",
+    };
+  }
+
+  if (input.ingredients.length === 0) {
+    return {
+      success: false,
+      error: "Add at least one saved food to the recipe.",
+    };
+  }
+
+  if (input.ingredients.some((ingredient) => !Number.isFinite(ingredient.massGrams) || ingredient.massGrams <= 0)) {
+    return {
+      success: false,
+      error: "Each recipe ingredient needs a mass greater than zero.",
+    };
+  }
+
+  try {
+    const recipe = createSavedRecipe(userId, {
+      name: trimmedName,
+      ingredients: input.ingredients,
+    });
+
+    return {
+      success: Boolean(recipe),
+      data: recipe ?? undefined,
+      error: recipe ? undefined : "Could not save recipe.",
+      shouldFallback: false,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not save recipe.", error),
+      shouldFallback: false,
+    };
+  }
+}
+
+export async function updateSavedRecipeDefinition(
+  userId: string,
+  recipeId: string,
+  input: SavedRecipeInput
+): Promise<DashboardWriteResult<SavedRecipe>> {
+  const trimmedName = input.name.trim();
+
+  if (!trimmedName) {
+    return {
+      success: false,
+      error: "Recipe name is required.",
+    };
+  }
+
+  if (input.ingredients.length === 0) {
+    return {
+      success: false,
+      error: "Add at least one saved food to the recipe.",
+    };
+  }
+
+  if (input.ingredients.some((ingredient) => !Number.isFinite(ingredient.massGrams) || ingredient.massGrams <= 0)) {
+    return {
+      success: false,
+      error: "Each recipe ingredient needs a mass greater than zero.",
+    };
+  }
+
+  try {
+    const recipe = updateSavedRecipe(userId, recipeId, {
+      name: trimmedName,
+      ingredients: input.ingredients,
+    });
+
+    return {
+      success: Boolean(recipe),
+      data: recipe ?? undefined,
+      error: recipe ? undefined : "Could not update recipe.",
+      shouldFallback: false,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not update recipe.", error),
+      shouldFallback: false,
+    };
+  }
+}
+
+export async function deleteSavedRecipeDefinition(
+  userId: string,
+  recipeId: string
+): Promise<DashboardWriteResult<null>> {
+  try {
+    const deleted = deleteSavedRecipe(userId, recipeId);
+
+    return {
+      success: deleted,
+      error: deleted ? undefined : "Could not delete recipe.",
+      shouldFallback: false,
+      data: null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not delete recipe.", error),
+      shouldFallback: false,
+    };
+  }
+}
+
+export async function buildSavedFoodLogEntry(
+  userId: string,
+  sourceType: Extract<FoodLogSourceType, "saved_food" | "recipe">,
+  sourceId: string,
+  massGrams: number
+): Promise<DashboardWriteResult<Required<Pick<FoodLogInput, "name" | "energyKcal" | "protein" | "fat" | "carbs" | "sourceType" | "sourceId" | "massGrams">>>> {
+  if (!Number.isFinite(massGrams) || massGrams <= 0) {
+    return {
+      success: false,
+      error: "Mass must be greater than zero.",
+    };
+  }
+
+  try {
+    if (sourceType === "saved_food") {
+      const savedFood = getSavedFoodById(userId, sourceId);
+
+      if (!savedFood) {
+        return {
+          success: false,
+          error: "Could not find that saved food.",
+        };
+      }
+
+      const derivedNutrition = calculateSavedFoodNutrition(savedFood, massGrams);
+
+      return {
+        success: true,
+        data: {
+          name: savedFood.name,
+          energyKcal: derivedNutrition.energyKcal,
+          protein: derivedNutrition.protein,
+          fat: derivedNutrition.fat,
+          carbs: derivedNutrition.carbs,
+          sourceType,
+          sourceId,
+          massGrams,
+        },
+      };
+    }
+
+    const savedRecipe = getSavedRecipeById(userId, sourceId);
+
+    if (!savedRecipe) {
+      return {
+        success: false,
+        error: "Could not find that recipe.",
+      };
+    }
+
+    const derivedNutrition = calculateSavedRecipeNutrition(savedRecipe, massGrams);
+
+    return {
+      success: true,
+      data: {
+        name: savedRecipe.name,
+        energyKcal: derivedNutrition.energyKcal,
+        protein: derivedNutrition.protein,
+        fat: derivedNutrition.fat,
+        carbs: derivedNutrition.carbs,
+        sourceType,
+        sourceId,
+        massGrams,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: buildUnexpectedErrorMessage("Could not load saved nutrition item.", error),
+      shouldFallback: false,
+    };
+  }
 }
 
 export async function getDailyExerciseMetrics(
   userId: string,
   date: Date | string
 ): Promise<Omit<DailyExerciseMetrics, "date"> | null> {
-  const { data, error } = await supabase
-    .from("daily_exercise_metrics")
-    .select(
-      "id, user_id, metric_date, volume_kg, duration_mins, workout_type, created_at, updated_at"
-    )
-    .eq("user_id", userId)
-    .eq("metric_date", getDateKey(date))
-    .maybeSingle<DailyExerciseMetricsRow>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data ? mapDailyExerciseMetricsRow(data) : null;
+  return getLocalDailyExerciseMetrics(userId, date);
 }
 
 export async function getLifetimeTrainingMetrics(userId: string): Promise<LifetimeTrainingMetrics> {
-  const { data, error } = await supabase
-    .from("daily_exercise_metrics")
-    .select("volume_kg, duration_mins")
-    .eq("user_id", userId)
-    .returns<Array<Pick<DailyExerciseMetricsRow, "volume_kg" | "duration_mins">>>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data.reduce<LifetimeTrainingMetrics>(
-    (totals, row) => {
-      totals.totalVolume += Number(row.volume_kg ?? 0);
-      totals.totalDurationMins += Number(row.duration_mins ?? 0);
-      totals.totalWorkouts += Number(row.volume_kg ?? 0) > 0 || Number(row.duration_mins ?? 0) > 0 ? 1 : 0;
-
-      return totals;
-    },
-    {
-      totalSets: null,
-      totalVolume: 0,
-      totalDurationMins: 0,
-      totalWorkouts: 0,
-      totalReps: null,
-    }
-  );
+  return getLocalLifetimeTrainingMetrics(userId);
 }
 
 export async function getWeightEntries(userId: string): Promise<WeightEntry[]> {
-  const { data, error } = await supabase
-    .from("body_weight_entries")
-    .select("id, user_id, entry_date, weight_kg, created_at, updated_at")
-    .eq("user_id", userId)
-    .order("entry_date", { ascending: true })
-    .returns<BodyWeightEntryRow[]>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data.map(mapBodyWeightEntryRow);
+  return getLocalWeightEntries(userId);
 }
 
 export async function getActiveWeightGoal(userId: string): Promise<WeightGoal | null> {
-  const goalPlan = await getActiveGoalPlan(userId);
-
-  return goalPlan?.bodyGoal ?? null;
+  return getLocalActiveGoalPlan(userId)?.bodyGoal ?? null;
 }
 
 export async function getWorkoutDashboardSnapshot(
@@ -721,75 +574,27 @@ export async function appendFoodLogEntry(
   date: Date | string,
   entry: FoodLogInput
 ): Promise<DashboardWriteResult<MacroBarProps>> {
-  const values = [
-    entry.energyKcal ?? 0,
-    entry.protein,
-    entry.fat,
-    entry.carbs,
-    entry.alcoholGrams ?? 0,
-  ];
-  const hasNegativeValue = values.some((value) => value < 0);
-  const hasAnyPositiveValue = values.some((value) => value > 0);
+  const validationError = validateFoodLogInput(entry);
 
-  if (hasNegativeValue) {
+  if (validationError) {
     return {
       success: false,
-      error: "Food values cannot be negative.",
-    };
-  }
-
-  if (!hasAnyPositiveValue) {
-    return {
-      success: false,
-      error: "Enter at least one food value greater than zero.",
+      error: validationError,
     };
   }
 
   try {
-    const { error } = await supabase
-      .from("food_log_entries")
-      .insert(
-        {
-          user_id: userId,
-          entry_date: getDateKey(date),
-          logged_at: entry.loggedAt ?? new Date().toISOString(),
-          meal_slot: entry.mealSlot ?? "custom",
-          name: entry.name?.trim() || null,
-          energy_kcal: entry.energyKcal ?? null,
-          protein_grams: entry.protein,
-          fat_grams: entry.fat,
-          carbs_grams: entry.carbs,
-          alcohol_grams: entry.alcoholGrams ?? 0,
-        }
-      );
-
-    if (error) {
-      return {
-        success: false,
-        error: error.message,
-        shouldFallback: true,
-      };
-    }
-
-    const updatedMetrics = await getDailyNutritionMetrics(userId, date);
+    const snapshot = insertLocalFoodLogEntry(userId, date, entry);
 
     return {
       success: true,
-      data: updatedMetrics ?? {
-        protein: 0,
-        proteinGoal: 0,
-        fat: 0,
-        fatGoal: 0,
-        carbs: 0,
-        carbsGoal: 0,
-        calorieGoal: 0,
-      },
+      data: snapshot.summary,
     };
   } catch (error) {
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not save food entry.", error),
-      shouldFallback: true,
+      shouldFallback: false,
     };
   }
 }
@@ -800,58 +605,25 @@ export async function updateFoodLogEntry(
   date: Date | string,
   entry: FoodLogInput
 ): Promise<DashboardWriteResult<FoodLogDaySnapshot>> {
-  const values = [entry.energyKcal ?? 0, entry.protein, entry.fat, entry.carbs, entry.alcoholGrams ?? 0];
-  const hasNegativeValue = values.some((value) => !Number.isFinite(value) || value < 0);
-  const hasAnyPositiveValue = values.some((value) => value > 0);
+  const validationError = validateFoodLogInput(entry);
 
-  if (hasNegativeValue) {
+  if (validationError) {
     return {
       success: false,
-      error: "Food values cannot be negative.",
-    };
-  }
-
-  if (!hasAnyPositiveValue) {
-    return {
-      success: false,
-      error: "Enter at least one food value greater than zero.",
+      error: validationError,
     };
   }
 
   try {
-    const { error } = await supabase
-      .from("food_log_entries")
-      .update({
-        entry_date: getDateKey(date),
-        logged_at: entry.loggedAt ?? new Date().toISOString(),
-        meal_slot: entry.mealSlot ?? "custom",
-        name: entry.name?.trim() || null,
-        energy_kcal: entry.energyKcal ?? null,
-        protein_grams: entry.protein,
-        fat_grams: entry.fat,
-        carbs_grams: entry.carbs,
-        alcohol_grams: entry.alcoholGrams ?? 0,
-      })
-      .eq("id", entryId)
-      .eq("user_id", userId);
-
-    if (error) {
-      return {
-        success: false,
-        error: error.message,
-        shouldFallback: true,
-      };
-    }
-
     return {
       success: true,
-      data: await getFoodLogDay(userId, date),
+      data: updateLocalFoodLogEntry(userId, entryId, date, entry),
     };
   } catch (error) {
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not update food entry.", error),
-      shouldFallback: true,
+      shouldFallback: false,
     };
   }
 }
@@ -862,29 +634,15 @@ export async function deleteFoodLogEntry(
   date: Date | string
 ): Promise<DashboardWriteResult<FoodLogDaySnapshot>> {
   try {
-    const { error } = await supabase
-      .from("food_log_entries")
-      .delete()
-      .eq("id", entryId)
-      .eq("user_id", userId);
-
-    if (error) {
-      return {
-        success: false,
-        error: error.message,
-        shouldFallback: true,
-      };
-    }
-
     return {
       success: true,
-      data: await getFoodLogDay(userId, date),
+      data: deleteLocalFoodLogEntry(userId, entryId, date),
     };
   } catch (error) {
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not delete food entry.", error),
-      shouldFallback: true,
+      shouldFallback: false,
     };
   }
 }
@@ -902,38 +660,15 @@ export async function upsertWeightEntry(
   }
 
   try {
-    const { data, error } = await supabase
-      .from("body_weight_entries")
-      .upsert(
-        {
-          user_id: userId,
-          entry_date: getDateKey(date),
-          weight_kg: weightKg,
-        },
-        {
-          onConflict: "user_id,entry_date",
-        }
-      )
-      .select("id, user_id, entry_date, weight_kg, created_at, updated_at")
-      .single<BodyWeightEntryRow>();
-
-    if (error) {
-      return {
-        success: false,
-        error: error.message,
-        shouldFallback: true,
-      };
-    }
-
     return {
       success: true,
-      data: mapBodyWeightEntryRow(data),
+      data: upsertLocalWeightEntry(userId, date, weightKg),
     };
   } catch (error) {
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not save weight entry.", error),
-      shouldFallback: true,
+      shouldFallback: false,
     };
   }
 }
@@ -943,39 +678,35 @@ export async function upsertActiveNutritionGoal(
   goal: NutritionGoalInput
 ): Promise<DashboardWriteResult<NutritionGoal>> {
   try {
-    const existingPlan = await getActiveGoalPlan(userId);
-    const latestWeightEntry = existingPlan ? null : (await getWeightEntries(userId)).at(-1) ?? null;
+    const existingPlan = getLocalActiveGoalPlan(userId);
+    const latestWeightEntry = existingPlan ? null : getLocalWeightEntries(userId).at(-1) ?? null;
 
-    const weightGoal = existingPlan
-      ? {
-          goalType: existingPlan.bodyGoal.goalType,
-          startWeightKg: existingPlan.bodyGoal.startWeightKg,
-          targetWeightKg: existingPlan.bodyGoal.targetWeightKg,
-          targetRateKgPerWeek: existingPlan.bodyGoal.targetRateKgPerWeek,
-        }
-      : {
-          goalType: "maintain" as const,
-          startWeightKg: latestWeightEntry?.weightKg ?? 74,
-          targetWeightKg: latestWeightEntry?.weightKg ?? 74,
-          targetRateKgPerWeek: 0,
-        };
-
-    const result = await upsertActiveGoalPlan(userId, {
-      weightGoal,
+    const result = upsertLocalGoalPlan(userId, {
+      weightGoal: existingPlan
+        ? {
+            goalType: existingPlan.bodyGoal.goalType,
+            startWeightKg: existingPlan.bodyGoal.startWeightKg,
+            targetWeightKg: existingPlan.bodyGoal.targetWeightKg,
+            targetRateKgPerWeek: existingPlan.bodyGoal.targetRateKgPerWeek,
+          }
+        : {
+            goalType: "maintain",
+            startWeightKg: latestWeightEntry?.weightKg ?? 74,
+            targetWeightKg: latestWeightEntry?.weightKg ?? 74,
+            targetRateKgPerWeek: 0,
+          },
       nutritionGoal: goal,
     });
 
     return {
-      success: result.success,
-      error: result.error,
-      shouldFallback: result.shouldFallback,
-      data: result.data?.nutritionGoal,
+      success: true,
+      data: result?.nutritionGoal,
     };
   } catch (error) {
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not save nutrition goals.", error),
-      shouldFallback: true,
+      shouldFallback: false,
     };
   }
 }
@@ -984,18 +715,18 @@ export async function upsertActiveWeightGoal(
   userId: string,
   goal: WeightGoalInput
 ): Promise<DashboardWriteResult<WeightGoal>> {
+  const existingPlan = getLocalActiveGoalPlan(userId);
+
+  if (!existingPlan) {
+    return {
+      success: false,
+      error: "Create a nutrition program before saving a bodyweight goal.",
+      shouldFallback: false,
+    };
+  }
+
   try {
-    const existingPlan = await getActiveGoalPlan(userId);
-
-    if (!existingPlan) {
-      return {
-        success: false,
-        error: "Create a nutrition program before saving a bodyweight goal.",
-        shouldFallback: true,
-      };
-    }
-
-    const result = await upsertActiveGoalPlan(userId, {
+    const result = upsertLocalGoalPlan(userId, {
       weightGoal: goal,
       nutritionGoal: {
         programMode: existingPlan.nutritionGoal.programMode,
@@ -1013,16 +744,14 @@ export async function upsertActiveWeightGoal(
     });
 
     return {
-      success: result.success,
-      error: result.error,
-      shouldFallback: result.shouldFallback,
-      data: result.data?.bodyGoal,
+      success: true,
+      data: result?.bodyGoal,
     };
   } catch (error) {
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not save weight goal.", error),
-      shouldFallback: true,
+      shouldFallback: false,
     };
   }
 }
@@ -1031,205 +760,25 @@ export async function upsertActiveGoalPlan(
   userId: string,
   goalPlan: GoalPlanInput
 ): Promise<DashboardWriteResult<GoalPlan>> {
-  const goalValues = [
-    goalPlan.weightGoal.startWeightKg,
-    goalPlan.weightGoal.targetWeightKg,
-    goalPlan.weightGoal.targetRateKgPerWeek,
-  ];
-  const nutritionValues = [
-    goalPlan.nutritionGoal.calorieGoal,
-    goalPlan.nutritionGoal.proteinGoal,
-    goalPlan.nutritionGoal.fatGoal,
-    goalPlan.nutritionGoal.carbsGoal,
-  ];
+  const validationError = validateGoalPlan(goalPlan);
 
-  if (goalValues.some((value) => !Number.isFinite(value) || value < 0)) {
+  if (validationError) {
     return {
       success: false,
-      error: "Bodyweight goal values must be valid non-negative numbers.",
-    };
-  }
-
-  if (
-    goalPlan.weightGoal.startWeightKg <= 0 ||
-    goalPlan.weightGoal.targetWeightKg <= 0 ||
-    nutritionValues.some((value) => !Number.isFinite(value) || value < 0) ||
-    goalPlan.nutritionGoal.calorieGoal <= 0
-  ) {
-    return {
-      success: false,
-      error: "Enter valid target values before saving the goal plan.",
+      error: validationError,
     };
   }
 
   try {
-    const existingBodyGoal = await getActiveBodyGoalRow(userId);
-    const existingNutritionProgram = await getActiveNutritionProgramRow(userId);
-
-    let bodyGoalId = existingBodyGoal?.id;
-
-    const goalPayload = {
-      user_id: userId,
-      goal_type: goalPlan.weightGoal.goalType,
-      status: "active" as const,
-      start_weight_kg: goalPlan.weightGoal.startWeightKg,
-      target_weight_kg: goalPlan.weightGoal.targetWeightKg,
-      target_rate_unit: "kg_per_week",
-      target_rate_value:
-        goalPlan.weightGoal.goalType === "maintain"
-          ? 0
-          : Math.abs(goalPlan.weightGoal.targetRateKgPerWeek),
-      target_rate_kg_per_week: normalizeSignedRateKgPerWeek(
-        goalPlan.weightGoal.goalType,
-        goalPlan.weightGoal.targetRateKgPerWeek
-      ),
-      started_on: existingBodyGoal?.started_on ?? getDateKey(new Date()),
-      completed_on: null,
-      paused_on: null,
-      notes: null,
-    };
-
-    if (existingBodyGoal) {
-      const { data, error } = await supabase
-        .from("body_goals")
-        .update(goalPayload)
-        .eq("id", existingBodyGoal.id)
-        .select(
-          "id, user_id, goal_type, status, start_weight_kg, target_weight_kg, target_rate_kg_per_week, started_on, completed_on, paused_on, notes, created_at, updated_at"
-        )
-        .single<BodyGoalRow>();
-
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-          shouldFallback: true,
-        };
-      }
-
-      bodyGoalId = data.id;
-    } else {
-      const { data, error } = await supabase
-        .from("body_goals")
-        .insert(goalPayload)
-        .select(
-          "id, user_id, goal_type, status, start_weight_kg, target_weight_kg, target_rate_kg_per_week, started_on, completed_on, paused_on, notes, created_at, updated_at"
-        )
-        .single<BodyGoalRow>();
-
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-          shouldFallback: true,
-        };
-      }
-
-      bodyGoalId = data.id;
-    }
-
-    const nutritionPayload = {
-      user_id: userId,
-      goal_id: bodyGoalId,
-      program_mode: goalPlan.nutritionGoal.programMode,
-      is_active: true,
-      calorie_target: goalPlan.nutritionGoal.calorieGoal,
-      protein_target_grams: goalPlan.nutritionGoal.proteinGoal,
-      fat_target_grams: goalPlan.nutritionGoal.fatGoal,
-      carb_target_grams: goalPlan.nutritionGoal.carbsGoal,
-      maintenance_calorie_estimate: goalPlan.nutritionGoal.maintenanceCalories ?? null,
-      planned_daily_energy_delta: goalPlan.nutritionGoal.plannedDailyEnergyDelta ?? null,
-      generated_summary: null,
-    };
-
-    let nutritionProgramId = existingNutritionProgram?.id;
-
-    if (existingNutritionProgram) {
-      const { data, error } = await supabase
-        .from("nutrition_programs")
-        .update(nutritionPayload)
-        .eq("id", existingNutritionProgram.id)
-        .select(
-          "id, user_id, goal_id, program_mode, is_active, calorie_target, protein_target_grams, fat_target_grams, carb_target_grams, maintenance_calorie_estimate, planned_daily_energy_delta, generated_summary, created_at, updated_at"
-        )
-        .single<NutritionProgramRow>();
-
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-          shouldFallback: true,
-        };
-      }
-
-      nutritionProgramId = data.id;
-    } else {
-      const { data, error } = await supabase
-        .from("nutrition_programs")
-        .insert(nutritionPayload)
-        .select(
-          "id, user_id, goal_id, program_mode, is_active, calorie_target, protein_target_grams, fat_target_grams, carb_target_grams, maintenance_calorie_estimate, planned_daily_energy_delta, generated_summary, created_at, updated_at"
-        )
-        .single<NutritionProgramRow>();
-
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-          shouldFallback: true,
-        };
-      }
-
-      nutritionProgramId = data.id;
-    }
-
-    const preferencesPayload = {
-      program_id: nutritionProgramId,
-      protein_preference: goalPlan.nutritionGoal.proteinPreference,
-      carb_preference: goalPlan.nutritionGoal.carbPreference,
-      fat_preference: goalPlan.nutritionGoal.fatPreference,
-    };
-
-    const { error: preferencesError } = await supabase
-      .from("nutrition_program_preferences")
-      .upsert(preferencesPayload, { onConflict: "program_id" });
-
-    if (preferencesError) {
-      return {
-        success: false,
-        error: preferencesError.message,
-        shouldFallback: true,
-      };
-    }
-
-    const adaptiveSettingsPayload = {
-      program_id: nutritionProgramId,
-      is_enabled: goalPlan.nutritionGoal.adaptiveEnabled,
-    };
-
-    const { error: adaptiveSettingsError } = await supabase
-      .from("adaptive_program_settings")
-      .upsert(adaptiveSettingsPayload, { onConflict: "program_id" });
-
-    if (adaptiveSettingsError) {
-      return {
-        success: false,
-        error: adaptiveSettingsError.message,
-        shouldFallback: true,
-      };
-    }
-
-    const updatedPlan = await getActiveGoalPlan(userId);
-
     return {
       success: true,
-      data: updatedPlan ?? undefined,
+      data: upsertLocalGoalPlan(userId, goalPlan) ?? undefined,
     };
   } catch (error) {
     return {
       success: false,
       error: buildUnexpectedErrorMessage("Could not save goal plan.", error),
-      shouldFallback: true,
+      shouldFallback: false,
     };
   }
 }

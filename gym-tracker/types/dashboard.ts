@@ -7,6 +7,8 @@ export type FoodLogMealSlot =
   | "snack"
   | "custom";
 
+export type FoodLogSourceType = "manual" | "saved_food" | "recipe";
+
 export type DatedMacroMetrics = MacroBarProps & {
   date: string;
 };
@@ -111,6 +113,45 @@ export type FoodLogEntry = {
   fat: number;
   carbs: number;
   alcoholGrams: number;
+  sourceType?: FoodLogSourceType;
+  sourceId?: string | null;
+  massGrams?: number | null;
+};
+
+export type SavedFood = {
+  id: string;
+  name: string;
+  referenceMassGrams: number;
+  energyKcal: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SavedRecipeIngredient = {
+  id: string;
+  savedFoodId: string;
+  savedFoodName: string;
+  massGrams: number;
+  energyKcal: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+};
+
+export type SavedRecipe = {
+  id: string;
+  name: string;
+  totalMassGrams: number;
+  energyKcal: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  ingredients: SavedRecipeIngredient[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type FoodLogDaySummary = MacroBarProps & {

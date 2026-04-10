@@ -866,6 +866,11 @@ export default function PerformanceScreen() {
     setIsTargetsModalVisible(false);
   };
 
+  const dismissTargetsKeypad = () => {
+    Keyboard.dismiss();
+    setActiveTargetsField(null);
+  };
+
   const closeGoalModal = () => {
     if (isSavingGoal) {
       return;
@@ -1243,9 +1248,9 @@ export default function PerformanceScreen() {
           transparent
           visible={isTargetsModalVisible}
           onRequestClose={closeTargetsModal}>
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <TouchableWithoutFeedback onPress={dismissTargetsKeypad}>
             <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback>
+              <TouchableWithoutFeedback onPress={dismissTargetsKeypad}>
                 <View style={styles.modalCard}>
                   <Text style={styles.modalTitle}>Edit Targets</Text>
 

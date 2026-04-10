@@ -244,6 +244,10 @@ export default function ActiveScreen() {
         </ScrollView>
 
         {activeSetField ? (
+          <Pressable style={styles.keypadDismissOverlay} onPress={() => setActiveSetField(null)} />
+        ) : null}
+
+        {activeSetField ? (
           <View style={styles.keypadContainer}>
             <CustomKeypad
               mode={activeSetField.field === "weight" ? "decimal" : "integer"}
@@ -523,6 +527,9 @@ const styles = StyleSheet.create({
   },
   keypadContainer: {
     marginTop: 8,
+  },
+  keypadDismissOverlay: {
+    ...StyleSheet.absoluteFillObject,
   },
   finishButtonContainer: {
     flex: 1,
