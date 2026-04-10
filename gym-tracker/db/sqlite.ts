@@ -169,6 +169,62 @@ const EMPTY_ACTIVE_WORKOUT: ActiveWorkout = {
 
 export const db = SQLite.openDatabaseSync("gym.db");
 
+function hasColumn(tableName: string, columnName: string) {
+  const columns = db.getAllSync<{ name: string }>(`PRAGMA table_info(${tableName})`);
+
+  return columns.some((column) => column.name === columnName);
+}
+
+function ensureColumn(tableName: string, columnName: string, definition: string) {
+  if (hasColumn(tableName, columnName)) {
+    return;
+  }
+
+  db.execSync(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition};`);
+}
+
+function runMigrations() {
+  ensureColumn("user_exercises", "normalized_name", "TEXT");
+  ensureColumn("routines", "normalized_name", "TEXT");
+  ensureColumn("routine_exercises", "created_at", "TEXT");
+  ensureColumn("routine_exercises", "updated_at", "TEXT");
+  ensureColumn("routine_exercise_sets", "id", "TEXT");
+  ensureColumn("routine_exercise_sets", "created_at", "TEXT");
+  ensureColumn("routine_exercise_sets", "updated_at", "TEXT");
+  ensureColumn("workout_sessions", "selected_exercise_id", "TEXT");
+  ensureColumn("workout_session_exercises", "created_at", "TEXT");
+  ensureColumn("workout_session_exercises", "updated_at", "TEXT");
+  ensureColumn("workout_session_sets", "created_at", "TEXT");
+  ensureColumn("workout_session_sets", "updated_at", "TEXT");
+
+  db.execSync(`
+    UPDATE user_exercises
+    SET normalized_name = lower(trim(name))
+    WHERE normalized_name IS NULL;
+
+    UPDATE routines
+    SET normalized_name = lower(trim(name))
+    WHERE normalized_name IS NULL;
+
+    UPDATE routine_exercises
+    SET created_at = COALESCE(created_at, datetime('now')),
+        updated_at = COALESCE(updated_at, created_at, datetime('now'));
+
+    UPDATE routine_exercise_sets
+    SET id = COALESCE(id, routine_exercise_id || '-set-' || (sort_order + 1)),
+        created_at = COALESCE(created_at, datetime('now')),
+        updated_at = COALESCE(updated_at, created_at, datetime('now'));
+
+    UPDATE workout_session_exercises
+    SET created_at = COALESCE(created_at, datetime('now')),
+        updated_at = COALESCE(updated_at, created_at, datetime('now'));
+
+    UPDATE workout_session_sets
+    SET created_at = COALESCE(created_at, datetime('now')),
+        updated_at = COALESCE(updated_at, created_at, datetime('now'));
+  `);
+}
+
 export function initDB() {
   db.execSync("PRAGMA foreign_keys = ON;");
   db.execSync(`
@@ -336,6 +392,8 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_sync_outbox_status ON sync_outbox(status);
     CREATE INDEX IF NOT EXISTS idx_sync_outbox_entity ON sync_outbox(entity_type, entity_id);
   `);
+
+  runMigrations();
 }
 
 function getCurrentWorkoutSessionStateKey(userId: string) {
@@ -445,6 +503,201 @@ function isUserExercise(userId: string, exerciseId: string) {
   );
 
   return Boolean(row);
+}
+
+function replaceUserExerciseMuscles(exercise: Exercise) {
+  db.runSync("DELETE FROM user_exercise_muscles WHERE user_exercise_id = ?", [exercise.id]);
+
+  (exercise.primaryMuscles ?? []).forEach((muscle, index) => {
+    db.runSync(
+      `
+        INSERT INTO user_exercise_muscles (
+          id,
+          user_exercise_id,
+          muscle_name,
+          role,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'primary', ?, ?)
+      `,
+      [
+        `${exercise.id}-primary-${index + 1}`,
+        exercise.id,
+        muscle,
+        exercise.createdAt,
+        exercise.updatedAt,
+      ]
+    );
+  });
+
+  (exercise.secondaryMuscles ?? []).forEach((muscle, index) => {
+    db.runSync(
+      `
+        INSERT INTO user_exercise_muscles (
+          id,
+          user_exercise_id,
+          muscle_name,
+          role,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'secondary', ?, ?)
+      `,
+      [
+        `${exercise.id}-secondary-${index + 1}`,
+        exercise.id,
+        muscle,
+        exercise.createdAt,
+        exercise.updatedAt,
+      ]
+    );
+  });
+}
+
+function reindexRoutineExercises(routineId: string, updatedAt: string) {
+  const routineExercises = db.getAllSync<{ id: string }>(
+    `
+      SELECT id
+      FROM routine_exercises
+      WHERE routine_id = ?
+      ORDER BY sort_order ASC, id ASC
+    `,
+    [routineId]
+  );
+
+  routineExercises.forEach((routineExercise, index) => {
+    db.runSync(
+      `
+        UPDATE routine_exercises
+        SET sort_order = ?, updated_at = ?
+        WHERE id = ?
+      `,
+      [index, updatedAt, routineExercise.id]
+    );
+  });
+}
+
+function replaceRoutineDefinition(
+  routineId: string,
+  selectedExercises: Array<{ exercise: Exercise; exerciseSource: "seeded" | "custom" }>,
+  timestamp: string
+) {
+  db.runSync("DELETE FROM routine_exercises WHERE routine_id = ?", [routineId]);
+
+  selectedExercises.forEach(({ exercise, exerciseSource }, exerciseIndex) => {
+    const routineExerciseId = `${routineId}-exercise-${exerciseIndex + 1}`;
+
+    db.runSync(
+      `
+        INSERT INTO routine_exercises (
+          id,
+          routine_id,
+          exercise_source,
+          exercise_id,
+          sort_order,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        routineExerciseId,
+        routineId,
+        exerciseSource,
+        exercise.id,
+        exerciseIndex,
+        timestamp,
+        timestamp,
+      ]
+    );
+
+    db.runSync(
+      `
+        INSERT INTO routine_exercise_sets (
+          id,
+          routine_exercise_id,
+          sort_order,
+          target_reps,
+          target_weight,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        `${routineExerciseId}-set-1`,
+        routineExerciseId,
+        0,
+        null,
+        null,
+        timestamp,
+        timestamp,
+      ]
+    );
+  });
+}
+
+function removeCustomExerciseFromRoutines(userId: string, exerciseId: string, timestamp: string) {
+  const affectedRoutines = db.getAllSync<{ id: string }>(
+    `
+      SELECT DISTINCT r.id
+      FROM routines r
+      JOIN routine_exercises re ON re.routine_id = r.id
+      WHERE r.user_id = ?
+        AND r.deleted_at IS NULL
+        AND re.exercise_source = 'custom'
+        AND re.exercise_id = ?
+    `,
+    [userId, exerciseId]
+  );
+
+  affectedRoutines.forEach((routine) => {
+    db.runSync(
+      `
+        DELETE FROM routine_exercises
+        WHERE routine_id = ?
+          AND exercise_source = 'custom'
+          AND exercise_id = ?
+      `,
+      [routine.id, exerciseId]
+    );
+
+    const remainingExerciseCount = db.getFirstSync<{ count: number }>(
+      `
+        SELECT COUNT(*) as count
+        FROM routine_exercises
+        WHERE routine_id = ?
+      `,
+      [routine.id]
+    )?.count ?? 0;
+
+    if (remainingExerciseCount === 0) {
+      db.runSync(
+        `
+          UPDATE routines
+          SET updated_at = ?, deleted_at = ?
+          WHERE id = ?
+        `,
+        [timestamp, timestamp, routine.id]
+      );
+      enqueueSyncOperation("routine", routine.id, "delete", {
+        userId,
+        routineId: routine.id,
+      });
+      return;
+    }
+
+    reindexRoutineExercises(routine.id, timestamp);
+    db.runSync(
+      `
+        UPDATE routines
+        SET updated_at = ?
+        WHERE id = ?
+      `,
+      [timestamp, routine.id]
+    );
+    enqueueSyncOperation("routine", routine.id, "update", {
+      userId,
+      routineId: routine.id,
+    });
+  });
 }
 
 export function getPersistedCurrentWorkout(userId: string): {
@@ -1573,53 +1826,87 @@ export function insertUserExercise(userId: string, exercise: Exercise) {
       ]
     );
 
-    (exercise.primaryMuscles ?? []).forEach((muscle, index) => {
-      db.runSync(
-        `
-          INSERT INTO user_exercise_muscles (
-            id,
-            user_exercise_id,
-            muscle_name,
-            role,
-            created_at,
-            updated_at
-          ) VALUES (?, ?, ?, 'primary', ?, ?)
-        `,
-        [
-          `${exercise.id}-primary-${index + 1}`,
-          exercise.id,
-          muscle,
-          exercise.createdAt,
-          exercise.updatedAt,
-        ]
-      );
-    });
-
-    (exercise.secondaryMuscles ?? []).forEach((muscle, index) => {
-      db.runSync(
-        `
-          INSERT INTO user_exercise_muscles (
-            id,
-            user_exercise_id,
-            muscle_name,
-            role,
-            created_at,
-            updated_at
-          ) VALUES (?, ?, ?, 'secondary', ?, ?)
-        `,
-        [
-          `${exercise.id}-secondary-${index + 1}`,
-          exercise.id,
-          muscle,
-          exercise.createdAt,
-          exercise.updatedAt,
-        ]
-      );
-    });
+    replaceUserExerciseMuscles(exercise);
 
     enqueueSyncOperation("user_exercise", exercise.id, "create", {
       userId,
       name: exercise.name,
+    });
+
+    db.execSync("COMMIT;");
+  } catch (error) {
+    db.execSync("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function updateUserExercise(userId: string, exercise: Exercise) {
+  db.execSync("BEGIN TRANSACTION;");
+
+  try {
+    db.runSync(
+      `
+        UPDATE user_exercises
+        SET
+          name = ?,
+          normalized_name = ?,
+          category = ?,
+          muscle_group = ?,
+          is_unilateral = ?,
+          is_time_based = ?,
+          updated_at = ?,
+          deleted_at = NULL
+        WHERE id = ?
+          AND user_id = ?
+      `,
+      [
+        exercise.name,
+        exercise.name.trim().toLowerCase(),
+        exercise.category ?? null,
+        exercise.muscleGroup,
+        exercise.isUnilateral ? 1 : 0,
+        exercise.isTimeBased ? 1 : 0,
+        exercise.updatedAt,
+        exercise.id,
+        userId,
+      ]
+    );
+
+    replaceUserExerciseMuscles(exercise);
+    enqueueSyncOperation("user_exercise", exercise.id, "update", {
+      userId,
+      name: exercise.name,
+    });
+
+    db.execSync("COMMIT;");
+  } catch (error) {
+    db.execSync("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function deleteUserExercise(userId: string, exerciseId: string) {
+  const timestamp = new Date().toISOString();
+
+  db.execSync("BEGIN TRANSACTION;");
+
+  try {
+    db.runSync(
+      `
+        UPDATE user_exercises
+        SET updated_at = ?, deleted_at = ?
+        WHERE id = ?
+          AND user_id = ?
+      `,
+      [timestamp, timestamp, exerciseId, userId]
+    );
+
+    db.runSync("DELETE FROM user_exercise_muscles WHERE user_exercise_id = ?", [exerciseId]);
+    removeCustomExerciseFromRoutines(userId, exerciseId, timestamp);
+
+    enqueueSyncOperation("user_exercise", exerciseId, "delete", {
+      userId,
+      exerciseId,
     });
 
     db.execSync("COMMIT;");
@@ -1733,60 +2020,85 @@ export function insertRoutine(
       ]
     );
 
-    selectedExercises.forEach(({ exercise, exerciseSource }, exerciseIndex) => {
-      const routineExerciseId = `${routine.id}-exercise-${exerciseIndex + 1}`;
-      const timestamp = new Date().toISOString();
-
-      db.runSync(
-        `
-          INSERT INTO routine_exercises (
-            id,
-            routine_id,
-            exercise_source,
-            exercise_id,
-            sort_order,
-            created_at,
-            updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          routineExerciseId,
-          routine.id,
-          exerciseSource,
-          exercise.id,
-          exerciseIndex,
-          timestamp,
-          timestamp,
-        ]
-      );
-
-      db.runSync(
-        `
-          INSERT INTO routine_exercise_sets (
-            id,
-            routine_exercise_id,
-            sort_order,
-            target_reps,
-            target_weight,
-            created_at,
-            updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          `${routineExerciseId}-set-1`,
-          routineExerciseId,
-          0,
-          null,
-          null,
-          timestamp,
-          timestamp,
-        ]
-      );
-    });
+    replaceRoutineDefinition(routine.id, selectedExercises, new Date().toISOString());
 
     enqueueSyncOperation("routine", routine.id, "create", {
       userId,
       name: routine.name,
+    });
+
+    db.execSync("COMMIT;");
+  } catch (error) {
+    db.execSync("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function updateRoutine(
+  userId: string,
+  routine: Routine,
+  selectedExercises: Array<{ exercise: Exercise; exerciseSource: "seeded" | "custom" }>
+) {
+  const timestamp = new Date().toISOString();
+
+  db.execSync("BEGIN TRANSACTION;");
+
+  try {
+    db.runSync(
+      `
+        UPDATE routines
+        SET
+          name = ?,
+          normalized_name = ?,
+          gym_id = ?,
+          updated_at = ?,
+          deleted_at = NULL
+        WHERE id = ?
+          AND user_id = ?
+      `,
+      [
+        routine.name,
+        routine.name.trim().toLowerCase(),
+        routine.gymId ?? null,
+        timestamp,
+        routine.id,
+        userId,
+      ]
+    );
+
+    replaceRoutineDefinition(routine.id, selectedExercises, timestamp);
+    enqueueSyncOperation("routine", routine.id, "update", {
+      userId,
+      name: routine.name,
+    });
+
+    db.execSync("COMMIT;");
+  } catch (error) {
+    db.execSync("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function deleteRoutine(userId: string, routineId: string) {
+  const timestamp = new Date().toISOString();
+
+  db.execSync("BEGIN TRANSACTION;");
+
+  try {
+    db.runSync("DELETE FROM routine_exercises WHERE routine_id = ?", [routineId]);
+    db.runSync(
+      `
+        UPDATE routines
+        SET updated_at = ?, deleted_at = ?
+        WHERE id = ?
+          AND user_id = ?
+      `,
+      [timestamp, timestamp, routineId, userId]
+    );
+
+    enqueueSyncOperation("routine", routineId, "delete", {
+      userId,
+      routineId,
     });
 
     db.execSync("COMMIT;");

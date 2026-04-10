@@ -19,9 +19,9 @@ export default function ProfileBadgeRail({ badges, onPressBadge }: ProfileBadgeR
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
       <View style={styles.spacer} />
-      {badges.map((badge) => (
+      {badges.map((badge, index) => (
         <ProfileBadgeCard
-          key={badge.id}
+          key={`${badge.id}-${index}`}
           {...badge}
           onPress={onPressBadge ? () => onPressBadge(badge.id) : undefined}
         />

@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -7,19 +8,44 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibrary } from "@/context/LibraryContext";
 
 export default function NewExerciseScreen() {
-  const { addCustomExercise, hasExerciseNamed, exercises } = useLibrary();
+  const { exerciseId } = useLocalSearchParams<{ exerciseId?: string }>();
+  const {
+    addCustomExercise,
+    updateCustomExercise,
+    deleteCustomExercise,
+    hasExerciseNamed,
+    isCustomExercise,
+    exercises,
+  } = useLibrary();
   const [name, setName] = useState("");
-  const [muscleGroup, setMuscleGroup] = useState("");
   const [primaryMuscles, setPrimaryMuscles] = useState<string[]>([]);
   const [secondaryMuscles, setSecondaryMuscles] = useState<string[]>([]);
   const [openDropdown, setOpenDropdown] = useState<"primary" | "secondary" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasMissingNameError = errorMessage === "Name is required.";
+
+  const editingExercise = useMemo(() => {
+    if (!exerciseId || !isCustomExercise(exerciseId)) {
+      return null;
+    }
+
+    return exercises.find((exercise) => exercise.id === exerciseId) ?? null;
+  }, [exerciseId, exercises, isCustomExercise]);
+
+  useEffect(() => {
+    if (!editingExercise) {
+      return;
+    }
+
+    setName(editingExercise.name);
+    setPrimaryMuscles(editingExercise.primaryMuscles ?? []);
+    setSecondaryMuscles(editingExercise.secondaryMuscles ?? []);
+  }, [editingExercise]);
 
   const muscleOptions = useMemo(() => {
     return Array.from(
@@ -30,13 +56,12 @@ export default function NewExerciseScreen() {
           ...(exercise.secondaryMuscles ?? []),
         ])
       )
-    ).sort((first, second) => first.localeCompare(second));
+    )
+      .filter(Boolean)
+      .sort((first, second) => first.localeCompare(second));
   }, [exercises]);
 
-  const toggleMuscleSelection = (
-    muscle: string,
-    target: "primary" | "secondary"
-  ) => {
+  const toggleMuscleSelection = (muscle: string, target: "primary" | "secondary") => {
     const setter = target === "primary" ? setPrimaryMuscles : setSecondaryMuscles;
 
     setter((prev) => {
@@ -56,28 +81,52 @@ export default function NewExerciseScreen() {
       return;
     }
 
-    if (hasExerciseNamed(trimmedName)) {
+    if (hasExerciseNamed(trimmedName, editingExercise?.id)) {
       setErrorMessage("That exercise already exists in your library.");
       return;
     }
 
-    addCustomExercise({
+    const nextExercise = {
       name: trimmedName,
-      muscleGroup: primaryMuscles.length > 0 ? primaryMuscles[0] : "",
-      primaryMuscles: primaryMuscles.length > 0 ? primaryMuscles : [primaryMuscles[0]],
+      muscleGroup: primaryMuscles[0] ?? editingExercise?.muscleGroup ?? "",
+      primaryMuscles,
       secondaryMuscles,
-      createdAt: new Date().toISOString(),
+      createdAt: editingExercise?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    });
+    };
+
+    if (editingExercise) {
+      updateCustomExercise(editingExercise.id, nextExercise);
+    } else {
+      addCustomExercise(nextExercise);
+    }
 
     router.back();
+  };
+
+  const handleDelete = () => {
+    if (!editingExercise) {
+      return;
+    }
+
+    Alert.alert("Delete exercise", "Delete this custom exercise from your library?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          deleteCustomExercise(editingExercise.id);
+          router.back();
+        },
+      },
+    ]);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-            <Text style={styles.title}>New Exercise</Text>
+          <Text style={styles.title}>{editingExercise ? "Edit Exercise" : "New Exercise"}</Text>
         </View>
 
         <View style={styles.fieldGroup}>
@@ -104,9 +153,7 @@ export default function NewExerciseScreen() {
                 )
               }>
               <Text style={styles.dropdownButtonText} numberOfLines={2}>
-                {primaryMuscles.length > 0
-                  ? primaryMuscles.join(", ")
-                  : "Select muscles"}
+                {primaryMuscles.length > 0 ? primaryMuscles.join(", ") : "Select muscles"}
               </Text>
             </Pressable>
 
@@ -149,9 +196,7 @@ export default function NewExerciseScreen() {
                 )
               }>
               <Text style={styles.dropdownButtonText} numberOfLines={2}>
-                {secondaryMuscles.length > 0
-                  ? secondaryMuscles.join(", ")
-                  : "Select muscles"}
+                {secondaryMuscles.length > 0 ? secondaryMuscles.join(", ") : "Select muscles"}
               </Text>
             </Pressable>
 
@@ -188,8 +233,16 @@ export default function NewExerciseScreen() {
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
         <Pressable style={styles.primaryButton} onPress={handleSave}>
-          <Text style={styles.primaryButtonText}>Save Exercise</Text>
+          <Text style={styles.primaryButtonText}>
+            {editingExercise ? "Update Exercise" : "Save Exercise"}
+          </Text>
         </Pressable>
+
+        {editingExercise ? (
+          <Pressable style={styles.deleteButton} onPress={handleDelete}>
+            <Text style={styles.deleteButtonText}>Delete Exercise</Text>
+          </Pressable>
+        ) : null}
 
         <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
           <Text style={styles.secondaryButtonText}>Cancel</Text>
@@ -221,13 +274,6 @@ const styles = StyleSheet.create({
     color: "#F4F4F4",
     fontSize: 28,
     fontWeight: "600",
-  },
-  subtitle: {
-    color: "#A0A0A0",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 8,
-    marginBottom: 20,
   },
   fieldGroup: {
     marginBottom: 14,
@@ -325,6 +371,19 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#F4F4F4",
     fontSize: 17,
+    fontWeight: "600",
+  },
+  deleteButton: {
+    height: 50,
+    borderRadius: 18,
+    backgroundColor: "#2A1515",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  deleteButtonText: {
+    color: "#F28B82",
+    fontSize: 16,
     fontWeight: "600",
   },
   secondaryButton: {

@@ -15,9 +15,9 @@ export default function AccountSettingsPanel({ items }: AccountSettingsPanelProp
   return (
     <SurfaceCard padding="md">
       <View style={styles.list}>
-        {items.map((item) => (
+        {items.map((item, index) => (
           <SettingsRow
-            key={item.id}
+            key={`${item.id}-${index}`}
             iconName={item.iconName}
             label={item.label}
             value={item.value}

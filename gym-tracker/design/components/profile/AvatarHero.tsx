@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAppTheme } from "@/design/hooks/use-app-theme";
@@ -118,13 +119,13 @@ export default function AvatarHero({
 
       <View style={styles.statsRow}>
         {stats.map((stat, index) => (
-          <>
+          <Fragment key={`${stat.label}-${index}`}>
             {index > 0 ? <View style={styles.statDivider} /> : null}
-            <View key={`${stat.label}-${index}`} style={styles.stat}>
+            <View style={styles.stat}>
               <Text style={styles.statValue}>{stat.value}</Text>
               <Text style={styles.statLabel}>{stat.label}</Text>
             </View>
-          </>
+          </Fragment>
         ))}
       </View>
     </View>

@@ -46,7 +46,7 @@ function formatCategoryLabel(value: string) {
 
 export default function RoutinesScreen() {
   const { addRoutine } = useActiveWorkout();
-  const { routines, exercises } = useLibrary();
+  const { routines, exercises, isCustomRoutine } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState("All");
   const [selectedGymId, setSelectedGymId] = useState("all");
@@ -383,8 +383,27 @@ export default function RoutinesScreen() {
               onPress={() => handleSelectRoutine(item)}
             >
               <View style={styles.routineHeader}>
-                <Text style={styles.routineName}>{item.name}</Text>
-                <Text style={styles.exerciseCount}>{item.exercises.length} exercises</Text>
+                <View style={styles.routineTitleWrap}>
+                  <View style={styles.routineNameRow}>
+                    <Text style={styles.routineName}>{item.name}</Text>
+                    {isCustomRoutine(item.id) ? <Text style={styles.customBadge}>Custom</Text> : null}
+                  </View>
+                  <Text style={styles.exerciseCount}>{item.exercises.length} exercises</Text>
+                </View>
+
+                {isCustomRoutine(item.id) ? (
+                  <Pressable
+                    style={styles.manageButton}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      router.push({
+                        pathname: "/workout/new-routine",
+                        params: { routineId: item.id },
+                      });
+                    }}>
+                    <Text style={styles.manageButtonText}>Edit</Text>
+                  </Pressable>
+                ) : null}
               </View>
 
               <ScrollView
@@ -541,15 +560,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  routineTitleWrap: {
+    flex: 1,
+  },
+  routineNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   routineName: {
     color: "#F4F4F4",
     fontSize: 18,
     fontWeight: "600",
-    flex: 1,
+  },
+  customBadge: {
+    color: "#7EDAA0",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
   exerciseCount: {
     color: "#7C7C7C",
     fontSize: 13,
+  },
+  manageButton: {
+    minWidth: 64,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "#2A2A2A",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  manageButtonText: {
+    color: "#F4F4F4",
+    fontSize: 13,
+    fontWeight: "600",
   },
   exerciseChipRow: {
     gap: 8,

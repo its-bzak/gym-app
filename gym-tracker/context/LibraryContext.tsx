@@ -1,11 +1,15 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
+  deleteRoutine,
+  deleteUserExercise,
   getCachedReferenceExercises,
   getCachedRoutines,
   getCachedUserExercises,
   getReferenceExerciseSyncStatus,
   insertRoutine,
   insertUserExercise,
+  updateRoutine,
+  updateUserExercise,
 } from "@/db/sqlite";
 import { syncSeededExerciseReferenceData } from "@/services/referenceDataBootstrap";
 import { syncPendingLocalChanges } from "@/services/localSyncService";
@@ -23,8 +27,14 @@ type LibraryContextType = {
   lastReferenceExerciseSyncAt: string | null;
   addCustomExercise: (exercise: CreateExerciseInput) => Exercise;
   addCustomRoutine: (name: string, exercises: Exercise[]) => Routine;
-  hasExerciseNamed: (name: string) => boolean;
-  hasRoutineNamed: (name: string) => boolean;
+  updateCustomExercise: (exerciseId: string, exercise: CreateExerciseInput) => Exercise;
+  deleteCustomExercise: (exerciseId: string) => void;
+  updateCustomRoutine: (routineId: string, name: string, exercises: Exercise[]) => Routine;
+  deleteCustomRoutine: (routineId: string) => void;
+  hasExerciseNamed: (name: string, excludeId?: string) => boolean;
+  hasRoutineNamed: (name: string, excludeId?: string) => boolean;
+  isCustomExercise: (exerciseId: string) => boolean;
+  isCustomRoutine: (routineId: string) => boolean;
 };
 
 const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
@@ -130,16 +140,28 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const exercises = useMemo(() => [...seededExercises, ...customExercises], [customExercises, seededExercises]);
 
-  const hasExerciseNamed = (name: string) => {
+  const hasExerciseNamed = (name: string, excludeId?: string) => {
     const normalizedName = normalizeName(name);
 
-    return exercises.some((exercise) => normalizeName(exercise.name) === normalizedName);
+    return exercises.some(
+      (exercise) => exercise.id !== excludeId && normalizeName(exercise.name) === normalizedName
+    );
   };
 
-  const hasRoutineNamed = (name: string) => {
+  const hasRoutineNamed = (name: string, excludeId?: string) => {
     const normalizedName = normalizeName(name);
 
-    return routines.some((routine) => normalizeName(routine.name) === normalizedName);
+    return routines.some(
+      (routine) => routine.id !== excludeId && normalizeName(routine.name) === normalizedName
+    );
+  };
+
+  const isCustomExercise = (exerciseId: string) => {
+    return customExercises.some((exercise) => exercise.id === exerciseId);
+  };
+
+  const isCustomRoutine = (routineId: string) => {
+    return routines.some((routine) => routine.id === routineId);
   };
 
   const addCustomExercise = (exercise: CreateExerciseInput) => {
@@ -155,6 +177,35 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     void syncPendingLocalChanges();
 
     return newExercise;
+  };
+
+  const updateCustomExercise = (exerciseId: string, exercise: CreateExerciseInput) => {
+    const nextOwnerId = ownerId ?? LOCAL_ANONYMOUS_USER_ID;
+    const updatedExercise: Exercise = {
+      ...exercise,
+      id: exerciseId,
+    };
+
+    updateUserExercise(nextOwnerId, updatedExercise);
+    const refreshedCustomExercises = getCachedUserExercises(nextOwnerId);
+
+    setCustomExercises(refreshedCustomExercises);
+    setRoutines(getCachedRoutines(nextOwnerId, [...seededExercises, ...refreshedCustomExercises]));
+    void syncPendingLocalChanges();
+
+    return updatedExercise;
+  };
+
+  const deleteCustomExercise = (exerciseId: string) => {
+    const nextOwnerId = ownerId ?? LOCAL_ANONYMOUS_USER_ID;
+
+    deleteUserExercise(nextOwnerId, exerciseId);
+
+    const refreshedCustomExercises = getCachedUserExercises(nextOwnerId);
+
+    setCustomExercises(refreshedCustomExercises);
+    setRoutines(getCachedRoutines(nextOwnerId, [...seededExercises, ...refreshedCustomExercises]));
+    void syncPendingLocalChanges();
   };
 
   const addCustomRoutine = (name: string, selectedExercises: Exercise[]) => {
@@ -183,6 +234,40 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     return newRoutine;
   };
 
+  const updateCustomRoutine = (routineId: string, name: string, selectedExercises: Exercise[]) => {
+    const nextOwnerId = ownerId ?? LOCAL_ANONYMOUS_USER_ID;
+    const updatedRoutine: Routine = {
+      id: routineId,
+      name: name.trim(),
+      exercises: selectedExercises.map((exercise) => ({
+        exercise,
+        sets: [{ reps: null, weight: null }],
+      })),
+    };
+
+    updateRoutine(
+      nextOwnerId,
+      updatedRoutine,
+      selectedExercises.map((exercise) => ({
+        exercise,
+        exerciseSource: customExercises.some((item) => item.id === exercise.id) ? "custom" : "seeded",
+      }))
+    );
+
+    setRoutines(getCachedRoutines(nextOwnerId, [...seededExercises, ...customExercises]));
+    void syncPendingLocalChanges();
+
+    return updatedRoutine;
+  };
+
+  const deleteCustomRoutine = (routineId: string) => {
+    const nextOwnerId = ownerId ?? LOCAL_ANONYMOUS_USER_ID;
+
+    deleteRoutine(nextOwnerId, routineId);
+    setRoutines(getCachedRoutines(nextOwnerId, [...seededExercises, ...customExercises]));
+    void syncPendingLocalChanges();
+  };
+
   return (
     <LibraryContext.Provider
       value={{
@@ -193,8 +278,14 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         lastReferenceExerciseSyncAt,
         addCustomExercise,
         addCustomRoutine,
+        updateCustomExercise,
+        deleteCustomExercise,
+        updateCustomRoutine,
+        deleteCustomRoutine,
         hasExerciseNamed,
         hasRoutineNamed,
+        isCustomExercise,
+        isCustomRoutine,
       }}
     >
       {children}

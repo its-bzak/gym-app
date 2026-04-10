@@ -51,6 +51,7 @@ export default function ExercisesScreen() {
     isHydratingExercises,
     cachedExerciseCount,
     lastReferenceExerciseSyncAt,
+    isCustomExercise,
   } = useLibrary();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState("All");
@@ -373,15 +374,30 @@ export default function ExercisesScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <Pressable
-              style={styles.exerciseRow}
-              onPress={() => handleSelectExercise(item)}
-            >
-              <Text style={styles.exerciseName}>{item.name}</Text>
-              <Text style={styles.muscleGroup}>
-                Primary: {(item.primaryMuscles ?? []).join(", ") || item.muscleGroup}
-              </Text>
-            </Pressable>
+            <View style={styles.exerciseRow}>
+              <Pressable style={styles.exerciseInfo} onPress={() => handleSelectExercise(item)}>
+                <View style={styles.exerciseTitleRow}>
+                  <Text style={styles.exerciseName}>{item.name}</Text>
+                  {isCustomExercise(item.id) ? <Text style={styles.customBadge}>Custom</Text> : null}
+                </View>
+                <Text style={styles.muscleGroup}>
+                  Primary: {(item.primaryMuscles ?? []).join(", ") || item.muscleGroup}
+                </Text>
+              </Pressable>
+
+              {isCustomExercise(item.id) ? (
+                <Pressable
+                  style={styles.manageButton}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/workout/new-exercise",
+                      params: { exerciseId: item.id },
+                    })
+                  }>
+                  <Text style={styles.manageButtonText}>Edit</Text>
+                </Pressable>
+              ) : null}
+            </View>
           )}
         />
         <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -517,15 +533,46 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  exerciseInfo: {
+    flex: 1,
+  },
+  exerciseTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
   },
   exerciseName: {
     color: "#fff",
     fontSize: 18,
-    marginBottom: 4,
+  },
+  customBadge: {
+    color: "#7EDAA0",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
   muscleGroup: {
     color: "#7C7C7C",
     fontSize: 14,
+  },
+  manageButton: {
+    minWidth: 64,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "#2A2A2A",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  manageButtonText: {
+    color: "#F4F4F4",
+    fontSize: 13,
+    fontWeight: "600",
   },
   emptyState: {
     backgroundColor: "#1A1A1A",

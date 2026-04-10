@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   ActivityIndicator,
   FlatList,
   Pressable,
@@ -9,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibrary } from "@/context/LibraryContext";
 import {
@@ -43,7 +44,16 @@ function formatCategoryLabel(value: string) {
 }
 
 export default function NewRoutineScreen() {
-  const { exercises, addCustomRoutine, hasRoutineNamed } = useLibrary();
+  const { routineId } = useLocalSearchParams<{ routineId?: string }>();
+  const {
+    exercises,
+    routines,
+    addCustomRoutine,
+    updateCustomRoutine,
+    deleteCustomRoutine,
+    hasRoutineNamed,
+    isCustomRoutine,
+  } = useLibrary();
   const [routineName, setRoutineName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState("All");
@@ -57,6 +67,23 @@ export default function NewRoutineScreen() {
   const [isSyncingGymData, setIsSyncingGymData] = useState(true);
   const [gymDataStatus, setGymDataStatus] = useState<string | null>(null);
   const hasMissingNameError = errorMessage === "Routine name is required.";
+
+  const editingRoutine = useMemo(() => {
+    if (!routineId || !isCustomRoutine(routineId)) {
+      return null;
+    }
+
+    return routines.find((routine) => routine.id === routineId) ?? null;
+  }, [isCustomRoutine, routineId, routines]);
+
+  useEffect(() => {
+    if (!editingRoutine) {
+      return;
+    }
+
+    setRoutineName(editingRoutine.name);
+    setSelectedExerciseIds(editingRoutine.exercises.map((exercise) => exercise.exercise.id));
+  }, [editingRoutine]);
 
   useEffect(() => {
     let isMounted = true;
@@ -259,7 +286,7 @@ export default function NewRoutineScreen() {
       return;
     }
 
-    if (hasRoutineNamed(trimmedName)) {
+    if (hasRoutineNamed(trimmedName, editingRoutine?.id)) {
       setErrorMessage("You already have a routine with this name.");
       return;
     }
@@ -269,8 +296,31 @@ export default function NewRoutineScreen() {
       return;
     }
 
-    addCustomRoutine(trimmedName, selectedExercises);
+    if (editingRoutine) {
+      updateCustomRoutine(editingRoutine.id, trimmedName, selectedExercises);
+    } else {
+      addCustomRoutine(trimmedName, selectedExercises);
+    }
+
     router.back();
+  };
+
+  const handleDeleteRoutine = () => {
+    if (!editingRoutine) {
+      return;
+    }
+
+    Alert.alert("Delete routine", "Delete this custom routine from your library?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          deleteCustomRoutine(editingRoutine.id);
+          router.back();
+        },
+      },
+    ]);
   };
 
   return (
@@ -284,7 +334,6 @@ export default function NewRoutineScreen() {
           ListHeaderComponentStyle={styles.listHeader}
           ListHeaderComponent={
             <>
-
               <TextInput
                 style={[styles.input, hasMissingNameError && styles.inputError]}
                 value={routineName}
@@ -292,7 +341,7 @@ export default function NewRoutineScreen() {
                   setRoutineName(value);
                   setErrorMessage(null);
                 }}
-                placeholder="&apos;My Awesome Routine&apos;"
+                placeholder="My Awesome Routine"
                 placeholderTextColor="#6F6F6F"
               />
 
@@ -308,14 +357,15 @@ export default function NewRoutineScreen() {
                     <Text style={styles.statusBannerText}>{gymDataStatus}</Text>
                   </View>
                 ) : null}
-                
-                  <TextInput
-                    style={styles.searchInput}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    placeholder="Search by exercise or muscle"
-                    placeholderTextColor="#6F6F6F"
-                  />
+
+                <TextInput
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search by exercise or muscle"
+                  placeholderTextColor="#6F6F6F"
+                />
+
                 <View style={styles.controlsRow}>
                   <Pressable
                     style={styles.filterButton}
@@ -354,7 +404,7 @@ export default function NewRoutineScreen() {
                   </Pressable>
                 </View>
 
-                {openFilterMenu !== null && (
+                {openFilterMenu !== null ? (
                   <View style={styles.filterDropdown}>
                     <ScrollView
                       nestedScrollEnabled
@@ -383,28 +433,24 @@ export default function NewRoutineScreen() {
                       })}
                     </ScrollView>
                   </View>
-                )}
+                ) : null}
               </View>
 
               {selectedExercises.length === 0 ? (
                 <View style={styles.emptySelectedState}>
-                  <Text style={styles.emptySelectedText}>
-                    Selected exercises will appear here
-                  </Text>
+                  <Text style={styles.emptySelectedText}>Selected exercises will appear here</Text>
                 </View>
               ) : (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.selectedChipRow}
-                  style={styles.selectedScroll}
-                >
+                  style={styles.selectedScroll}>
                   {selectedExercises.map((exercise) => (
                     <Pressable
                       key={exercise.id}
                       style={styles.selectedChip}
-                      onPress={() => toggleExerciseSelection(exercise.id)}
-                    >
+                      onPress={() => toggleExerciseSelection(exercise.id)}>
                       <Text style={styles.selectedChipText}>{exercise.name}</Text>
                     </Pressable>
                   ))}
@@ -433,8 +479,7 @@ export default function NewRoutineScreen() {
                 onPress={() => {
                   toggleExerciseSelection(item.id);
                   setErrorMessage(null);
-                }}
-              >
+                }}>
                 <View>
                   <Text style={styles.exerciseName}>{item.name}</Text>
                   <Text style={styles.exerciseDetails}>
@@ -448,8 +493,16 @@ export default function NewRoutineScreen() {
           ListFooterComponent={
             <View style={styles.footerActions}>
               <Pressable style={styles.primaryButton} onPress={handleSaveRoutine}>
-                <Text style={styles.primaryButtonText}>Save Routine</Text>
+                <Text style={styles.primaryButtonText}>
+                  {editingRoutine ? "Update Routine" : "Save Routine"}
+                </Text>
               </Pressable>
+
+              {editingRoutine ? (
+                <Pressable style={styles.deleteButton} onPress={handleDeleteRoutine}>
+                  <Text style={styles.deleteButtonText}>Delete Routine</Text>
+                </Pressable>
+              ) : null}
 
               <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
                 <Text style={styles.secondaryButtonText}>Cancel</Text>
@@ -481,18 +534,6 @@ const styles = StyleSheet.create({
   listHeader: {
     zIndex: 20,
     elevation: 20,
-  },
-  title: {
-    color: "#F4F4F4",
-    fontSize: 28,
-    fontWeight: "600",
-  },
-  subtitle: {
-    color: "#A0A0A0",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 8,
-    marginBottom: 20,
   },
   label: {
     color: "#D0D0D0",
@@ -692,6 +733,19 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#F4F4F4",
     fontSize: 17,
+    fontWeight: "600",
+  },
+  deleteButton: {
+    height: 50,
+    borderRadius: 18,
+    backgroundColor: "#2A1515",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  deleteButtonText: {
+    color: "#F28B82",
+    fontSize: 16,
     fontWeight: "600",
   },
   secondaryButton: {

@@ -442,33 +442,37 @@ async function pullCompletedWorkoutSessions(userId: string) {
     const { data: exerciseRows, error: workoutExercisesError } = await supabase
       .from("workout_session_exercises")
       .select(
-        "id, workout_session_id, exercise_source, exercise_id, display_name_snapshot, sort_order, created_at, updated_at"
+        "id, workout_session_id, exercise_source, exercise_id, display_name_snapshot, sort_order, created_at"
       )
       .in("workout_session_id", sessionIds)
-      .returns<RemoteWorkoutSessionExerciseRow[]>();
+      .returns<Array<Omit<RemoteWorkoutSessionExerciseRow, "updated_at">>>();
 
     if (workoutExercisesError) {
       throw new Error(workoutExercisesError.message);
     }
 
-    workoutExercises = exerciseRows ?? [];
+    workoutExercises = (exerciseRows ?? []).map((exercise) => ({
+      ...exercise,
+      updated_at: exercise.created_at,
+    }));
 
     const workoutExerciseIds = workoutExercises.map((exercise) => exercise.id);
 
     if (workoutExerciseIds.length > 0) {
       const { data: setRows, error: workoutSetsError } = await supabase
         .from("workout_session_sets")
-        .select(
-          "id, workout_session_exercise_id, sort_order, reps, weight, created_at, updated_at"
-        )
+        .select("id, workout_session_exercise_id, sort_order, reps, weight, created_at")
         .in("workout_session_exercise_id", workoutExerciseIds)
-        .returns<RemoteWorkoutSessionSetRow[]>();
+        .returns<Array<Omit<RemoteWorkoutSessionSetRow, "updated_at">>>();
 
       if (workoutSetsError) {
         throw new Error(workoutSetsError.message);
       }
 
-      workoutSets = setRows ?? [];
+      workoutSets = (setRows ?? []).map((set) => ({
+        ...set,
+        updated_at: set.created_at,
+      }));
     }
   }
 
