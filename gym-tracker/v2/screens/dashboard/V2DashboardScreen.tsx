@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { Text, View } from "react-native";
 import { useFocusEffect, router } from "expo-router";
+import TodaysNutritionCard from "@/components/main/TodaysNutritionCard";
 import { useDisplayUnitPreference } from "@/hooks/use-display-unit-preference";
 import { loadV2DashboardPreview } from "@/v2/adapters/overview";
 import V2LinkRow from "@/v2/components/V2LinkRow";
@@ -94,6 +95,18 @@ export default function V2DashboardScreen() {
           onPress: () => router.push(V2_ROUTES.profile),
         },
       ]}>
+      {preview ? (
+        <TodaysNutritionCard
+          calorieGoal={preview.todaysNutrition.calorieGoal}
+          carbs={preview.todaysNutrition.carbs}
+          carbsGoal={preview.todaysNutrition.carbsGoal}
+          fat={preview.todaysNutrition.fat}
+          fatGoal={preview.todaysNutrition.fatGoal}
+          protein={preview.todaysNutrition.protein}
+          proteinGoal={preview.todaysNutrition.proteinGoal}
+        />
+      ) : null}
+
       <V2SectionCard
         title="Connected Data"
         subtitle={isLoading ? "Loading" : preview?.headline}>

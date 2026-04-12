@@ -18,6 +18,16 @@ import type {
   V2ProfilePreview,
 } from "@/v2/types";
 
+const EMPTY_TODAYS_NUTRITION = {
+  protein: 0,
+  proteinGoal: 0,
+  fat: 0,
+  fatGoal: 0,
+  carbs: 0,
+  carbsGoal: 0,
+  calorieGoal: 0,
+};
+
 function formatCompactNumber(value: number) {
   if (value < 1000) {
     return Math.round(value).toString();
@@ -86,6 +96,7 @@ export async function loadV2DashboardPreview(
       snapshot.weightGoal
         ? `${snapshot.weightGoal.goalType.toUpperCase()} goal active.`
         : "No active goal.",
+    todaysNutrition: snapshot.macroMetrics ?? EMPTY_TODAYS_NUTRITION,
     stats: [
       {
         id: "calories",

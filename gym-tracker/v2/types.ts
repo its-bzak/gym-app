@@ -1,3 +1,6 @@
+import type { MacroBarProps } from "@/utils/calculateMacroBar";
+import type { V2Route } from "@/v2/navigation/routes";
+
 export type V2Tone = "default" | "accent" | "success" | "warning" | "danger" | "info";
 
 export type V2KeyStat = {
@@ -12,13 +15,14 @@ export type V2LinkItem = {
   id: string;
   label: string;
   description: string;
-  href: string;
+  href: V2Route;
 };
 
 export type V2DashboardPreview = {
   displayName: string;
   dateLabel: string;
   headline: string;
+  todaysNutrition: MacroBarProps;
   stats: V2KeyStat[];
   quickLinks: V2LinkItem[];
 };

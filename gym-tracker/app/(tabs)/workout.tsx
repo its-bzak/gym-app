@@ -1,19 +1,29 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
+  Animated,
   Keyboard,
+  LayoutChangeEvent,
+  LayoutAnimation,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   TouchableWithoutFeedback,
+  UIManager,
   View,
 } from "react-native";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DateCarousel from "@/components/main/DateCarousel";
-import DailyMacroMetricsSection from "@/components/main/DailyMetrics/DailyMacroMetricsSection";
-import DailyExerciseMetricsSection from "@/components/main/DailyMetrics/DailyExerciseMetricsSection";
+import TodaysExerciseCard from "@/components/main/TodaysExerciseCard";
+import TodaysNutritionCard from "@/components/main/TodaysNutritionCard";
+import InsightsCard from "../../components/main/InsightsCard";
 import {
   DEFAULT_METRICS_DATE,
   getDailyExerciseMetrics,
@@ -22,8 +32,6 @@ import {
   mockWeightEntries,
   upsertWeightEntry as upsertMockWeightEntry,
 } from "@/mock/MainScreen/DailyMetricsSection";
-import WeightTrendSection from "@/components/main/WeightTrend";
-import GoalProgressSection from "@/components/main/GoalProgress";
 import CustomKeypad from "@/components/ui/CustomKeypad";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 import { useAppTheme } from "@/design/hooks/use-app-theme";
@@ -57,7 +65,11 @@ const EMPTY_EXERCISE_METRICS = {
   workoutType: "",
 };
 
+const DASHBOARD_CARD_ORDER_STORAGE_KEY = "workout-dashboard-card-order-v1";
+const DEFAULT_DASHBOARD_CARD_ORDER = ["nutrition", "exercise", "insights"] as const;
+
 type QuickActionModal = "weight" | "library" | null;
+type DashboardCardKey = (typeof DEFAULT_DASHBOARD_CARD_ORDER)[number];
 
 export default function WorkoutScreen() {
   const { theme } = useAppTheme();
@@ -78,8 +90,26 @@ export default function WorkoutScreen() {
   const [quickActionError, setQuickActionError] = useState<string | null>(null);
   const [weightInput, setWeightInput] = useState("");
   const [isWeightKeypadVisible, setIsWeightKeypadVisible] = useState(false);
+  const [dashboardCardOrder, setDashboardCardOrder] = useState<DashboardCardKey[]>([
+    ...DEFAULT_DASHBOARD_CARD_ORDER,
+  ]);
+  const [draggingDashboardCard, setDraggingDashboardCard] = useState<DashboardCardKey | null>(null);
   const { startWorkout } = useActiveWorkout();
   const { unitPreference } = useDisplayUnitPreference();
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const dragOffsetY = useRef(new Animated.Value(0)).current;
+  const dashboardCardLayoutsRef = useRef<Partial<Record<DashboardCardKey, { y: number; height: number }>>>({});
+  const dashboardCardOrderRef = useRef<DashboardCardKey[]>([...DEFAULT_DASHBOARD_CARD_ORDER]);
+  const activeDragCardRef = useRef<DashboardCardKey | null>(null);
+  const dragActivationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasActivatedDragRef = useRef(false);
+  const dragStartPageYRef = useRef(0);
+  const dragStartCardYRef = useRef(0);
+  const dragStartScrollYRef = useRef(0);
+  const scrollOffsetYRef = useRef(0);
+  const scrollViewportHeightRef = useRef(0);
+  const scrollContentHeightRef = useRef(0);
+  const scrollViewportTopRef = useRef(0);
   const styles = createThemedStyles(theme, (currentTheme) => ({
     safeArea: {
       flex: 1,
@@ -91,10 +121,6 @@ export default function WorkoutScreen() {
       backgroundColor: currentTheme.colors.background,
       paddingHorizontal: 18,
       paddingTop: 9,
-    },
-    dataContainers: {
-      flexDirection: "row" as const,
-      marginTop: 18,
     },
     statusRow: {
       flexDirection: "row" as const,
@@ -112,16 +138,6 @@ export default function WorkoutScreen() {
       textAlign: "center" as const,
       marginTop: 4,
       marginBottom: 4,
-    },
-    weightTrendContainer: {
-      flex: 1,
-      height: 80,
-      marginRight: 5,
-    },
-    goalProgressContainer: {
-      flex: 1,
-      height: 80,
-      marginLeft: 5,
     },
     bodyMapContainer: {
       marginTop: 20,
@@ -311,7 +327,80 @@ export default function WorkoutScreen() {
       lineHeight: currentTheme.typography.label.lineHeight,
       fontWeight: currentTheme.typography.label.fontWeight,
     },
+    dashboardOrderCopy: {
+      color: currentTheme.colors.textSecondary,
+      fontSize: currentTheme.typography.body.fontSize,
+      lineHeight: currentTheme.typography.body.lineHeight,
+      fontWeight: currentTheme.typography.body.fontWeight,
+      marginBottom: 14,
+    },
+    dashboardOrderList: {
+      gap: 10,
+      marginBottom: 18,
+    },
+    dashboardOrderRow: {
+      minHeight: 48,
+      borderRadius: currentTheme.radii.lg,
+      backgroundColor: currentTheme.colors.surface,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+      paddingHorizontal: 14,
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      justifyContent: "space-between" as const,
+    },
+    dashboardOrderLabel: {
+      color: currentTheme.colors.textPrimary,
+      fontSize: currentTheme.typography.label.fontSize,
+      lineHeight: currentTheme.typography.label.lineHeight,
+      fontWeight: currentTheme.typography.label.fontWeight,
+      textTransform: "capitalize" as const,
+    },
   }));
+
+  useEffect(() => {
+    if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    dashboardCardOrderRef.current = dashboardCardOrder;
+  }, [dashboardCardOrder]);
+
+  useEffect(() => () => clearDashboardDragState(), []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDashboardCardOrder = async () => {
+      try {
+        const storedValue = await AsyncStorage.getItem(DASHBOARD_CARD_ORDER_STORAGE_KEY);
+
+        if (!isMounted || !storedValue) {
+          return;
+        }
+
+        const parsedValue = JSON.parse(storedValue);
+
+        if (
+          Array.isArray(parsedValue) &&
+          parsedValue.length === DEFAULT_DASHBOARD_CARD_ORDER.length &&
+          DEFAULT_DASHBOARD_CARD_ORDER.every((key) => parsedValue.includes(key))
+        ) {
+          setDashboardCardOrder(parsedValue as DashboardCardKey[]);
+        }
+      } catch {
+        // Keep default order when local preference is unavailable.
+      }
+    };
+
+    void loadDashboardCardOrder();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const resetQuickActionForms = () => {
     setWeightInput("");
@@ -338,6 +427,271 @@ export default function WorkoutScreen() {
   const dismissWeightKeypad = () => {
     Keyboard.dismiss();
     setIsWeightKeypadVisible(false);
+  };
+
+  const persistDashboardCardOrder = async (nextOrder: DashboardCardKey[]) => {
+    try {
+      await AsyncStorage.setItem(DASHBOARD_CARD_ORDER_STORAGE_KEY, JSON.stringify(nextOrder));
+    } catch {
+      // Keep the in-memory order even if local persistence is unavailable.
+    }
+  };
+
+  const clearDashboardDragState = () => {
+    if (dragActivationTimeoutRef.current) {
+      clearTimeout(dragActivationTimeoutRef.current);
+      dragActivationTimeoutRef.current = null;
+    }
+
+    hasActivatedDragRef.current = false;
+    activeDragCardRef.current = null;
+  };
+
+  const cancelPendingDashboardDrag = () => {
+    if (dragActivationTimeoutRef.current) {
+      clearTimeout(dragActivationTimeoutRef.current);
+      dragActivationTimeoutRef.current = null;
+    }
+
+    hasActivatedDragRef.current = false;
+
+    if (!draggingDashboardCard) {
+      activeDragCardRef.current = null;
+    }
+  };
+
+  const handleDashboardScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollOffsetYRef.current = event.nativeEvent.contentOffset.y;
+  };
+
+  const handleScrollViewLayout = (event: LayoutChangeEvent) => {
+    scrollViewportHeightRef.current = event.nativeEvent.layout.height;
+    scrollViewportTopRef.current = event.nativeEvent.layout.y;
+  };
+
+  const handleScrollViewContentSizeChange = (_width: number, height: number) => {
+    scrollContentHeightRef.current = height;
+  };
+
+  const updateDragAutoScroll = (pageY: number) => {
+    const viewportHeight = scrollViewportHeightRef.current;
+    const viewportTop = scrollViewportTopRef.current;
+    const maxScrollY = Math.max(scrollContentHeightRef.current - viewportHeight, 0);
+
+    if (!viewportHeight || maxScrollY <= 0) {
+      return;
+    }
+
+    const edgeThreshold = 120;
+    const relativeTouchY = pageY - viewportTop;
+    let scrollDelta = 0;
+
+    if (relativeTouchY < edgeThreshold) {
+      scrollDelta = relativeTouchY - edgeThreshold;
+    } else if (relativeTouchY > viewportHeight - edgeThreshold) {
+      scrollDelta = relativeTouchY - (viewportHeight - edgeThreshold);
+    }
+
+    if (scrollDelta === 0) {
+      return;
+    }
+
+    const dampedScrollDelta = Math.max(Math.min(scrollDelta * 0.18, 18), -18);
+    const nextScrollY = Math.max(0, Math.min(scrollOffsetYRef.current + dampedScrollDelta, maxScrollY));
+
+    if (nextScrollY === scrollOffsetYRef.current) {
+      return;
+    }
+
+    scrollOffsetYRef.current = nextScrollY;
+    scrollViewRef.current?.scrollTo({ y: nextScrollY, animated: false });
+  };
+
+  const handleDashboardCardLayout =
+    (cardKey: DashboardCardKey) => (event: LayoutChangeEvent) => {
+      const { y, height } = event.nativeEvent.layout;
+      dashboardCardLayoutsRef.current[cardKey] = { y, height };
+    };
+
+  const updateDashboardCardOrderWhileDragging = (cardKey: DashboardCardKey, desiredCardY: number) => {
+    const activeLayout = dashboardCardLayoutsRef.current[cardKey];
+
+    if (!activeLayout) {
+      return;
+    }
+
+    const draggedCardCenter = desiredCardY + activeLayout.height / 2;
+    const otherCardKeys = dashboardCardOrderRef.current.filter((currentCardKey) => currentCardKey !== cardKey);
+    let insertionIndex = 0;
+
+    otherCardKeys.forEach((otherCardKey) => {
+      const otherLayout = dashboardCardLayoutsRef.current[otherCardKey];
+
+      if (!otherLayout) {
+        return;
+      }
+
+      const otherCardMidpoint = otherLayout.y + otherLayout.height / 2;
+
+      if (draggedCardCenter >= otherCardMidpoint) {
+        insertionIndex += 1;
+      }
+    });
+
+    const nextOrder = [...otherCardKeys];
+    nextOrder.splice(insertionIndex, 0, cardKey);
+
+    if (nextOrder.every((currentCardKey, index) => currentCardKey === dashboardCardOrderRef.current[index])) {
+      return;
+    }
+
+    LayoutAnimation.configureNext({
+      duration: 180,
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+      },
+    });
+
+    dashboardCardOrderRef.current = nextOrder;
+    setDashboardCardOrder(nextOrder);
+  };
+
+  const finishDashboardCardDrag = () => {
+    const draggedCard = activeDragCardRef.current;
+    const nextOrder = [...dashboardCardOrderRef.current];
+
+    clearDashboardDragState();
+    LayoutAnimation.configureNext({
+      duration: 180,
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+      },
+    });
+    setDraggingDashboardCard(null);
+
+    Animated.spring(dragOffsetY, {
+      toValue: 0,
+      useNativeDriver: true,
+      bounciness: 6,
+      speed: 18,
+    }).start();
+
+    if (!draggedCard) {
+      return;
+    }
+
+    void persistDashboardCardOrder(nextOrder);
+  };
+
+  const startDashboardCardDrag = (cardKey: DashboardCardKey) => {
+    clearDashboardDragState();
+    activeDragCardRef.current = cardKey;
+    dragStartScrollYRef.current = scrollOffsetYRef.current;
+    dragStartCardYRef.current = dashboardCardLayoutsRef.current[cardKey]?.y ?? 0;
+    dragActivationTimeoutRef.current = setTimeout(() => {
+      hasActivatedDragRef.current = true;
+      setDraggingDashboardCard(cardKey);
+      dragOffsetY.setValue(0);
+    }, 220);
+  };
+
+  const createDashboardCardHandleResponder = (cardKey: DashboardCardKey) => ({
+      onResponderGrant: (event: { nativeEvent: { pageY: number } }) => {
+        dragStartPageYRef.current = event.nativeEvent.pageY;
+        startDashboardCardDrag(cardKey);
+      },
+      onResponderMove: (event: { nativeEvent: { pageY: number } }) => {
+        if (!hasActivatedDragRef.current || activeDragCardRef.current !== cardKey) {
+          return;
+        }
+
+        updateDragAutoScroll(event.nativeEvent.pageY);
+
+        const currentLayoutY = dashboardCardLayoutsRef.current[cardKey]?.y ?? dragStartCardYRef.current;
+        const desiredCardY =
+          dragStartCardYRef.current +
+          (event.nativeEvent.pageY - dragStartPageYRef.current) +
+          (scrollOffsetYRef.current - dragStartScrollYRef.current);
+        const dragY = desiredCardY - currentLayoutY;
+
+        dragOffsetY.setValue(dragY);
+        updateDashboardCardOrderWhileDragging(cardKey, desiredCardY);
+      },
+      onResponderRelease: () => {
+        if (hasActivatedDragRef.current) {
+          finishDashboardCardDrag();
+          return;
+        }
+
+        cancelPendingDashboardDrag();
+      },
+      onResponderTerminate: () => {
+        if (hasActivatedDragRef.current) {
+          finishDashboardCardDrag();
+          return;
+        }
+
+        cancelPendingDashboardDrag();
+      },
+      onResponderTerminationRequest: () => false,
+    });
+
+  const dashboardCardHandleResponders = {
+    nutrition: createDashboardCardHandleResponder("nutrition"),
+    exercise: createDashboardCardHandleResponder("exercise"),
+    insights: createDashboardCardHandleResponder("insights"),
+  };
+
+  const renderDashboardCard = (cardKey: DashboardCardKey) => {
+    const animatedStyle =
+      draggingDashboardCard === cardKey
+        ? {
+            transform: [{ translateY: dragOffsetY }, { scale: 1.015 }],
+            zIndex: 20,
+            elevation: 20,
+            opacity: 0.98,
+          }
+        : undefined;
+
+    if (cardKey === "nutrition") {
+      return (
+        <Animated.View key={cardKey} onLayout={handleDashboardCardLayout(cardKey)} style={animatedStyle}>
+          <TodaysNutritionCard
+            protein={dailyMacroMetrics.protein}
+            proteinGoal={dailyMacroMetrics.proteinGoal}
+            fat={dailyMacroMetrics.fat}
+            fatGoal={dailyMacroMetrics.fatGoal}
+            carbs={dailyMacroMetrics.carbs}
+            carbsGoal={dailyMacroMetrics.carbsGoal}
+            calorieGoal={dailyMacroMetrics.calorieGoal}
+            menuResponderHandlers={dashboardCardHandleResponders[cardKey]}
+          />
+        </Animated.View>
+      );
+    }
+
+    if (cardKey === "exercise") {
+      return (
+        <Animated.View key={cardKey} onLayout={handleDashboardCardLayout(cardKey)} style={animatedStyle}>
+          <TodaysExerciseCard
+            metrics={dailyExerciseMetrics}
+            unitPreference={unitPreference}
+            menuResponderHandlers={dashboardCardHandleResponders[cardKey]}
+          />
+        </Animated.View>
+      );
+    }
+
+    return (
+      <Animated.View key={cardKey} onLayout={handleDashboardCardLayout(cardKey)} style={animatedStyle}>
+        <InsightsCard
+          entries={weightEntries}
+          goal={weightGoal}
+          unitPreference={unitPreference}
+          menuResponderHandlers={dashboardCardHandleResponders[cardKey]}
+        />
+      </Animated.View>
+    );
   };
 
   const applyFallbackDashboardState = () => {
@@ -466,7 +820,15 @@ export default function WorkoutScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.screen}>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.screen}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={draggingDashboardCard === null}
+        onLayout={handleScrollViewLayout}
+        onContentSizeChange={handleScrollViewContentSizeChange}
+        onScroll={handleDashboardScroll}
+        scrollEventThrottle={16}>
         
         <DateCarousel selectedDate={selectedDate} onChangeDate={setSelectedDate} />
         {isLoadingDashboard ? (
@@ -476,32 +838,7 @@ export default function WorkoutScreen() {
           </View>
         ) : null}
         {dashboardLoadError ? <Text style={styles.statusText}>{dashboardLoadError}</Text> : null}
-        <DailyMacroMetricsSection
-          protein={dailyMacroMetrics.protein}
-          proteinGoal={dailyMacroMetrics.proteinGoal}
-          fat={dailyMacroMetrics.fat}
-          fatGoal={dailyMacroMetrics.fatGoal}
-          carbs={dailyMacroMetrics.carbs}
-          carbsGoal={dailyMacroMetrics.carbsGoal}
-          calorieGoal={dailyMacroMetrics.calorieGoal}
-        />
-        <DailyExerciseMetricsSection
-          metrics={dailyExerciseMetrics}
-          unitPreference={unitPreference}
-        />
-
-        <View style={styles.dataContainers}>
-          <View style={styles.weightTrendContainer}>
-            <WeightTrendSection entries={weightEntries} unitPreference={unitPreference} />
-          </View>
-          <View style={styles.goalProgressContainer}>
-            <GoalProgressSection
-              entries={weightEntries}
-              goal={weightGoal}
-              unitPreference={unitPreference}
-            />
-          </View>
-        </View>
+        {dashboardCardOrder.map(renderDashboardCard)}
 
         <View style={styles.bodyMapContainer}>
           {/* Placeholder for BodyMap component */}
@@ -548,7 +885,7 @@ export default function WorkoutScreen() {
           </Pressable>
 
         </View>
-      </View>
+      </ScrollView>
 
       <Modal
         animationType="slide"
@@ -644,6 +981,7 @@ export default function WorkoutScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
     </SafeAreaView>
   );
 }

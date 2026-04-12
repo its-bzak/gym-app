@@ -15,7 +15,7 @@ const defaultDailyExerciseMetrics: Omit<DailyExerciseMetrics, "date"> = {
     workoutType: "",
 };
 
-function formatVolume(volumeKg: number, unitPreference: UnitPreference) {
+export function formatVolume(volumeKg: number, unitPreference: UnitPreference) {
     const volume = convertWeightKgToUnit(volumeKg, unitPreference);
     const unitLabel = getWeightUnitLabel(unitPreference);
 
@@ -31,7 +31,7 @@ function formatVolume(volumeKg: number, unitPreference: UnitPreference) {
     return `${formattedValue}k ${unitLabel}`;
 }
 
-function formatDuration(durationMins: number) {
+export function formatDuration(durationMins: number) {
     const hours = Math.floor(durationMins / 60);
     const minutes = durationMins % 60;
 
