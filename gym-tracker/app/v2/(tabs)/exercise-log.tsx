@@ -1,0 +1,1 @@
+export { default } from "@/v2/screens/exercise/V2ExerciseLogScreen";

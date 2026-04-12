@@ -62,15 +62,23 @@ function AuthGate() {
       return;
     }
 
-    const inAuthFlow = segments[0] === 'login' || segments[0] === 'register';
+    const inLegacyAuthFlow = segments[0] === 'login' || segments[0] === 'register';
+    const inV2Flow = segments[0] === 'v2';
+    const inV2AuthFlow = inV2Flow && (segments[1] === 'splash' || segments[1] === 'login' || segments[1] === 'register');
+    const inAuthFlow = inLegacyAuthFlow || inV2AuthFlow;
 
     if (!isAuthenticated && !inAuthFlow) {
-      router.replace('/login');
+      router.replace(inV2Flow ? '/v2/login' : '/login');
       return;
     }
 
-    if (isAuthenticated && inAuthFlow) {
+    if (isAuthenticated && inLegacyAuthFlow) {
       router.replace('/(tabs)/profile');
+      return;
+    }
+
+    if (isAuthenticated && inV2AuthFlow) {
+      router.replace('/v2/(tabs)/dashboard');
     }
   }, [isAuthReady, isAuthenticated, navigationState?.key, segments]);
 
@@ -124,6 +132,7 @@ export default function RootLayout() {
           <AuthGate />
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="v2" options={{ headerShown: false }} />
             <Stack.Screen name="login" options={{ headerShown: false }} />
             <Stack.Screen name="register" options={{ headerShown: false }} />
             <Stack.Screen name="workout/active" options={{ headerShown: false }} />

@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
+import { V2_ROUTES } from "@/v2/navigation/routes";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 const CURRENT_USER_ID = "user_ryan";
@@ -421,6 +422,10 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleOpenV2Preview = () => {
+    router.push(V2_ROUTES.dashboard);
+  };
+
   const handleLogout = () => {
     Alert.alert("Log out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
@@ -763,7 +768,11 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Contact</Text>
           <Text style={styles.sectionSubtitle}>Need help or want to report an issue?</Text>
 
-          <Pressable style={styles.secondaryActionButton} onPress={handleContact}>
+          <Pressable
+            style={styles.secondaryActionButton}
+            onLongPress={handleOpenV2Preview}
+            delayLongPress={600}
+            onPress={handleContact}>
             <Ionicons name="mail-outline" size={18} color="#F4F4F4" />
             <Text style={styles.secondaryActionButtonText}>Contact support</Text>
           </Pressable>

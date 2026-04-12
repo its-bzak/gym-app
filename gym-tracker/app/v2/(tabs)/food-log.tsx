@@ -1,0 +1,1 @@
+export { default } from "@/v2/screens/food/V2FoodLogScreen";
