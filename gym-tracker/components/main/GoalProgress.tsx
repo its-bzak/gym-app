@@ -38,11 +38,14 @@ export default function GoalProgressSection({
         titleLeft: {
             textAlign: "left" as const,
         },
+        titleSpacing: {
+            marginBottom: 8,
+        },
         titleRow: {
             flexDirection: "row" as const,
             alignItems: "center" as const,
-            justifyContent: "space-between" as const,
-            marginBottom: 12,
+            justifyContent: "flex-end" as const,
+            marginBottom: 10,
         },
         percentText: {
             color: currentTheme.colors.textPrimary,
@@ -95,8 +98,9 @@ export default function GoalProgressSection({
 
     return (
         <View style={styles.container}>
+            <Text style={[styles.title, styles.titleLeft, styles.titleSpacing]}>Goal Progress</Text>
+
             <View style={styles.titleRow}>
-                <Text style={[styles.title, styles.titleLeft]}>Goal Progress</Text>
                 <Text style={styles.percentText}>{`${Math.round(progressPercent)}% completed`}</Text>
             </View>
 

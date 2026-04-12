@@ -1,20 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
   Animated,
-  Keyboard,
   LayoutChangeEvent,
   LayoutAnimation,
-  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
-  TextInput,
-  TouchableWithoutFeedback,
   UIManager,
   View,
 } from "react-native";
@@ -30,9 +27,7 @@ import {
   getDailyMacroMetrics,
   mockGoal,
   mockWeightEntries,
-  upsertWeightEntry as upsertMockWeightEntry,
 } from "@/mock/MainScreen/DailyMetricsSection";
-import CustomKeypad from "@/components/ui/CustomKeypad";
 import { useActiveWorkout } from "@/context/ActiveWorkoutContext";
 import { useAppTheme } from "@/design/hooks/use-app-theme";
 import { createThemedStyles } from "@/design/utils/create-themed-styles";
@@ -40,12 +35,10 @@ import { useDisplayUnitPreference } from "@/hooks/use-display-unit-preference";
 import { Ionicons } from "@expo/vector-icons";
 import type { WeightEntry, WeightGoal } from "@/types/dashboard";
 import type { MacroBarProps } from "@/utils/calculateMacroBar";
-import { convertWeightUnitToKg, getWeightUnitLabel } from "@/utils/unitSystem";
 import {
   getDateKey,
   getWorkoutDashboardSnapshot,
   type WorkoutDashboardSnapshot,
-  upsertWeightEntry,
 } from "@/services/dashboardService";
 import { getAuthenticatedUserId } from "@/services/profileService";
 
@@ -68,11 +61,11 @@ const EMPTY_EXERCISE_METRICS = {
 const DASHBOARD_CARD_ORDER_STORAGE_KEY = "workout-dashboard-card-order-v1";
 const DEFAULT_DASHBOARD_CARD_ORDER = ["nutrition", "exercise", "insights"] as const;
 
-type QuickActionModal = "weight" | "library" | null;
 type DashboardCardKey = (typeof DEFAULT_DASHBOARD_CARD_ORDER)[number];
 
 export default function WorkoutScreen() {
   const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
   const [dailyMacroMetrics, setDailyMacroMetrics] = useState<MacroBarProps>(() =>
     getDailyMacroMetrics(selectedDate)
@@ -84,20 +77,16 @@ export default function WorkoutScreen() {
   const [weightGoal, setWeightGoal] = useState<WeightGoal | null>(mockGoal);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [dashboardLoadError, setDashboardLoadError] = useState<string | null>(null);
-  const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
-  const [activeQuickActionModal, setActiveQuickActionModal] = useState<QuickActionModal>(null);
-  const [isSavingQuickAction, setIsSavingQuickAction] = useState(false);
-  const [quickActionError, setQuickActionError] = useState<string | null>(null);
-  const [weightInput, setWeightInput] = useState("");
-  const [isWeightKeypadVisible, setIsWeightKeypadVisible] = useState(false);
   const [dashboardCardOrder, setDashboardCardOrder] = useState<DashboardCardKey[]>([
     ...DEFAULT_DASHBOARD_CARD_ORDER,
   ]);
   const [draggingDashboardCard, setDraggingDashboardCard] = useState<DashboardCardKey | null>(null);
+  const [isFloatingActionMenuOpen, setIsFloatingActionMenuOpen] = useState(false);
   const { startWorkout } = useActiveWorkout();
   const { unitPreference } = useDisplayUnitPreference();
   const scrollViewRef = useRef<ScrollView | null>(null);
   const dragOffsetY = useRef(new Animated.Value(0)).current;
+  const floatingActionMenuAnimation = useRef(new Animated.Value(0)).current;
   const dashboardCardLayoutsRef = useRef<Partial<Record<DashboardCardKey, { y: number; height: number }>>>({});
   const dashboardCardOrderRef = useRef<DashboardCardKey[]>([...DEFAULT_DASHBOARD_CARD_ORDER]);
   const activeDragCardRef = useRef<DashboardCardKey | null>(null);
@@ -122,6 +111,9 @@ export default function WorkoutScreen() {
       paddingHorizontal: 18,
       paddingTop: 9,
     },
+    screenContent: {
+      paddingBottom: 64,
+    },
     statusRow: {
       flexDirection: "row" as const,
       alignItems: "center" as const,
@@ -139,222 +131,58 @@ export default function WorkoutScreen() {
       marginTop: 4,
       marginBottom: 4,
     },
-    bodyMapContainer: {
-      marginTop: 20,
-      height: 360,
-      borderRadius: currentTheme.radii.xl,
-      backgroundColor: currentTheme.colors.surface,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
+    floatingActionDismissOverlay: {
+      ...StyleSheet.absoluteFillObject,
     },
-    startButton: {
-      marginBottom: 45,
-      height: 50,
-      borderRadius: currentTheme.components.button.radius,
-      backgroundColor: currentTheme.colors.accent,
-      alignItems: "center" as const,
-      justifyContent: "center" as const,
-    },
-    startButtonText: {
-      color: currentTheme.colors.onAccent,
-      fontSize: currentTheme.typography.label.fontSize + 2,
-      lineHeight: currentTheme.typography.label.lineHeight + 2,
-      fontWeight: currentTheme.typography.label.fontWeight,
-    },
-    secondaryButtonContainer: {
-      flexDirection: "row" as const,
-      justifyContent: "space-between" as const,
-      marginBottom: 12,
-    },
-    logFoodButton: {
-      flex: 1,
-      height: 40,
-      backgroundColor: currentTheme.colors.surface,
-      borderRadius: currentTheme.radii.lg,
-      alignItems: "center" as const,
-      justifyContent: "center" as const,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
-    },
-    logWeightButton: {
-      flex: 1,
-      height: 40,
-      backgroundColor: currentTheme.colors.surface,
-      borderRadius: currentTheme.radii.lg,
-      alignItems: "center" as const,
-      justifyContent: "center" as const,
-      marginLeft: 6,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
-    },
-    routinesAndExercisesButton: {
-      flex: 2,
-      height: 40,
-      backgroundColor: currentTheme.colors.surface,
-      borderRadius: currentTheme.radii.lg,
-      alignItems: "center" as const,
-      justifyContent: "center" as const,
-      marginLeft: 6,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
-    },
-    secondaryButtonText: {
-      color: currentTheme.colors.textSecondary,
-      fontSize: currentTheme.typography.body.fontSize,
-      lineHeight: currentTheme.typography.body.lineHeight,
-      fontWeight: currentTheme.typography.body.fontWeight,
-    },
-    mainButtonContainer: {
-      flex: 1,
-      flexDirection: "column" as const,
-      justifyContent: "flex-end" as const,
-    },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: currentTheme.colors.surfaceOverlay,
-      justifyContent: "flex-end" as const,
-    },
-    modalSheet: {
-      backgroundColor: currentTheme.colors.surfaceElevated,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
-      paddingHorizontal: 18,
-      paddingTop: 12,
-      paddingBottom: 28,
-      borderTopWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
-    },
-    modalHandle: {
-      alignSelf: "center" as const,
-      width: 46,
-      height: 5,
+    floatingActionButton: {
+      position: "absolute" as const,
+      right: 22,
+      width: 58,
+      height: 58,
       borderRadius: currentTheme.radii.pill,
-      backgroundColor: currentTheme.colors.border,
-      marginBottom: 16,
-    },
-    modalTitle: {
-      color: currentTheme.colors.textPrimary,
-      fontSize: currentTheme.typography.title.fontSize,
-      lineHeight: currentTheme.typography.title.lineHeight,
-      fontWeight: currentTheme.typography.title.fontWeight,
-      marginBottom: 8,
-    },
-    modalSubtitle: {
-      color: currentTheme.colors.textSecondary,
-      fontSize: currentTheme.typography.body.fontSize,
-      lineHeight: currentTheme.typography.body.lineHeight,
-      fontWeight: currentTheme.typography.body.fontWeight,
-      marginTop: 6,
-      marginBottom: 16,
-    },
-    fullWidthField: {
-      marginTop: 10,
-    },
-    metricLabel: {
-      color: currentTheme.colors.textSecondary,
-      fontSize: currentTheme.typography.caption.fontSize,
-      lineHeight: currentTheme.typography.caption.lineHeight,
-      fontWeight: currentTheme.typography.caption.fontWeight,
-      marginBottom: 6,
-    },
-    metricInput: {
-      minHeight: 46,
-      borderRadius: currentTheme.components.input.radius,
-      backgroundColor: currentTheme.colors.inputBackground,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.inputBorder,
-      color: currentTheme.colors.textPrimary,
-      paddingHorizontal: 14,
-      fontSize: currentTheme.typography.body.fontSize,
-      lineHeight: currentTheme.typography.body.lineHeight,
-      fontWeight: currentTheme.typography.body.fontWeight,
-    },
-    libraryActionButton: {
-      minHeight: 50,
-      borderRadius: currentTheme.radii.lg,
-      backgroundColor: currentTheme.colors.surface,
+      backgroundColor: "#FFFFFF",
       alignItems: "center" as const,
       justifyContent: "center" as const,
-      marginBottom: 10,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
+      shadowColor: "#000000",
+      shadowOpacity: 0.18,
+      shadowRadius: 14,
+      shadowOffset: {
+        width: 0,
+        height: 8,
+      },
+      elevation: 10,
     },
-    libraryActionButtonText: {
-      color: currentTheme.colors.textPrimary,
-      fontSize: currentTheme.typography.label.fontSize,
-      lineHeight: currentTheme.typography.label.lineHeight,
-      fontWeight: currentTheme.typography.label.fontWeight,
+    floatingActionMenuContainer: {
+      position: "absolute" as const,
+      right: 22,
+      alignItems: "flex-end" as const,
+      gap: 12,
     },
-    quickActionError: {
-      color: currentTheme.colors.danger,
-      fontSize: currentTheme.typography.caption.fontSize,
-      lineHeight: currentTheme.typography.caption.lineHeight,
-      fontWeight: currentTheme.typography.caption.fontWeight,
-      marginTop: 12,
-    },
-    modalButtonRow: {
-      flexDirection: "row" as const,
-      gap: 10,
-      marginTop: 18,
-    },
-    modalSecondaryButton: {
-      flex: 1,
-      minHeight: 48,
-      borderRadius: currentTheme.radii.lg,
-      backgroundColor: currentTheme.colors.surface,
-      alignItems: "center" as const,
-      justifyContent: "center" as const,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
-    },
-    modalPrimaryButton: {
-      flex: 1,
-      minHeight: 48,
-      borderRadius: currentTheme.radii.lg,
-      backgroundColor: currentTheme.colors.accent,
-      alignItems: "center" as const,
-      justifyContent: "center" as const,
-    },
-    modalSecondaryButtonText: {
-      color: currentTheme.colors.textSecondary,
-      fontSize: currentTheme.typography.label.fontSize,
-      lineHeight: currentTheme.typography.label.lineHeight,
-      fontWeight: currentTheme.typography.label.fontWeight,
-    },
-    modalPrimaryButtonText: {
-      color: currentTheme.colors.onAccent,
-      fontSize: currentTheme.typography.label.fontSize,
-      lineHeight: currentTheme.typography.label.lineHeight,
-      fontWeight: currentTheme.typography.label.fontWeight,
-    },
-    dashboardOrderCopy: {
-      color: currentTheme.colors.textSecondary,
-      fontSize: currentTheme.typography.body.fontSize,
-      lineHeight: currentTheme.typography.body.lineHeight,
-      fontWeight: currentTheme.typography.body.fontWeight,
-      marginBottom: 14,
-    },
-    dashboardOrderList: {
-      gap: 10,
-      marginBottom: 18,
-    },
-    dashboardOrderRow: {
-      minHeight: 48,
-      borderRadius: currentTheme.radii.lg,
-      backgroundColor: currentTheme.colors.surface,
-      borderWidth: 1,
-      borderColor: currentTheme.colors.borderMuted,
-      paddingHorizontal: 14,
+    floatingActionSecondaryButton: {
+      minWidth: 156,
+      height: 48,
+      paddingHorizontal: 16,
+      borderRadius: currentTheme.radii.pill,
+      backgroundColor: currentTheme.colors.surfaceElevated,
       flexDirection: "row" as const,
       alignItems: "center" as const,
       justifyContent: "space-between" as const,
+      borderWidth: 1,
+      borderColor: currentTheme.colors.borderMuted,
+      shadowColor: "#000000",
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      shadowOffset: {
+        width: 0,
+        height: 6,
+      },
+      elevation: 8,
     },
-    dashboardOrderLabel: {
+    floatingActionSecondaryButtonText: {
       color: currentTheme.colors.textPrimary,
       fontSize: currentTheme.typography.label.fontSize,
       lineHeight: currentTheme.typography.label.lineHeight,
       fontWeight: currentTheme.typography.label.fontWeight,
-      textTransform: "capitalize" as const,
     },
   }));
 
@@ -363,6 +191,15 @@ export default function WorkoutScreen() {
       UIManager.setLayoutAnimationEnabledExperimental(true);
     }
   }, []);
+
+  useEffect(() => {
+    Animated.spring(floatingActionMenuAnimation, {
+      toValue: isFloatingActionMenuOpen ? 1 : 0,
+      useNativeDriver: true,
+      bounciness: 7,
+      speed: 18,
+    }).start();
+  }, [floatingActionMenuAnimation, isFloatingActionMenuOpen]);
 
   useEffect(() => {
     dashboardCardOrderRef.current = dashboardCardOrder;
@@ -402,31 +239,32 @@ export default function WorkoutScreen() {
     };
   }, []);
 
-  const resetQuickActionForms = () => {
-    setWeightInput("");
-    setIsWeightKeypadVisible(false);
+  const handleQuickAddFood = () => {
+    setIsFloatingActionMenuOpen(false);
+    router.push({
+      pathname: "/discover",
+      params: {
+        quickAdd: "1",
+        date: getDateKey(selectedDate),
+        time: new Date()
+          .toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          })
+          .replace(" ", "")
+          .toLowerCase(),
+      },
+    });
   };
 
-  const closeQuickActionModal = () => {
-    if (isSavingQuickAction) {
-      return;
-    }
-
-    setActiveQuickActionModal(null);
-    setQuickActionError(null);
-    resetQuickActionForms();
+  const handleStartWorkout = () => {
+    setIsFloatingActionMenuOpen(false);
+    startWorkout();
+    router.push("/workout/active");
   };
 
-  const openQuickActionModal = (modal: QuickActionModal) => {
-    resetQuickActionForms();
-    setQuickActionError(null);
-    setActiveQuickActionModal(modal);
-    setIsWeightKeypadVisible(modal === "weight");
-  };
-
-  const dismissWeightKeypad = () => {
-    Keyboard.dismiss();
-    setIsWeightKeypadVisible(false);
+  const toggleFloatingActionMenu = () => {
+    setIsFloatingActionMenuOpen((currentValue) => !currentValue);
   };
 
   const persistDashboardCardOrder = async (nextOrder: DashboardCardKey[]) => {
@@ -718,14 +556,11 @@ export default function WorkoutScreen() {
         }
 
         if (!authenticatedUserId) {
-          setAuthenticatedUserId(null);
           applyFallbackDashboardState();
           setWeightGoal(mockGoal);
           setDashboardLoadError("Using local dashboard data right now.");
           return;
         }
-
-        setAuthenticatedUserId(authenticatedUserId);
 
         const snapshot: WorkoutDashboardSnapshot = await getWorkoutDashboardSnapshot(
           authenticatedUserId,
@@ -746,7 +581,6 @@ export default function WorkoutScreen() {
           return;
         }
 
-        setAuthenticatedUserId(null);
         applyFallbackDashboardState();
         setDashboardLoadError("Using local dashboard data right now.");
       } finally {
@@ -763,66 +597,12 @@ export default function WorkoutScreen() {
     };
   }, [selectedDate]);
 
-  const handleSaveWeight = async () => {
-    const nextWeightValue = Number(weightInput);
-
-    if (!Number.isFinite(nextWeightValue) || nextWeightValue <= 0) {
-      setQuickActionError("Enter a valid weight greater than zero.");
-      return;
-    }
-
-    const nextWeightKg = convertWeightUnitToKg(nextWeightValue, unitPreference);
-
-    setIsSavingQuickAction(true);
-    setQuickActionError(null);
-
-    try {
-      if (authenticatedUserId) {
-        const result = await upsertWeightEntry(authenticatedUserId, selectedDate, nextWeightKg);
-
-        if (result.success && result.data) {
-          try {
-            upsertMockWeightEntry(selectedDate, result.data.weightKg);
-          } catch {
-            // Best-effort local mirror only.
-          }
-
-          setWeightEntries((previousEntries) => {
-            const remainingEntries = previousEntries.filter(
-              (entry) => entry.date !== result.data?.date
-            );
-
-            return [...remainingEntries, result.data as WeightEntry].sort((left, right) =>
-              left.date.localeCompare(right.date)
-            );
-          });
-          setDashboardLoadError(null);
-          setActiveQuickActionModal(null);
-          resetQuickActionForms();
-          return;
-        }
-
-        if (!result.shouldFallback) {
-          setQuickActionError(result.error ?? "Could not save weight entry.");
-          return;
-        }
-      }
-
-      const fallbackEntry = upsertMockWeightEntry(selectedDate, nextWeightKg);
-      setWeightEntries([...mockWeightEntries]);
-      setDashboardLoadError("Using local dashboard data right now.");
-      setActiveQuickActionModal(null);
-      resetQuickActionForms();
-    } finally {
-      setIsSavingQuickAction(false);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
         ref={scrollViewRef}
         style={styles.screen}
+        contentContainerStyle={styles.screenContent}
         showsVerticalScrollIndicator={false}
         scrollEnabled={draggingDashboardCard === null}
         onLayout={handleScrollViewLayout}
@@ -839,148 +619,69 @@ export default function WorkoutScreen() {
         ) : null}
         {dashboardLoadError ? <Text style={styles.statusText}>{dashboardLoadError}</Text> : null}
         {dashboardCardOrder.map(renderDashboardCard)}
-
-        <View style={styles.bodyMapContainer}>
-          {/* Placeholder for BodyMap component */}
-        </View>
-
-        <View style={styles.mainButtonContainer}>
-    
-          <View style={styles.secondaryButtonContainer}>
-            <Pressable
-              style={styles.logFoodButton}
-              onPress={() =>
-                router.push({
-                  pathname: "/discover",
-                  params: {
-                    quickAdd: "1",
-                    date: getDateKey(selectedDate),
-                    time: new Date().toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    }).replace(" ", "").toLowerCase(),
-                  },
-                })
-              }>
-                <Ionicons name="fast-food-outline" size={20} color={theme.colors.iconSecondary} />
-            </Pressable>
-
-            <Pressable style={styles.logWeightButton} onPress={() => openQuickActionModal("weight")}>
-                <Ionicons name="scale-outline" size={20} color={theme.colors.iconSecondary} />
-            </Pressable>
-
-            <Pressable
-              style={styles.routinesAndExercisesButton}
-              onPress={() => openQuickActionModal("library")}>
-                <Text style={styles.secondaryButtonText}>Routines / Exercises</Text>
-            </Pressable>
-
-          </View>
-
-          <Pressable style={styles.startButton} onPress={() => {
-            startWorkout();
-            router.push("/workout/active");
-          }}>
-              <Text style={styles.startButtonText}>Start Workout</Text>
-          </Pressable>
-
-        </View>
       </ScrollView>
 
-      <Modal
-        animationType="slide"
-        transparent
-        visible={activeQuickActionModal !== null}
-        onRequestClose={closeQuickActionModal}>
-        <TouchableWithoutFeedback onPress={dismissWeightKeypad} accessible={false}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={dismissWeightKeypad} accessible={false}>
-              <View style={styles.modalSheet}>
-                <View style={styles.modalHandle} />
+      {isFloatingActionMenuOpen ? (
+        <Pressable
+          accessibilityLabel="Close add menu"
+          onPress={() => setIsFloatingActionMenuOpen(false)}
+          style={styles.floatingActionDismissOverlay}
+        />
+      ) : null}
 
-                {activeQuickActionModal === "weight" ? (
-                  <>
-                    <Text style={styles.modalTitle}>Log weight</Text>
+      <Animated.View
+        pointerEvents={isFloatingActionMenuOpen ? "auto" : "none"}
+        style={[
+          styles.floatingActionMenuContainer,
+          {
+            bottom: insets.bottom + 148,
+            opacity: floatingActionMenuAnimation,
+            transform: [
+              {
+                translateY: floatingActionMenuAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [18, 0],
+                }),
+              },
+              {
+                scale: floatingActionMenuAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.92, 1],
+                }),
+              },
+            ],
+          },
+        ]}>
+        <Pressable style={styles.floatingActionSecondaryButton} onPress={handleStartWorkout}>
+          <Text style={styles.floatingActionSecondaryButtonText}>Start Workout</Text>
+          <Ionicons color={theme.colors.iconPrimary} name="barbell-outline" size={18} />
+        </Pressable>
 
-                    <Text style={styles.modalSubtitle}>
-                      Save a weight reading for this date.
-                    </Text>
+        <Pressable style={styles.floatingActionSecondaryButton} onPress={handleQuickAddFood}>
+          <Text style={styles.floatingActionSecondaryButtonText}>Quick Add Food</Text>
+          <Ionicons color={theme.colors.iconPrimary} name="fast-food-outline" size={18} />
+        </Pressable>
+      </Animated.View>
 
-                    <View style={styles.fullWidthField}>
-                      <Text style={styles.metricLabel}>{`Weight (${getWeightUnitLabel(unitPreference)})`}</Text>
-                      <TextInput
-                        style={styles.metricInput}
-                        value={weightInput}
-                        onChangeText={setWeightInput}
-                        keyboardType="numeric"
-                        editable={!isSavingQuickAction}
-                        showSoftInputOnFocus={false}
-                        onFocus={() => {
-                          Keyboard.dismiss();
-                          setIsWeightKeypadVisible(true);
-                        }}
-                      />
-                    </View>
-
-                    {isWeightKeypadVisible ? (
-                      <CustomKeypad
-                        mode="decimal"
-                        value={weightInput}
-                        onChange={setWeightInput}
-                        onDone={() => setIsWeightKeypadVisible(false)}
-                        showClearKey={false}
-                        showDoneKey={false}
-                      />
-                    ) : null}
-                  </>
-                ) : null}
-
-                {activeQuickActionModal === "library" ? (
-                  <>
-                    <Text style={styles.modalTitle}>Choose library</Text>
-
-                    <Pressable
-                      style={styles.libraryActionButton}
-                      onPress={() => {
-                        setActiveQuickActionModal(null);
-                        router.push("/workout/exercises");
-                      }}>
-                      <Text style={styles.libraryActionButtonText}>Exercise Library</Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.libraryActionButton}
-                      onPress={() => {
-                        setActiveQuickActionModal(null);
-                        router.push("/workout/routines");
-                      }}>
-                      <Text style={styles.libraryActionButtonText}>Routine Library</Text>
-                    </Pressable>
-                  </>
-                ) : null}
-
-                {quickActionError ? <Text style={styles.quickActionError}>{quickActionError}</Text> : null}
-
-                <View style={styles.modalButtonRow}>
-                  <Pressable style={styles.modalSecondaryButton} onPress={closeQuickActionModal}>
-                    <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
-                  </Pressable>
-
-                  {activeQuickActionModal === "weight" ? (
-                    <Pressable style={styles.modalPrimaryButton} onPress={handleSaveWeight}>
-                      {isSavingQuickAction ? (
-                        <ActivityIndicator size="small" color={theme.colors.onAccent} />
-                      ) : (
-                        <Text style={styles.modalPrimaryButtonText}>Save Weight</Text>
-                      )}
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+      <Pressable
+        accessibilityLabel="Add"
+        onPress={toggleFloatingActionMenu}
+        style={[styles.floatingActionButton, { bottom: insets.bottom + 78 }]}
+      >
+        <Animated.View
+          style={{
+            transform: [
+              {
+                rotate: floatingActionMenuAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ["0deg", "45deg"],
+                }),
+              },
+            ],
+          }}>
+          <Ionicons color="#111418" name="add" size={30} />
+        </Animated.View>
+      </Pressable>
 
     </SafeAreaView>
   );
