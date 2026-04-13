@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
@@ -16,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
 import DateCarousel from "@/components/main/DateCarousel";
 import TodaysExerciseCard from "@/components/main/TodaysExerciseCard";
@@ -66,6 +68,7 @@ type DashboardCardKey = (typeof DEFAULT_DASHBOARD_CARD_ORDER)[number];
 export default function WorkoutScreen() {
   const { theme } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const [selectedDate, setSelectedDate] = useState(() => new Date(DEFAULT_METRICS_DATE));
   const [dailyMacroMetrics, setDailyMacroMetrics] = useState<MacroBarProps>(() =>
     getDailyMacroMetrics(selectedDate)
@@ -202,6 +205,12 @@ export default function WorkoutScreen() {
   }, [floatingActionMenuAnimation, isFloatingActionMenuOpen]);
 
   useEffect(() => {
+    if (!isFocused) {
+      setIsFloatingActionMenuOpen(false);
+    }
+  }, [isFocused]);
+
+  useEffect(() => {
     dashboardCardOrderRef.current = dashboardCardOrder;
   }, [dashboardCardOrder]);
 
@@ -264,6 +273,7 @@ export default function WorkoutScreen() {
   };
 
   const toggleFloatingActionMenu = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsFloatingActionMenuOpen((currentValue) => !currentValue);
   };
 
@@ -390,6 +400,8 @@ export default function WorkoutScreen() {
       },
     });
 
+    void Haptics.selectionAsync();
+
     dashboardCardOrderRef.current = nextOrder;
     setDashboardCardOrder(nextOrder);
   };
@@ -428,6 +440,7 @@ export default function WorkoutScreen() {
     dragStartCardYRef.current = dashboardCardLayoutsRef.current[cardKey]?.y ?? 0;
     dragActivationTimeoutRef.current = setTimeout(() => {
       hasActivatedDragRef.current = true;
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setDraggingDashboardCard(cardKey);
       dragOffsetY.setValue(0);
     }, 220);
@@ -658,7 +671,7 @@ export default function WorkoutScreen() {
         </Pressable>
 
         <Pressable style={styles.floatingActionSecondaryButton} onPress={handleQuickAddFood}>
-          <Text style={styles.floatingActionSecondaryButtonText}>Quick Add Food</Text>
+          <Text style={styles.floatingActionSecondaryButtonText}>Add Food</Text>
           <Ionicons color={theme.colors.iconPrimary} name="fast-food-outline" size={18} />
         </Pressable>
       </Animated.View>

@@ -1,7 +1,8 @@
-import { Text, View } from "react-native";
+import { Animated, Easing, Text, View } from "react-native";
 import type { GestureResponderHandlers } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useRef } from "react";
 import { calculateMacroBar, type MacroBarProps } from "@/utils/calculateMacroBar";
 
 const nutritionCardClassNames = {
@@ -40,6 +41,8 @@ type MacroRingProps = {
   color: string;
 };
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 export interface TodaysNutritionCardProps extends MacroBarProps {
   onPressMenu?: () => void;
   onLongPressMenu?: () => void;
@@ -65,8 +68,24 @@ function ProgressRing({
   const normalizedProgress = clampProgress(progress);
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference * (1 - normalizedProgress);
   const center = size / 2;
+  const animatedProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    animatedProgress.setValue(0);
+
+    Animated.timing(animatedProgress, {
+      toValue: normalizedProgress,
+      duration: 900,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [animatedProgress, normalizedProgress]);
+
+  const strokeDashoffset = animatedProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [circumference, 0],
+  });
 
   return (
     <View className={nutritionCardClassNames.ringFrame} style={{ width: size, height: size }}>
@@ -79,7 +98,7 @@ function ProgressRing({
           stroke={trackColor}
           strokeWidth={strokeWidth}
         />
-        <Circle
+        <AnimatedCircle
           cx={center}
           cy={center}
           fill="none"
