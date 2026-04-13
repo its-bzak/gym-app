@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 import { useState } from "react";
 import Ionicons from "@expo/vector-icons/build/Ionicons";
+import AppDatePicker from "@/components/ui/AppDatePicker";
 import { useAppTheme } from "@/design/hooks/use-app-theme";
 import { createThemedStyles } from "@/design/utils/create-themed-styles";
 import { getCurrentDate } from "@/utils/dateFormat";
@@ -12,6 +13,7 @@ type DateCarouselProps = {
 
 export default function DateCarousel({ selectedDate, onChangeDate }: DateCarouselProps) {
     const { theme } = useAppTheme();
+    const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
 
     const [internalSelectedDate, setInternalSelectedDate] = useState(
         () => new Date(getCurrentDate())
@@ -63,14 +65,30 @@ export default function DateCarousel({ selectedDate, onChangeDate }: DateCarouse
         }));
 
     return (
+        <>
         <View style={styles.datePill}>
             <Pressable onPress={() => changeDay(-1)}>
                                 <Ionicons name="chevron-back" size={20} color={theme.colors.iconSecondary} />
             </Pressable>
-            <Text style={styles.dateText}>{formatDate(activeDate)}</Text>
+            <Pressable onPress={() => setIsDatePickerVisible(true)}>
+                <Text style={styles.dateText}>{formatDate(activeDate)}</Text>
+            </Pressable>
             <Pressable onPress={() => changeDay(1)}>
                                 <Ionicons name="chevron-forward" size={20} color={theme.colors.iconSecondary} />
             </Pressable>
         </View>
+        <AppDatePicker
+            visible={isDatePickerVisible}
+            value={activeDate}
+            onClose={() => setIsDatePickerVisible(false)}
+            onConfirm={(nextDate) => {
+                if (!selectedDate) {
+                    setInternalSelectedDate(nextDate);
+                }
+
+                onChangeDate?.(nextDate);
+            }}
+        />
+        </>
     );
 }

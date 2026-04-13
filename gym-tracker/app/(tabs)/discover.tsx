@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from "react-native-svg";
+import AppDatePicker from "@/components/ui/AppDatePicker";
 import CustomKeypad, { type CustomKeypadMode } from "@/components/ui/CustomKeypad";
 import { useAppTheme } from "@/design/hooks/use-app-theme";
 import { createThemedStyles } from "@/design/utils/create-themed-styles";
@@ -366,6 +367,7 @@ export default function DiscoverScreen() {
     const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
     const [summary, setSummary] = useState<FoodLogDaySummary>(EMPTY_SUMMARY);
     const [entries, setEntries] = useState<FoodLogEntry[]>([]);
+    const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
     const [dateSummariesByKey, setDateSummariesByKey] = useState<DateStripSummaryMap>({});
     const [isLoadingFoodLog, setIsLoadingFoodLog] = useState(true);
     const [foodLogError, setFoodLogError] = useState<string | null>(null);
@@ -421,6 +423,11 @@ export default function DiscoverScreen() {
             fontSize: currentTheme.typography.title.fontSize,
             lineHeight: currentTheme.typography.title.lineHeight,
             fontWeight: currentTheme.typography.title.fontWeight,
+        },
+        headerTitleButton: {
+            flex: 1,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
         },
         dateStrip: {
             flexDirection: "row" as const,
@@ -997,6 +1004,10 @@ export default function DiscoverScreen() {
     useEffect(() => {
         void loadFoodLog(selectedDate);
     }, [selectedDate]);
+
+    const handleSelectDate = (nextDate: Date) => {
+        setSelectedDate(nextDate);
+    };
 
     useEffect(() => {
         if (quickAddParams.quickAdd !== "1") {
@@ -1611,7 +1622,9 @@ export default function DiscoverScreen() {
                         <Ionicons name="chevron-back" size={22} color={theme.colors.iconPrimary} />
                     </Pressable>
 
-                    <Text style={styles.headerTitle}>{formatHeaderTitle(selectedDate)}</Text>
+                    <Pressable style={styles.headerTitleButton} onPress={() => setIsDatePickerVisible(true)}>
+                        <Text style={styles.headerTitle}>{formatHeaderTitle(selectedDate)}</Text>
+                    </Pressable>
 
                     <Pressable
                         style={styles.headerIconButton}
@@ -1623,6 +1636,13 @@ export default function DiscoverScreen() {
                         <Ionicons name="chevron-forward" size={22} color={theme.colors.iconPrimary} />
                     </Pressable>
                 </View>
+
+                <AppDatePicker
+                    visible={isDatePickerVisible}
+                    value={selectedDate}
+                    onClose={() => setIsDatePickerVisible(false)}
+                    onConfirm={handleSelectDate}
+                />
 
                 <View style={styles.dateStrip}>
                     {dateStrip.map((date) => {
