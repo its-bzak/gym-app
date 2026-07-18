@@ -53,7 +53,7 @@ export const BottomNavigation = memo(function BottomNavigation(_props: BottomTab
   const normalizedIndex = activeIndex >= 0 ? activeIndex : 0;
   const pillWidth = Math.min(320, Math.max(260, width - 116));
   const buttonWidth = pillWidth / NAVIGATION_TABS.length;
-  const indicatorWidth = 56;
+  const indicatorWidth = 80;
   const indicatorOffset = buttonWidth * normalizedIndex + (buttonWidth - indicatorWidth) / 2;
 
   const indicatorX = useSharedValue(indicatorOffset);
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 0,
-    borderRadius: 18,
+    borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.12)',
     zIndex: 0,
   },
