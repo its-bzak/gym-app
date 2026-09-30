@@ -1,9 +1,86 @@
 # // [Frontend] --
+node_modules/
+.expo/
+.expo-shared/
+web-build/
+coverage/
+*.tsbuildinfo
+
+# React Native / native build outputs
+android/.gradle/
+android/app/build/
+android/build/
+ios/Pods/
+ios/build/
+ios/DerivedData/
+*.xcuserstate
+*.hmap
+*.ipa
+*.apk
+*.aab
+*.keystore
+*.jks
+*.mobileprovision
+*.provisionprofile
+local.properties
 
 # // [Backend] --
+target/
+build/
+.gradle/
+out/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.war
+*.ear
+hs_err_pid*
+
+# IDE output
+.idea/
+*.iml
+.classpath
+.project
+.settings/
 
 # // [Database] --
+# Local database files and SQLite sidecars
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
+
+# Local PostgreSQL data directories
+pgdata/
+postgres-data/
+**/pgdata/
+**/postgres-data/
 
 # // [DevOps] --
+# Local environment files; keep shareable templates in version control
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# Docker / container runtime artifacts
+*.pid
+*.sock
 
 # // [Misc.] --
+# Logs and temporary files
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+desktop.ini
