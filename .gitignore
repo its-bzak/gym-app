@@ -30,8 +30,6 @@ build/
 .gradle/
 out/
 *.class
-*.jar
-!gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
 hs_err_pid*
@@ -68,6 +66,9 @@ postgres-data/
 !.env.example
 !.env.sample
 !.env.template
+!.env.*.example
+!.env.*.sample
+!.env.*.template
 
 # Docker / container runtime artifacts
 *.pid
